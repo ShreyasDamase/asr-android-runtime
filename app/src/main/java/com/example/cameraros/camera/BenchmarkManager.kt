@@ -7,132 +7,207 @@ import android.util.Log
 import androidx.camera.core.ImageProxy
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.max
-import kotlin.math.min
 
 /**
- * Manages robotics-grade camera benchmarks and health heartbeat.
+ * Robotics-grade benchmark processor.
+ *
+ * Implements [FrameProcessor] — plugged into [FramePipeline] as the first processor.
+ *
+ * Thread safety:
+ * - [process] is always called from the single camera analyzer thread.
+ * - [snapshot] is a [@Volatile] reference to an immutable [TelemetrySnapshot].
+ *   Writing it replaces the reference atomically; any thread reading [snapshot]
+ *   gets a consistent, non-torn point-in-time view.
+ * - [updateThermalStatus] and [onCameraError] may be called from any thread
+ *   (thermal listener / Camera2 callbacks) and are safe because they use
+ *   copy() to produce a new snapshot atomically via the volatile write.
  */
 class BenchmarkManager(private val context: Context) : FrameProcessor {
 
     companion object {
         private const val TAG = "PhoneCamera"
         private const val LOG_INTERVAL_MS = 1000L
+
+        /**
+         * Telemetry protocol version.
+         * Increment this when fields are added or removed so that Ubuntu-side
+         * parsers can detect the format and adapt.
+         */
+        const val TELEMETRY_PROTOCOL = 1
     }
 
-    private val frameCount = AtomicLong(0)
+    // -------------------------------------------------------------------------
+    // Telemetry snapshot — read from any thread, written on analyzer thread
+    // -------------------------------------------------------------------------
+
+    @Volatile
+    var snapshot = TelemetrySnapshot()
+        private set
+
+    // -------------------------------------------------------------------------
+    // Internal state — only accessed on the analyzer thread
+    // -------------------------------------------------------------------------
+
     private var startTime = 0L
-    private var lastFrameTime = 0L
     private var lastLogTime = 0L
+    private var totalFrames = 0L
+    private var averageFps = 0.0
+    private var frameGapEvents = 0L
 
-    // Metrics
-    var currentFps = 0.0
-    var averageFps = 0.0
-    var frameTimeMs = 0.0
-    var analyzerTimeMs = 0.0
-    var latencyMs = 0.0
-    var totalFrames = 0L
+    /** Sliding-window FPS: stores arrival timestamps for the last 1 second of frames. */
+    private val frameWindowMs = ArrayDeque<Long>()
 
-    private var totalAnalyzerTime = 0L
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
 
-    fun reset() {
-        frameCount.set(0)
+    /**
+     * Reset all metrics. Call this before (re)starting the camera pipeline.
+     * @param restartCount The number of restarts so far, preserved across resets.
+     */
+    fun reset(restartCount: Int = 0) {
         startTime = SystemClock.elapsedRealtime()
-        lastFrameTime = 0L
         lastLogTime = startTime
-        currentFps = 0.0
+        totalFrames = 0L
         averageFps = 0.0
-        frameTimeMs = 0.0
-        analyzerTimeMs = 0.0
-        latencyMs = 0.0
-        totalAnalyzerTime = 0L
+        frameGapEvents = 0L
+        frameWindowMs.clear()
+        snapshot = TelemetrySnapshot(restartCount = restartCount)
         Log.i(TAG, "Benchmark Reset")
     }
 
-    override fun process(image: ImageProxy, timestampNs: Long) {
-        // Since FramePipeline calls this, we measure the "processing" duration here
-        val startProcessTime = System.nanoTime()
-        
-        updateMetrics(timestampNs)
-        
-        val durationNs = System.nanoTime() - startProcessTime
-        analyzerTimeMs = durationNs / 1_000_000.0
-        totalAnalyzerTime += (durationNs / 1_000_000)
-    }
+    // -------------------------------------------------------------------------
+    // FrameProcessor implementation
+    // -------------------------------------------------------------------------
 
-    private fun updateMetrics(cameraTimestampNs: Long) {
+    override fun process(image: ImageProxy, metadata: FrameMetadata) {
+        val processStartNs = System.nanoTime()
         val now = SystemClock.elapsedRealtime()
-        if (startTime == 0L) startTime = now
-        
-        val count = frameCount.incrementAndGet()
-        totalFrames = count
-        
-        // Calculate intervals
-        if (lastFrameTime != 0L) {
-            val interval = now - lastFrameTime
-            frameTimeMs = interval.toDouble()
-        }
-        lastFrameTime = now
 
-        // FPS Calculations
+        if (startTime == 0L) startTime = now
+
+        totalFrames++
+
+        // Sliding-window instant FPS: count frames that arrived within the last 1 second
+        frameWindowMs.addLast(now)
+        while (frameWindowMs.isNotEmpty() && frameWindowMs.first() < now - 1000L) {
+            frameWindowMs.removeFirst()
+        }
+        val instantFps = frameWindowMs.size.toDouble()
+
+        // Lifetime average FPS
         val totalElapsed = now - startTime
         if (totalElapsed > 0) {
-            averageFps = (count.toDouble() / totalElapsed.toDouble()) * 1000.0
-            currentFps = averageFps // Using avg as current for stability in simple benchmark
+            averageFps = (totalFrames.toDouble() / totalElapsed.toDouble()) * 1000.0
         }
 
-        // Latency: Diff between camera capture and current arrival
-        val cameraTimeMs = TimeUnit.NANOSECONDS.toMillis(cameraTimestampNs)
+        // End-to-end latency: sensor hardware capture → analyzer entry
+        // Both timestamps are boot-relative nanoseconds.
+        val sensorTimeMs = TimeUnit.NANOSECONDS.toMillis(metadata.sensorTimestampNs)
         val bootTimeMs = SystemClock.elapsedRealtimeNanos() / 1_000_000
-        latencyMs = (bootTimeMs - cameraTimeMs).toDouble()
+        val latencyMs = (bootTimeMs - sensorTimeMs).toDouble()
 
-        // Periodic Heartbeat Logging
+        // Time spent inside this processor
+        val analyzerMs = (System.nanoTime() - processStartNs) / 1_000_000.0
+
+        // Preserve cross-thread fields from the previous snapshot
+        val prev = snapshot
+
+        // Publish new snapshot — atomic volatile write
+        snapshot = TelemetrySnapshot(
+            frameId = metadata.frameId,
+            instantFps = instantFps,
+            averageFps = averageFps,
+            latencyMs = latencyMs,
+            analyzerMs = analyzerMs,
+            totalFrames = totalFrames,
+            frameGapEvents = frameGapEvents,
+            cameraErrors = prev.cameraErrors,
+            restartCount = prev.restartCount,
+            thermalStatus = prev.thermalStatus,
+            sensorTimestampNs = metadata.sensorTimestampNs,
+            analyzerEnterNs = metadata.analyzerEnterNs,
+            memoryMb = getMemoryUsageMb(),
+            uptimeMs = now - startTime
+        )
+
+        // Periodic structured telemetry heartbeat
         if (now - lastLogTime >= LOG_INTERVAL_MS) {
-            logHeartbeat()
+            logTelemetry(snapshot)
             lastLogTime = now
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Cross-thread update methods (safe — produce new snapshots via copy())
+    // -------------------------------------------------------------------------
+
+    /**
+     * Called when a frame gap is detected by [FramePipeline].
+     * Safe to call from the analyzer thread.
+     */
+    fun onFrameGap() {
+        frameGapEvents++  // analyzer thread only — no sync needed
+    }
+
+    /**
+     * Called when a Camera2 device error occurs.
+     * May be called from the camera callback thread.
+     */
+    fun onCameraError() {
+        snapshot = snapshot.copy(cameraErrors = snapshot.cameraErrors + 1)
+    }
+
+    /**
+     * Update the thermal status in the snapshot.
+     * Called from the thermal listener (main thread).
+     */
+    fun updateThermalStatus(status: ThermalStatus) {
+        snapshot = snapshot.copy(thermalStatus = status)
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /** Returns total running time in ms since last [reset]. */
     fun getRunningTimeMs(): Long {
         if (startTime == 0L) return 0L
         return SystemClock.elapsedRealtime() - startTime
     }
 
-    private fun logHeartbeat() {
-        val uptimeMs = getRunningTimeMs()
-        val uptimeStr = formatDuration(uptimeMs)
-        val memInfo = getMemoryUsage()
-
-        val heartbeat = """
-            --------------------------------------------------
-            Status: RUNNING
-            FPS: ${String.format(Locale.US, "%.1f", currentFps)}
-            Average FPS: ${String.format(Locale.US, "%.1f", averageFps)}
-            Latency: ${String.format(Locale.US, "%.1f", latencyMs)} ms
-            Analyzer Time: ${String.format(Locale.US, "%.2f", analyzerTimeMs)} ms
-            Frames: $totalFrames
-            Uptime: $uptimeStr
-            Memory: $memInfo MB
-            --------------------------------------------------
-        """.trimIndent()
-        Log.d(TAG, heartbeat)
-    }
-
-    private fun formatDuration(ms: Long): String {
-        val hours = TimeUnit.MILLISECONDS.toHours(ms)
-        val minutes = TimeUnit.MILLISECONDS.toMinutes(ms) % 60
-        val seconds = TimeUnit.MILLISECONDS.toSeconds(ms) % 60
-        return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
-    }
-
-    fun getMemoryUsage(): Long {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val memoryInfo = ActivityManager.MemoryInfo()
-        activityManager.getMemoryInfo(memoryInfo)
-        
+    /** Current app heap usage in MB. */
+    fun getMemoryUsageMb(): Long {
         val runtime = Runtime.getRuntime()
-        val usedMem = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
-        return usedMem
+        return (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L)
+    }
+
+    /**
+     * Emits one structured telemetry line per second.
+     *
+     * Format: [TELEMETRY] protocol=1 frame_id=N fps=N.N avg_fps=N.N ...
+     *
+     * Parse on Ubuntu:
+     *   adb logcat -s PhoneCamera:D | grep TELEMETRY \
+     *     | awk '{for(i=1;i<=NF;i++) if($i~/fps=/) print $i}'
+     */
+    private fun logTelemetry(s: TelemetrySnapshot) {
+        val uptimeSec = s.uptimeMs / 1000
+        Log.d(
+            TAG,
+            "[TELEMETRY] protocol=$TELEMETRY_PROTOCOL" +
+                    " frame_id=${s.frameId}" +
+                    " fps=${String.format(Locale.US, "%.1f", s.instantFps)}" +
+                    " avg_fps=${String.format(Locale.US, "%.1f", s.averageFps)}" +
+                    " latency_ms=${String.format(Locale.US, "%.1f", s.latencyMs)}" +
+                    " analyzer_ms=${String.format(Locale.US, "%.2f", s.analyzerMs)}" +
+                    " frames=${s.totalFrames}" +
+                    " gap_events=${s.frameGapEvents}" +
+                    " errors=${s.cameraErrors}" +
+                    " restarts=${s.restartCount}" +
+                    " thermal=${s.thermalStatus.name}" +
+                    " memory_mb=${s.memoryMb}" +
+                    " uptime_s=$uptimeSec"
+        )
     }
 }

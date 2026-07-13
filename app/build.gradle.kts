@@ -14,6 +14,10 @@ android {
         versionName = "1.0"
     }
 
+    buildFeatures {
+        // Required for BuildConfig.VERSION_NAME and VERSION_CODE in CameraService
+        buildConfig = true
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
