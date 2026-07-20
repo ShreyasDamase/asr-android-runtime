@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">cameraros</string>
+    <string name="app_name">ASR Runtime</string>
+    <string name="shortcut_stop_label">Stop ASR Service</string>
 </resources>

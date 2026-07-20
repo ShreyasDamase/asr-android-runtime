@@ -9,6 +9,7 @@ import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import org.asr.runtime.common.ModuleState
 import org.asr.runtime.common.SensorModule
 import org.asr.runtime.diagnostic.ThermalStatus
 import org.asr.runtime.pipeline.FramePipeline
@@ -25,6 +26,7 @@ class CameraManager(
 ) : SensorModule {
 
     override val id: String = "camera"
+    override var state: ModuleState = ModuleState.STOPPED
 
     // To be set by AsrService
     var lifecycleOwner: LifecycleOwner? = null
@@ -69,6 +71,7 @@ class CameraManager(
         config: CameraConfig
     ) {
         val provider = cameraProvider ?: return
+        state = ModuleState.STARTING
 
         Log.i(TAG, "Starting Camera...")
         Log.i(TAG, "Config: ${config.toLogString()}")
@@ -91,7 +94,9 @@ class CameraManager(
                 it.setAnalyzer(cameraExecutor, CameraAnalyzer(pipeline))
             }
 
-        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+        val cameraSelector = CameraSelector.Builder()
+            .requireLensFacing(config.lensFacing)
+            .build()
 
         try {
             provider.unbindAll()
@@ -100,17 +105,21 @@ class CameraManager(
                 cameraSelector,
                 imageAnalysis
             )
-            Log.i(TAG, "Camera Started")
+            Log.i(TAG, "Camera Started with lens facing ${config.lensFacing}")
+            state = ModuleState.RUNNING
         } catch (exc: Exception) {
-            Log.e(TAG, "Use case binding failed", exc)
+            Log.e(TAG, "Use case binding failed for lens ${config.lensFacing}", exc)
+            state = ModuleState.ERROR
             onCameraError()
         }
     }
 
     fun stopCamera() {
+        state = ModuleState.STOPPING
         cameraProvider?.unbindAll()
         imageAnalysis = null
         Log.i(TAG, "Camera Stopped")
+        state = ModuleState.STOPPED
     }
 
     fun shutdown() {

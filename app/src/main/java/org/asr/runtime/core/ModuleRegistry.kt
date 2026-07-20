@@ -19,6 +19,22 @@ class ModuleRegistry(private val modules: List<SensorModule>) {
         modules.forEach { it.release() }
     }
 
+    fun startModule(id: String) {
+        modules.find { it.id == id }?.start()
+    }
+
+    fun stopModule(id: String) {
+        modules.find { it.id == id }?.stop()
+    }
+
+    fun getModuleStatus(): Map<String, String> {
+        return modules.associate { it.id to it.state.name }
+    }
+
+    fun getRunningModules(): List<String> {
+        return modules.filter { it.state == org.asr.runtime.common.ModuleState.RUNNING }.map { it.id }
+    }
+
     @Suppress("UNCHECKED_CAST")
     fun <T : SensorModule> getModule(id: String): T? {
         return modules.find { it.id == id } as? T

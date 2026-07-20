@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="stop_asr"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_stop_label"
+        android:shortcutLongLabel="@string/shortcut_stop_label">
+        <intent
+            android:action="org.asr.runtime.STOP"
+            android:targetPackage="org.asr.runtime"
+            android:targetClass="org.asr.runtime.core.AsrService" />
+    </shortcut>
+</shortcuts>

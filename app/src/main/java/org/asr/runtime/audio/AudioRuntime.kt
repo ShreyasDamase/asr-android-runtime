@@ -9,6 +9,7 @@ import android.media.MediaRecorder
 import android.os.Process
 import android.util.Log
 import androidx.core.content.ContextCompat
+import org.asr.runtime.common.ModuleState
 import org.asr.runtime.common.SensorModule
 import kotlin.concurrent.thread
 import kotlin.math.log10
@@ -17,6 +18,7 @@ import kotlin.math.sqrt
 class AudioRuntime(private val context: Context) : SensorModule {
 
     override val id: String = "audio"
+    override var state: ModuleState = ModuleState.STOPPED
 
     companion object {
         private const val TAG = "AsrAudio"
@@ -36,10 +38,12 @@ class AudioRuntime(private val context: Context) : SensorModule {
 
     override fun start() {
         if (shouldRun) return
+        state = ModuleState.STARTING
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             snapshot = snapshot.copy(lastError = "RECORD_AUDIO permission not granted")
             Log.w(TAG, "Microphone not started: RECORD_AUDIO permission not granted")
+            state = ModuleState.ERROR
             return
         }
 
@@ -52,6 +56,7 @@ class AudioRuntime(private val context: Context) : SensorModule {
         if (minBufferBytes <= 0) {
             snapshot = snapshot.copy(lastError = "Invalid min buffer size: $minBufferBytes")
             Log.e(TAG, "Microphone not started: invalid min buffer size $minBufferBytes")
+            state = ModuleState.ERROR
             return
         }
 
@@ -68,11 +73,13 @@ class AudioRuntime(private val context: Context) : SensorModule {
             recorder.release()
             snapshot = snapshot.copy(lastError = "AudioRecord failed to initialize")
             Log.e(TAG, "Microphone not started: AudioRecord failed to initialize")
+            state = ModuleState.ERROR
             return
         }
 
         audioRecord = recorder
         shouldRun = true
+        state = ModuleState.RUNNING
         snapshot = AudioSnapshot(isRunning = true, sampleRateHz = SAMPLE_RATE_HZ)
 
         worker = thread(name = "ASR-AudioRuntime") {
@@ -84,6 +91,7 @@ class AudioRuntime(private val context: Context) : SensorModule {
     }
 
     override fun stop() {
+        state = ModuleState.STOPPING
         shouldRun = false
         worker?.join(500)
         worker = null
@@ -94,6 +102,7 @@ class AudioRuntime(private val context: Context) : SensorModule {
         audioRecord = null
         snapshot = snapshot.copy(isRunning = false)
         Log.i(TAG, "Microphone runtime stopped")
+        state = ModuleState.STOPPED
     }
 
     override fun release() {
@@ -132,6 +141,7 @@ class AudioRuntime(private val context: Context) : SensorModule {
         } catch (e: RuntimeException) {
             snapshot = snapshot.copy(isRunning = false, lastError = e.message.orEmpty())
             Log.e(TAG, "Microphone runtime failed", e)
+            state = ModuleState.ERROR
         }
     }
 

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
+import org.asr.runtime.common.ModuleState
 import org.asr.runtime.common.SensorModule
 
 /**
@@ -14,6 +15,7 @@ import org.asr.runtime.common.SensorModule
 class BatteryManager(private val context: Context) : SensorModule {
 
     override val id: String = "battery"
+    override var state: ModuleState = ModuleState.STOPPED
 
     private var _level: Float = -1f
     private var _isCharging: Boolean = false
@@ -43,18 +45,27 @@ class BatteryManager(private val context: Context) : SensorModule {
     }
 
     override fun start() {
+        state = ModuleState.STARTING
         val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        context.registerReceiver(batteryReceiver, filter)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(batteryReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(batteryReceiver, filter)
+        }
         Log.i("AsrBattery", "Battery monitor started")
+        state = ModuleState.RUNNING
     }
 
     override fun stop() {
+        state = ModuleState.STOPPING
         try {
             context.unregisterReceiver(batteryReceiver)
         } catch (e: Exception) {
             // ignore
         }
         Log.i("AsrBattery", "Battery monitor stopped")
+        state = ModuleState.STOPPED
     }
 
     override fun release() {
