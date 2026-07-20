@@ -1,13 +1,14 @@
 plugins {
     id("com.android.application")
+    // id("org.jetbrains.kotlin.android") // Managed by top-level
 }
 
 android {
-    namespace = "com.example.cameraros"
-    compileSdk = 37
+    namespace = "org.asr.runtime"
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.cameraros"
+        applicationId = "org.asr.runtime"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -15,7 +16,6 @@ android {
     }
 
     buildFeatures {
-        // Required for BuildConfig.VERSION_NAME and VERSION_CODE in CameraService
         buildConfig = true
     }
     buildTypes {
