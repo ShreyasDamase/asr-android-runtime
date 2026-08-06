@@ -33,4 +33,7 @@ object AsrVersion {
     const val PAYLOAD_VERSION: Byte = 0x01
 
     const val RUNTIME_VERSION = "1.0.0"
+
+    /** Specification version for ASR Protocol. */
+    const val SPECIFICATION_VERSION = "1.0.0"
 }

@@ -10,10 +10,11 @@ import java.nio.ByteOrder
 /**
  * Stateless serializer: converts module data into versioned payload ByteArrays.
  *
- * Rules:
+ * Protocol specification v1.0.0 rules:
+ * - Payloads are TIGHTLY PACKED. No padding, no alignment.
+ * - All multi-byte values are LITTLE ENDIAN.
  * - This object has NO state — no sequence numbers, no counters, no references.
  * - Every payload starts with [AsrVersion.PAYLOAD_VERSION] as byte [0].
- * - All multi-byte values are Little Endian.
  * - Each module owns its own sequence counter (AtomicInteger).
  *
  * Payload versions allow each payload type to evolve independently of the
@@ -96,8 +97,8 @@ object PacketSerializer {
      *
      * [0]     payload_version  UInt8
      * [1-4]   level            Float32 (0.0–100.0 %)
-     * [5-8]   temperature      Float32 °C
-     * [9-12]  voltage          Float32 mV
+     * [5-8]   temperature      Float32 (°C - Celsius)
+     * [9-12]  voltage          Float32 (mV - Millivolts)
      * [13-16] is_charging      UInt32 (0=No, 1=Yes)
      */
     fun battery(
@@ -117,6 +118,8 @@ object PacketSerializer {
 
     /**
      * Audio payload — payload_version=0x01, variable length.
+     *
+     * Data format: Signed PCM, 16-bit, Little Endian, Mono, 16 kHz.
      *
      * [0]     payload_version  UInt8
      * [1-2]   sample_count     UInt16 (number of Int16 samples)

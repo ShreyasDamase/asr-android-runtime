@@ -40,11 +40,16 @@ class ImuManager(
     @Volatile private var gyro     = FloatArray(3)
     @Volatile private var gravity  = FloatArray(3)
     @Volatile private var rotation = FloatArray(4)  // [x, y, z, w] Android convention
+    @Volatile private var lastTs   = 0L
 
     override fun onSensorChanged(event: SensorEvent) {
         totalEvents.incrementAndGet()
         when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER      -> { accel    = event.values.copyOf(3); publishPacket() }
+            Sensor.TYPE_ACCELEROMETER      -> {
+                accel = event.values.copyOf(3)
+                lastTs = event.timestamp // Use hardware sensor timestamp
+                publishPacket()
+            }
             Sensor.TYPE_GYROSCOPE          -> { gyro     = event.values.copyOf(3) }
             Sensor.TYPE_GRAVITY            -> { gravity  = event.values.copyOf(3) }
             Sensor.TYPE_ROTATION_VECTOR    -> { rotation = event.values.copyOfRange(0, minOf(4, event.values.size)) }
@@ -60,10 +65,11 @@ class ImuManager(
             rotation = rotation   // PacketSerializer handles w,x,y,z reordering
         )
         val packet = AsrPacket.encode(
-            topicId  = TopicId.IMU.value,
-            seq      = seq.getAndIncrement(),
-            payload  = payload,
-            deviceId = deviceId
+            topicId     = TopicId.IMU.value,
+            seq         = seq.getAndIncrement(),
+            payload     = payload,
+            deviceId    = deviceId,
+            timestampNs = lastTs
         )
         transportManager.send(packet)
     }

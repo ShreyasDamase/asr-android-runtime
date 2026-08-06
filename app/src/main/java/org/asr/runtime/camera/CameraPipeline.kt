@@ -115,10 +115,11 @@ class CameraPipeline(
 
             // Stage 5: Publish
             val packet = AsrPacket.encode(
-                topicId  = TopicId.CAMERA_FRAME.value,
-                seq      = seq.getAndIncrement(),
-                payload  = payload,
-                deviceId = deviceId
+                topicId     = TopicId.CAMERA_FRAME.value,
+                seq         = seq.getAndIncrement(),
+                payload     = payload,
+                deviceId    = deviceId,
+                timestampNs = metadata.sensorTimestampNs
             )
             transportManager.send(packet)
 

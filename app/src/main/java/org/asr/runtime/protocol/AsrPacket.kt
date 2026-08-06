@@ -48,9 +48,11 @@ object AsrPacket {
      *
      * @param topicId    [TopicId] byte identifying the data type.
      * @param seq        Monotonically increasing sequence number (caller-managed).
+     *                   Overflow from 4294967295 to 0 is valid and expected.
      * @param payload    Payload bytes — first byte MUST be the payload_version.
      * @param flags      Packet flags (default [PacketFlags.NONE]).
      * @param deviceId   Device identifier byte.
+     * @param timestampNs Monotonic timestamp in nanoseconds. If null, current system monotonic time is used.
      * @return           Complete packet: 28-byte header + payload.
      */
     fun encode(
@@ -58,9 +60,10 @@ object AsrPacket {
         seq: Int,
         payload: ByteArray,
         flags: Byte = PacketFlags.NONE,
-        deviceId: Byte = 0
+        deviceId: Byte = 0,
+        timestampNs: Long? = null
     ): ByteArray {
-        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        val tsNs = timestampNs ?: SystemClock.elapsedRealtimeNanos()
         val totalSize = AsrVersion.HEADER_SIZE + payload.size
         val buf = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN)
 
@@ -72,7 +75,7 @@ object AsrPacket {
         buf.put(flags)                               // [4]
         buf.put(deviceId)                            // [5]
         buf.putShort(0)                              // [6-7] reserved
-        buf.putLong(timestampNs)                     // [8-15]
+        buf.putLong(tsNs)                            // [8-15]
         buf.putInt(seq)                              // [16-19]
         buf.putInt(payload.size)                     // [20-23]
 

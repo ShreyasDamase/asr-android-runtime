@@ -85,10 +85,11 @@ class GpsManager(
             speed    = location.speed
         )
         val packet = AsrPacket.encode(
-            topicId  = TopicId.GPS.value,
-            seq      = seq.getAndIncrement(),
-            payload  = payload,
-            deviceId = deviceId
+            topicId     = TopicId.GPS.value,
+            seq         = seq.getAndIncrement(),
+            payload     = payload,
+            deviceId    = deviceId,
+            timestampNs = location.elapsedRealtimeNanos
         )
         transportManager.send(packet)
 
