@@ -1,7 +1,10 @@
 package org.asr.runtime.camera
 
 import android.content.Context
+import android.hardware.camera2.CaptureRequest
 import android.util.Log
+import android.util.Range
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.resolutionselector.ResolutionSelector
@@ -11,8 +14,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import org.asr.runtime.common.ModuleState
 import org.asr.runtime.common.SensorModule
+import org.asr.runtime.diagnostic.BenchmarkProcessor
 import org.asr.runtime.diagnostic.ThermalStatus
-import org.asr.runtime.pipeline.FramePipeline
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -30,13 +33,15 @@ class CameraManager(
 
     // To be set by AsrService
     var lifecycleOwner: LifecycleOwner? = null
-    var pipeline: FramePipeline? = null
+    var cameraPipeline: CameraPipeline? = null
+    var benchmarkProcessor: BenchmarkProcessor? = null
     var config: CameraConfig = CameraConfig()
 
     override fun start() {
         val lo = lifecycleOwner ?: return
-        val p = pipeline ?: return
-        startCamera(lo, p, config)
+        val cp = cameraPipeline ?: return
+        val bp = benchmarkProcessor ?: BenchmarkProcessor(context)
+        startCamera(lo, cp, bp, config)
     }
 
     override fun stop() {
@@ -67,7 +72,8 @@ class CameraManager(
 
     fun startCamera(
         lifecycleOwner: LifecycleOwner,
-        pipeline: FramePipeline,
+        cameraPipeline: CameraPipeline,
+        benchmarkProcessor: BenchmarkProcessor,
         config: CameraConfig
     ) {
         val provider = cameraProvider ?: return
@@ -85,13 +91,21 @@ class CameraManager(
             )
             .build()
 
-        imageAnalysis = ImageAnalysis.Builder()
+        val analysisBuilder = ImageAnalysis.Builder()
             .setResolutionSelector(resolutionSelector)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(config.imageFormat)
-            .build()
+
+        // Lock AE frame rate to targetFps via Camera2 interop
+        Camera2Interop.Extender(analysisBuilder)
+            .setCaptureRequestOption(
+                CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                Range(config.targetFps, config.targetFps)
+            )
+
+        imageAnalysis = analysisBuilder.build()
             .also {
-                it.setAnalyzer(cameraExecutor, CameraAnalyzer(pipeline))
+                it.setAnalyzer(cameraExecutor, CameraAnalyzer(cameraPipeline, benchmarkProcessor))
             }
 
         val cameraSelector = CameraSelector.Builder()

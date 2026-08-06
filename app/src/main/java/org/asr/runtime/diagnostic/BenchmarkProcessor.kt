@@ -4,15 +4,17 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.ImageProxy
-import org.asr.runtime.pipeline.FrameMetadata
-import org.asr.runtime.pipeline.FrameProcessor
+import org.asr.runtime.camera.FrameMetadata
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
  * Robotics-grade benchmark processor.
+ *
+ * Tracks FPS, latency, thermal status, memory, and error counts.
+ * Called from CameraAnalyzer before the CameraPipeline for lightweight metric collection.
  */
-class BenchmarkProcessor(private val context: Context) : FrameProcessor {
+class BenchmarkProcessor(private val context: Context) {
 
     companion object {
         private const val TAG = "PhoneCamera"
@@ -42,7 +44,7 @@ class BenchmarkProcessor(private val context: Context) : FrameProcessor {
         Log.i(TAG, "Benchmark Reset")
     }
 
-    override fun process(image: ImageProxy, metadata: FrameMetadata) {
+    fun process(image: ImageProxy, metadata: FrameMetadata) {
         val processStartNs = System.nanoTime()
         val now = SystemClock.elapsedRealtime()
 
