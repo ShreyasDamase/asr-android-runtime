@@ -39,14 +39,20 @@ class TcpTransport(
     var host: String = "127.0.0.1",
     var port: Int = 4242,
     private val onPacketReceived: ((ByteArray) -> Unit)? = null,
-    private val onReconnect: (() -> Unit)? = null
+    private val onReconnect: (() -> Unit)? = null,
+    private val onConnectionStateChanged: ((Boolean) -> Unit)? = null
 ) : Transport {
 
     override val type: String = "tcp"
 
     @Volatile
     override var isConnected: Boolean = false
-        private set
+        private set(value) {
+            if (field != value) {
+                field = value
+                onConnectionStateChanged?.invoke(value)
+            }
+        }
 
     private val sendQueue = ArrayBlockingQueue<ByteArray>(QUEUE_CAPACITY)
 
@@ -88,9 +94,18 @@ class TcpTransport(
 
     override fun disconnect() {
         shouldRun = false
+        // Drain and unblock sendQueue.take() immediately.
+        // Without this, the write thread blocks forever on take() and
+        // writeThread.join(500) always times out, leaving a zombie thread.
+        sendQueue.clear()
+        sendQueue.offer(ByteArray(0))  // sentinel to wake take()
         runCatching { socket?.close() }
-        writeThread?.join(1500)
-        readThread?.join(1500)
+        writeThread?.interrupt()
+        readThread?.interrupt()
+        writeThread?.join(500)
+        readThread?.join(500)
+        writeThread = null
+        readThread  = null
         isConnected = false
         Log.i(TAG, "[TCP] Transport stopped")
     }
@@ -98,82 +113,113 @@ class TcpTransport(
     // ── Write loop ────────────────────────────────────────────────────────────
 
     private fun writeLoop() {
-        while (shouldRun) {
-            try {
-                Log.i(TAG, "[TCP] Connecting to $host:$port ...")
-                val sock = Socket(host, port)
-                sock.tcpNoDelay = true
-                sock.keepAlive = true
-                socket = sock
-                outputStream = sock.getOutputStream()
-                isConnected = true
-                onReconnect?.invoke()
-                Log.i(TAG, "[TCP] Connected to $host:$port")
+        try {
+            while (shouldRun && !Thread.currentThread().isInterrupted) {
+                try {
+                    Log.i(TAG, "[TCP] Connecting to $host:$port ...")
+                    val sock = Socket()
+                    sock.connect(java.net.InetSocketAddress(host, port), 3000)
+                    sock.tcpNoDelay = true
+                    sock.keepAlive = true
+                    socket = sock
+                    outputStream = sock.getOutputStream()
+                    isConnected = true
+                    onReconnect?.invoke()
+                    Log.i(TAG, "[TCP] Connected to $host:$port")
 
-                while (shouldRun && !sock.isClosed) {
-                    val packet = sendQueue.take()   // blocks until data available
-                    try {
-                        outputStream?.write(packet)
-                        outputStream?.flush()
-                    } catch (e: Exception) {
-                        // Socket closed — break inner loop, outer will reconnect
-                        break
+                    while (shouldRun && !sock.isClosed && !Thread.currentThread().isInterrupted) {
+                        val packet = try {
+                            sendQueue.take()   // blocks until data available
+                        } catch (e: InterruptedException) {
+                            break
+                        }
+                        if (packet.isEmpty()) break      // disconnect() sentinel — exit write loop cleanly
+                        try {
+                            outputStream?.write(packet)
+                            outputStream?.flush()
+                        } catch (e: Exception) {
+                            // Socket closed — break inner loop, outer will reconnect
+                            break
+                        }
+                    }
+                } catch (e: InterruptedException) {
+                    break
+                } catch (e: Exception) {
+                    isConnected = false
+                    if (shouldRun && !Thread.currentThread().isInterrupted) {
+                        Log.w(TAG, "[TCP] Disconnected (${e.message}) — retrying in ${RETRY_DELAY_MS}ms")
+                        try {
+                            Thread.sleep(RETRY_DELAY_MS)
+                        } catch (e: InterruptedException) {
+                            break
+                        }
                     }
                 }
-            } catch (e: Exception) {
-                isConnected = false
-                if (shouldRun) {
-                    Log.w(TAG, "[TCP] Disconnected (${e.message}) — retrying in ${RETRY_DELAY_MS}ms")
-                    Thread.sleep(RETRY_DELAY_MS)
-                }
             }
+        } finally {
+            isConnected = false
         }
-        isConnected = false
     }
 
     // ── Read loop ─────────────────────────────────────────────────────────────
 
     private fun readLoop() {
-        while (shouldRun) {
-            val sock = socket
-            if (sock == null || !sock.isConnected || sock.isClosed) {
-                Thread.sleep(200)
-                continue
-            }
-            try {
-                val ins = sock.getInputStream()
-                while (shouldRun && !sock.isClosed) {
-                    val header = ByteArray(AsrVersion.HEADER_SIZE)
-                    if (!readFully(ins, header, 0, AsrVersion.HEADER_SIZE)) break
-
-                    // Parse payload length from header bytes [20-23]
-                    val payloadLen = ByteBuffer.wrap(header, 20, 4)
-                        .order(ByteOrder.LITTLE_ENDIAN).int
-
-                    val fullPacket = ByteArray(AsrVersion.HEADER_SIZE + payloadLen)
-                    System.arraycopy(header, 0, fullPacket, 0, AsrVersion.HEADER_SIZE)
-
-                    if (payloadLen > 0 && !readFully(ins, fullPacket, AsrVersion.HEADER_SIZE, payloadLen)) break
-
-                    onPacketReceived?.invoke(fullPacket)
+        try {
+            while (shouldRun && !Thread.currentThread().isInterrupted) {
+                val sock = socket
+                if (sock == null || !sock.isConnected || sock.isClosed) {
+                    try {
+                        Thread.sleep(200)
+                    } catch (e: InterruptedException) {
+                        break
+                    }
+                    continue
                 }
-            } catch (e: Exception) {
-                if (shouldRun) Log.w(TAG, "[TCP] Read error: ${e.message}")
-                Thread.sleep(200)
+                try {
+                    val ins = sock.getInputStream()
+                    while (shouldRun && !sock.isClosed && !Thread.currentThread().isInterrupted) {
+                        val header = ByteArray(AsrVersion.HEADER_SIZE)
+                        if (!readFully(ins, header, 0, AsrVersion.HEADER_SIZE)) break
+
+                        // Parse payload length from header bytes [20-23]
+                        val payloadLen = ByteBuffer.wrap(header, 20, 4)
+                            .order(ByteOrder.LITTLE_ENDIAN).int
+
+                        val fullPacket = ByteArray(AsrVersion.HEADER_SIZE + payloadLen)
+                        System.arraycopy(header, 0, fullPacket, 0, AsrVersion.HEADER_SIZE)
+
+                        if (payloadLen > 0 && !readFully(ins, fullPacket, AsrVersion.HEADER_SIZE, payloadLen)) break
+
+                        onPacketReceived?.invoke(fullPacket)
+                    }
+                } catch (e: InterruptedException) {
+                    break
+                } catch (e: Exception) {
+                    if (shouldRun && !Thread.currentThread().isInterrupted) {
+                        Log.w(TAG, "[TCP] Read error: ${e.message}")
+                        try {
+                            Thread.sleep(200)
+                        } catch (e: InterruptedException) {
+                            break
+                        }
+                    }
+                }
             }
+        } finally {
+            // Read loop terminated
         }
     }
 
     private fun readFully(ins: InputStream, buf: ByteArray, offset: Int, length: Int): Boolean {
         var remaining = length
         var pos = offset
-        while (remaining > 0) {
+        while (remaining > 0 && shouldRun) {
             val read = ins.read(buf, pos, remaining)
             if (read < 0) return false
             pos += read
             remaining -= read
         }
-        return true
+        return remaining == 0
     }
 
     companion object {

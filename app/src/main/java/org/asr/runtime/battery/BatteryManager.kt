@@ -8,11 +8,20 @@ import android.os.BatteryManager
 import android.util.Log
 import org.asr.runtime.common.ModuleState
 import org.asr.runtime.common.SensorModule
+import org.asr.runtime.protocol.AsrPacket
+import org.asr.runtime.protocol.PacketSerializer
+import org.asr.runtime.protocol.TopicId
+import org.asr.runtime.transport.TransportManager
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Manages battery telemetry for ASR.
  */
-class BatteryManager(private val context: Context) : SensorModule {
+class BatteryManager(
+    private val context: Context,
+    private val transportManager: TransportManager,
+    private val deviceId: Byte
+) : SensorModule {
 
     override val id: String = "battery"
     override var state: ModuleState = ModuleState.STOPPED
@@ -21,6 +30,7 @@ class BatteryManager(private val context: Context) : SensorModule {
     private var _isCharging: Boolean = false
     private var _temperature: Float = -1f
     private var _voltage: Int = -1
+    private val seq = AtomicInteger(0)
 
     val level: Float get() = _level
     val isCharging: Boolean get() = _isCharging
@@ -41,6 +51,16 @@ class BatteryManager(private val context: Context) : SensorModule {
             _voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
 
             Log.d("AsrBattery", "[BATTERY] level=$_level% charging=$_isCharging temp=$_temperature°C voltage=$_voltage mV")
+
+            // ── Send Battery packet ──
+            val payload = PacketSerializer.battery(_level, _temperature, _voltage.toFloat(), _isCharging)
+            val packet = AsrPacket.encode(
+                topicId = TopicId.BATTERY.value,
+                seq = seq.getAndIncrement(),
+                payload = payload,
+                deviceId = deviceId
+            )
+            transportManager.send(packet)
         }
     }
 

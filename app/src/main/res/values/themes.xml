@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AsrRuntime" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:colorPrimary">#80CBC4</item>
+        <item name="android:colorSecondary">#FFD166</item>
+        <item name="android:statusBarColor">#F5F7FA</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

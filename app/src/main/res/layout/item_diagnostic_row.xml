@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingVertical="8dp">
+
+    <TextView
+        android:id="@+id/lblDiagnostic"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Label"
+        android:textColor="#4A5568"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/valDiagnostic"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Value"
+        android:textColor="#2D3748"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+</LinearLayout>

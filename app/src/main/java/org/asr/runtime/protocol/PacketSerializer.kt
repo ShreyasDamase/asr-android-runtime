@@ -251,4 +251,12 @@ object PacketSerializer {
     fun error(code: Int, message: String): ByteArray =
         """{"payload_version":1,"code":$code,"message":"${message.replace("\"", "'")}"}"""
             .toByteArray(Charsets.UTF_8)
+
+    /**
+     * HEARTBEAT payload — payload_version=0x01, 9 bytes total.
+     */
+    fun heartbeat(uptimeMs: Long): ByteArray = buf(9).apply {
+        put(AsrVersion.PAYLOAD_VERSION)
+        putLong(uptimeMs)
+    }.array()
 }

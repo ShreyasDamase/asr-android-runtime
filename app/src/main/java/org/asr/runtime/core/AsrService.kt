@@ -12,6 +12,9 @@ import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
+import android.net.wifi.WifiManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -36,21 +39,24 @@ import org.asr.runtime.sensor.MotionManager
 import org.asr.runtime.transport.LogTransport
 import org.asr.runtime.transport.TcpTransport
 import org.asr.runtime.transport.TransportManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
 
 /**
  * Foreground Service that owns and orchestrates the ASR hardware runtime.
- *
- * Responsibilities:
- * - Initialize all hardware drivers and transport layer
- * - Register command handlers for each module
- * - Manage lifecycle via ModuleRegistry
- * - Respond to ADB broadcast control actions
- * - Emit 1Hz heartbeat via DiagnosticsManager
  */
 class AsrService : LifecycleService() {
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     companion object {
         private const val TAG            = "PhoneCamera"
@@ -80,6 +86,18 @@ class AsrService : LifecycleService() {
         )
     }
 
+    // ── Runtime State ────────────────────────────────────────────────────────
+    private val _runtimeState = MutableStateFlow(RuntimeState.STOPPED)
+    val runtimeState: StateFlow<RuntimeState> = _runtimeState.asStateFlow()
+
+    private val _clientInfo = MutableStateFlow<ClientInfo?>(null)
+    val clientInfo: StateFlow<ClientInfo?> = _clientInfo.asStateFlow()
+
+    private val _diagnostics = MutableStateFlow(DiagnosticsSnapshot())
+    val diagnostics: StateFlow<DiagnosticsSnapshot> = _diagnostics.asStateFlow()
+
+    private var packetsReceivedCount = 0L
+
     // ── Hardware Drivers ─────────────────────────────────────────────────────
     private lateinit var cameraManager:      CameraManager
     private lateinit var imuManager:         ImuManager
@@ -107,6 +125,50 @@ class AsrService : LifecycleService() {
     private var restartCount = 0
     private var pendingStart = false
     private var deviceId: Byte = 0
+    private val heartbeatSeq = java.util.concurrent.atomic.AtomicInteger(0)
+    private lateinit var heartbeatHandler: Handler
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            if (isRunning) {
+                val s = benchmarkProcessor.snapshot
+                diagnosticsManager.logHeartbeat(
+                    fps           = s.instantFps,
+                    latency       = s.latencyMs,
+                    activeModules = moduleRegistry.getRunningModules(),
+                    tcpTransport  = tcpTransport
+                )
+
+                // ── Send HEARTBEAT packet to client ──
+                if (tcpTransport.isConnected) {
+                    val payload = PacketSerializer.heartbeat(s.uptimeMs)
+                    val packet = AsrPacket.encode(
+                        topicId = TopicId.HEARTBEAT.value,
+                        seq = heartbeatSeq.getAndIncrement(),
+                        payload = payload,
+                        deviceId = deviceId
+                    )
+                    transportManager.send(packet)
+                }
+
+                // Update UI Diagnostics
+                _diagnostics.value = DiagnosticsSnapshot(
+                    packetsSent      = transportManager.totalPacketsSent,
+                    packetsReceived  = packetsReceivedCount,
+                    queueDepth       = tcpTransport.queueDepth,
+                    droppedPackets   = transportManager.totalPacketDrops,
+                    reconnectCount   = transportManager.reconnectCount,
+                    socketState      = if (tcpTransport.isConnected) "CONNECTED" else "CONNECTING",
+                    lastHeartbeat    = System.currentTimeMillis(),
+                    uptimeMs         = s.uptimeMs
+                )
+
+                heartbeatHandler.postDelayed(this, 1000)
+            }
+        }
+    }
 
     private val binder = LocalBinder()
     inner class LocalBinder : Binder() {
@@ -131,6 +193,17 @@ class AsrService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        heartbeatHandler = Handler(Looper.getMainLooper())
+        
+        // ── Acquire Locks for Robotics Workload ──
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AsrRuntime:WakeLock")
+        wakeLock?.acquire(10 * 60 * 60 * 1000L) // 10 hour timeout
+
+        val wm = getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "AsrRuntime:WifiLock")
+        wifiLock?.acquire()
+
         Log.i(TAG, "[ASR] Starting Runtime v${BuildConfig.VERSION_NAME}")
 
         // ── 1. Stable device ID (SharedPreferences UUID) ──────────────────
@@ -141,8 +214,43 @@ class AsrService : LifecycleService() {
         tcpTransport = TcpTransport(
             host             = "127.0.0.1",
             port             = 4242,
-            onPacketReceived = { commandDispatcher.dispatch(it) },
-            onReconnect      = { transportManager.notifyReconnect() }
+            onPacketReceived = { 
+                packetsReceivedCount++
+                commandDispatcher.dispatch(it) 
+            },
+            onReconnect      = { transportManager.notifyReconnect() },
+            onConnectionStateChanged = { connected ->
+                if (connected) {
+                    val clientApp = if (tcpTransport.host == "127.0.0.1") "ASR Studio (ADB)" else "ASR Studio (Wi-Fi)"
+                    _clientInfo.value = ClientInfo(
+                        application = clientApp,
+                        host = tcpTransport.host,
+                        port = tcpTransport.port,
+                        connectedSince = System.currentTimeMillis()
+                    )
+                    if (_runtimeState.value == RuntimeState.CONNECTING) {
+                        _runtimeState.value = RuntimeState.CONNECTED
+                    }
+                    
+                    // ── Send Handshake: CAPABILITIES ──
+                    val capPayload = capabilityManager.discover().let {
+                        PacketSerializer.capabilities(this@AsrService, deviceId)
+                    }
+                    val capPacket = AsrPacket.encode(
+                        topicId = TopicId.CAPABILITIES.value,
+                        seq = 0,
+                        payload = capPayload,
+                        deviceId = deviceId
+                    )
+                    transportManager.send(capPacket)
+
+                } else {
+                    _clientInfo.value = null
+                    if (_runtimeState.value == RuntimeState.CONNECTED || _runtimeState.value == RuntimeState.STREAMING) {
+                        _runtimeState.value = RuntimeState.CONNECTING
+                    }
+                }
+            }
         )
         transportManager.addTransport(LogTransport())
         transportManager.addTransport(tcpTransport)
@@ -177,7 +285,7 @@ class AsrService : LifecycleService() {
         environmentManager = EnvironmentManager(this, transportManager, deviceId)
         motionManager      = MotionManager(this)
         audioRuntime       = AudioRuntime(this)
-        batteryManager     = BatteryManager(this)
+        batteryManager     = BatteryManager(this, transportManager, deviceId)
         speakerManager     = SpeakerManager(this)
         gpsManager         = GpsManager(this, transportManager, deviceId)
         capabilityManager  = CapabilityManager(this)
@@ -223,6 +331,12 @@ class AsrService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        
+        // On modern Android, we MUST call startForeground quickly if started via startForegroundService
+        if (intent?.action == ACTION_START || intent?.action == ACTION_RESTART) {
+            ensureForeground()
+        }
+
         when (intent?.action) {
             ACTION_START          -> handleStart()
             ACTION_STOP           -> handleStop()
@@ -314,61 +428,139 @@ class AsrService : LifecycleService() {
                 return Result.success("Profile '$profileId' enabled: $modules")
             }
         })
+        // Runtime stop
+        commandDispatcher.register(object : CommandHandler {
+            override val command = "runtime.stop"
+            override fun execute(params: JSONObject): Result<String> {
+                Log.i(TAG, "[CMD] Stop ASR Runtime requested via TCP command")
+                moduleRegistry.stopAll()
+                return Result.success("ASR Runtime modules stopped")
+            }
+        })
 
         Log.i(TAG, "[CMD] Registered ${commandDispatcher.registeredCommands().size} command handlers: ${commandDispatcher.registeredCommands()}")
     }
 
     // ── Handlers ─────────────────────────────────────────────────────────────
 
-    private fun handleStart() {
+    // ── Public Controller Methods ───────────────────────────────────────────
+
+    fun startRuntime() {
         if (isRunning) return
-        createNotificationChannel()
-        val notification = createNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            startForeground(NOTIFICATION_ID, notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        _runtimeState.value = RuntimeState.STARTING
+        handleStart()
+    }
+
+    fun stopRuntime() {
+        if (!isRunning) return
+        serviceScope.launch(Dispatchers.Default) {
+            _runtimeState.value = RuntimeState.STOPPING
+            handleStop()
+            _runtimeState.value = RuntimeState.STOPPED
+        }
+    }
+
+    fun restartRuntime() {
+        serviceScope.launch(Dispatchers.Default) {
+            _runtimeState.value = RuntimeState.STOPPING
+            handleRestart()
+            _runtimeState.value = RuntimeState.STARTING
+        }
+    }
+
+    fun resetRuntime() {
+        Log.w(TAG, "[DEV] Emergency Reset Triggered")
+        serviceScope.launch(Dispatchers.Default) {
+            moduleRegistry.stopAll()
+            packetsReceivedCount = 0
+            handleRestart()
+        }
+    }
+
+    fun reconnectTransport() {
+        Log.i(TAG, "[CMD] Manual Transport Reconnect (current host=${tcpTransport.host}:${tcpTransport.port})")
+        serviceScope.launch(Dispatchers.IO) {
+            tcpTransport.disconnect()
+            tcpTransport.connect()
+        }
+    }
+
+    /**
+     * Connects the TCP transport to a specific [host]:[port].
+     *
+     * Wi-Fi mode:   host = desktop LAN IP (e.g. "192.168.1.42"), port = 4242
+     * ADB mode:     host = "127.0.0.1", port = 4242
+     *               (requires:  adb forward tcp:4242 tcp:4242  on the host machine)
+     */
+    fun reconnectTransport(host: String, port: Int) {
+        Log.i(TAG, "[CMD] Transport connect → $host:$port")
+        serviceScope.launch(Dispatchers.IO) {
+            tcpTransport.disconnect()
+            tcpTransport.host = host
+            tcpTransport.port = port
+            tcpTransport.connect()
+        }
+    }
+
+    fun stopTransport() {
+        Log.i(TAG, "[CMD] Transport stop")
+        serviceScope.launch(Dispatchers.IO) {
+            tcpTransport.disconnect()
+        }
+    }
+
+    // ── Handlers ─────────────────────────────────────────────────────────────
+
+    private fun handleStart() {
+        ensureForeground()
+
+        if (isRunning) {
+            Log.i(TAG, "AsrService is already running, skipping internal start")
+            return
         }
 
         if (cameraManager.isCameraProviderReady()) startInternal() else pendingStart = true
     }
 
+    private fun ensureForeground() {
+        createNotificationChannel()
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            startForeground(NOTIFICATION_ID, notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
     private fun startInternal() {
+        _runtimeState.value = RuntimeState.CONNECTING
         benchmarkProcessor.reset(restartCount)
         moduleRegistry.startModule("battery")
         moduleRegistry.startModule("diagnostics")
         moduleRegistry.startModule("transport")
+        moduleRegistry.startModule("imu")
+        moduleRegistry.startModule("camera")
+        moduleRegistry.startModule("gps")
         isRunning = true
         startHeartbeatLoop()
-        Log.i(TAG, "[ASR] Runtime started. DeviceId=$deviceId Commands=${commandDispatcher.registeredCommands()}")
+        Log.i(TAG, "[ASR] Runtime started (sensors active). DeviceId=$deviceId Commands=${commandDispatcher.registeredCommands()}")
     }
 
     private fun startHeartbeatLoop() {
-        val handler = Handler(mainLooper)
-        handler.post(object : Runnable {
-            override fun run() {
-                if (isRunning) {
-                    val s = benchmarkProcessor.snapshot
-                    diagnosticsManager.logHeartbeat(
-                        fps           = s.instantFps,
-                        latency       = s.latencyMs,
-                        activeModules = moduleRegistry.getRunningModules(),
-                        tcpTransport  = tcpTransport
-                    )
-                    handler.postDelayed(this, 1000)
-                }
-            }
-        })
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
+        heartbeatHandler.post(heartbeatRunnable)
     }
 
     private fun handleStop() {
+        Log.i(TAG, "[ASR] Stopping runtime modules & transport")
         moduleRegistry.stopAll()
+        tcpTransport.disconnect()
         isRunning = false
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        _runtimeState.value = RuntimeState.STOPPED
+        _clientInfo.value = null
     }
 
     private fun handleRestart() {
@@ -402,13 +594,14 @@ class AsrService : LifecycleService() {
     }
 
     private fun handleTcpConnect(intent: Intent) {
+        // Extract extras immediately (before launching coroutine — intent extras may be recycled).
         val host = intent.getStringExtra("host") ?: "127.0.0.1"
         val port = intent.getIntExtra("port", 4242)
-        Log.i(TAG, "[CMD] TCP connect → $host:$port")
-        tcpTransport.disconnect()
-        tcpTransport.host = host
-        tcpTransport.port = port
-        tcpTransport.connect()
+        Log.i(TAG, "[ADB] TCP connect → $host:$port")
+        // Delegate to reconnectTransport() which runs on Dispatchers.IO.
+        // Do NOT call tcpTransport.disconnect() here directly — it calls Thread.join()
+        // which would block the main/binder thread for up to 1 second.
+        reconnectTransport(host, port)
     }
 
     private fun handleDevMode(intent: Intent) {
@@ -466,8 +659,13 @@ class AsrService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         super.onDestroy()
         try { unregisterReceiver(controlReceiver) } catch (e: Exception) { /* already unregistered */ }
+        
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wifiLock?.let { if (it.isHeld) it.release() }
+        
         moduleRegistry.releaseAll()
         Log.i(TAG, "[ASR] Runtime destroyed")
     }

@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "cameraros"
+rootProject.name = "asr_android"
 include(":app")

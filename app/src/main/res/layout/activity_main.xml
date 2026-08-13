@@ -1,88 +1,384 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="#FFFFFF"
-    android:padding="16dp">
+    android:background="#F5F7FA">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="ASR Runtime Status"
-            android:textSize="24sp"
+            android:text="ASR v1.0 Runtime"
+            android:textColor="#1A202C"
+            android:textSize="28sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Permissions"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
-
-        <TableLayout
-            android:id="@+id/permissionTable"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:stretchColumns="0"
-            android:layout_marginBottom="24dp"
-            android:background="#EEEEEE">
-            <TableRow android:background="#CCCCCC">
-                <TextView android:text="Permission" android:padding="8dp" android:textStyle="bold"/>
-                <TextView android:text="Status" android:padding="8dp" android:textStyle="bold"/>
-            </TableRow>
-        </TableLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Hardware / Sensors"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
-
-        <TableLayout
-            android:id="@+id/hardwareTable"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:stretchColumns="0"
-            android:background="#EEEEEE">
-            <TableRow android:background="#CCCCCC">
-                <TextView android:text="Hardware" android:padding="8dp" android:textStyle="bold"/>
-                <TextView android:text="Present" android:padding="8dp" android:textStyle="bold"/>
-                <TextView android:text="Status" android:padding="8dp" android:textStyle="bold"/>
-            </TableRow>
-        </TableLayout>
-
+        <!-- Runtime Control Card -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="24dp">
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
-            <Button
-                android:id="@+id/btnStart"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Start Runtime"
-                android:layout_marginEnd="8dp" />
+                android:orientation="vertical">
 
-            <Button
-                android:id="@+id/btnSettings"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="App Settings"
-                android:layout_marginStart="8dp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Runtime"
+                        android:textStyle="bold"
+                        android:textSize="18sp"/>
+                    <TextView
+                        android:id="@+id/txtRuntimeStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="● STOPPED"
+                        android:textColor="#A0AEC0"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#E2E8F0"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <Button
+                        android:id="@+id/btnStartRuntime"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1.2"
+                        android:text="START"
+                        android:textSize="12sp"
+                        android:singleLine="true"
+                        android:layout_marginEnd="4dp" />
+                    <Button
+                        android:id="@+id/btnStopRuntime"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="STOP"
+                        android:textSize="12sp"
+                        android:singleLine="true"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp" />
+                    <Button
+                        android:id="@+id/btnRestartRuntime"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1.2"
+                        android:text="RESTART"
+                        android:textSize="11sp"
+                        android:singleLine="true"
+                        android:layout_marginStart="2dp" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
+        <!-- Transport Control Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Transport"
+                    android:textStyle="bold"
+                    android:textSize="18sp"/>
+                <TextView
+                    android:id="@+id/txtTransportMode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Wi-Fi"
+                    android:textSize="12sp"
+                    android:textColor="#3182CE"
+                    android:textStyle="bold"
+                    android:background="#EBF8FF"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"/>
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#E2E8F0"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="12dp"/>
+
+            <!-- Host IP row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+                <TextView
+                    android:layout_width="56dp"
+                    android:layout_height="wrap_content"
+                    android:text="Host"
+                    android:textSize="13sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold"/>
+                <EditText
+                    android:id="@+id/editTransportHost"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="192.168.x.x  (or 127.0.0.1 for ADB)"
+                    android:inputType="textUri"
+                    android:singleLine="true"
+                    android:textSize="14sp"
+                    android:textColor="#1A202C"
+                    android:textColorHint="#718096"
+                    android:padding="10dp"
+                    android:background="#EDF2F7"/>
+            </LinearLayout>
+
+            <!-- Port row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="56dp"
+                    android:layout_height="wrap_content"
+                    android:text="Port"
+                    android:textSize="13sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold"/>
+                <EditText
+                    android:id="@+id/editTransportPort"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="4242"
+                    android:inputType="number"
+                    android:singleLine="true"
+                    android:textSize="14sp"
+                    android:textColor="#1A202C"
+                    android:textColorHint="#718096"
+                    android:padding="10dp"
+                    android:background="#EDF2F7"/>
+            </LinearLayout>
+
+            <!-- ADB hint -->
+            <TextView
+                android:id="@+id/txtAdbHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ADB mode: run  adb reverse tcp:4242 tcp:4242  then use 127.0.0.1"
+                android:textSize="11sp"
+                android:textColor="#4A5568"
+                android:fontFamily="monospace"
+                android:background="#EDF2F7"
+                android:padding="8dp"
+                android:layout_marginBottom="12dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/btnConnectTransport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="CONNECT"
+                    android:textSize="12sp"
+                    android:singleLine="true"
+                    android:maxLines="1"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:layout_marginEnd="2dp" />
+                <Button
+                    android:id="@+id/btnDisconnectTransport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="DISCONNECT"
+                    android:textSize="11sp"
+                    android:singleLine="true"
+                    android:maxLines="1"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp" />
+                <Button
+                    android:id="@+id/btnReconnectTransport"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="RECONNECT"
+                    android:textSize="11sp"
+                    android:singleLine="true"
+                    android:maxLines="1"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp"
+                    android:layout_marginStart="2dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Connected Client Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connected Client"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:layout_marginBottom="12dp"/>
+
+            <LinearLayout
+                android:id="@+id/layoutClientInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientStatus"/>
+                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientApp"/>
+                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientHost"/>
+                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientSince"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Permissions Table (Restored) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Permissions"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:layout_marginBottom="12dp"/>
+
+            <TableLayout
+                android:id="@+id/permissionTable"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stretchColumns="0"
+                android:background="#F7FAFC">
+                <TableRow android:background="#EDF2F7">
+                    <TextView android:text="Permission" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568"/>
+                    <TextView android:text="Status" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
+                </TableRow>
+            </TableLayout>
+        </LinearLayout>
+
+        <!-- Hardware / Sensor Table (Restored) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Hardware / Sensors"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:layout_marginBottom="12dp"/>
+
+            <TableLayout
+                android:id="@+id/hardwareTable"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stretchColumns="0"
+                android:background="#F7FAFC">
+                <TableRow android:background="#EDF2F7">
+                    <TextView android:text="Hardware" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568"/>
+                    <TextView android:text="Present" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
+                    <TextView android:text="Status" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
+                </TableRow>
+            </TableLayout>
+        </LinearLayout>
+
+        <!-- Diagnostics Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Diagnostics"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:layout_marginBottom="12dp"/>
+
+            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowPacketsSent"/>
+            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowPacketsReceived"/>
+            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowQueueDepth"/>
+            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowDropped"/>
+            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowReconnects"/>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnEmergencyReset"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠ RESET RUNTIME"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#E53E3E"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="32dp"/>
+
     </LinearLayout>
-</ScrollView>
+</androidx.core.widget.NestedScrollView>
