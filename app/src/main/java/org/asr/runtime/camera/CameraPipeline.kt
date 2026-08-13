@@ -32,24 +32,76 @@ interface CameraCompressor {
  *
  * Converts YUV_420_888 ImageProxy to JPEG via Android's YuvImage API.
  */
-class JpegCompressor(val quality: Int = 85) : CameraCompressor {
+class JpegCompressor(val quality: Int = 75) : CameraCompressor {
     override val encoding = CameraEncoding.JPEG
 
     override fun compress(image: ImageProxy): ByteArray {
-        val yBuffer = image.planes[0].buffer
-        val uBuffer = image.planes[1].buffer
-        val vBuffer = image.planes[2].buffer
-        val ySize = yBuffer.remaining()
-        val uSize = uBuffer.remaining()
-        val vSize = vBuffer.remaining()
-        val nv21 = ByteArray(ySize + uSize + vSize)
-        yBuffer.get(nv21, 0, ySize)
-        vBuffer.get(nv21, ySize, vSize)
-        uBuffer.get(nv21, ySize + vSize, uSize)
+        val width = image.width
+        val height = image.height
+        val yPlane = image.planes[0]
+        val uPlane = image.planes[1]
+        val vPlane = image.planes[2]
 
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
+        val yBuffer = yPlane.buffer
+        val uBuffer = uPlane.buffer
+        val vBuffer = vPlane.buffer
+
+        yBuffer.rewind()
+        uBuffer.rewind()
+        vBuffer.rewind()
+
+        val ySize = width * height
+        val uvSize = width * height / 2
+        val nv21 = ByteArray(ySize + uvSize)
+
+        val yRowStride = yPlane.rowStride
+        val yPixelStride = yPlane.pixelStride
+        var pos = 0
+
+        if (yRowStride == width && yPixelStride == 1) {
+            val bytesToCopy = ySize.coerceAtMost(yBuffer.remaining())
+            yBuffer.get(nv21, 0, bytesToCopy)
+            pos = bytesToCopy
+        } else {
+            val rowBytes = ByteArray(yRowStride)
+            for (row in 0 until height) {
+                if (yBuffer.remaining() < yRowStride) break
+                yBuffer.get(rowBytes, 0, yRowStride)
+                for (col in 0 until width) {
+                    val idx = col * yPixelStride
+                    if (idx < rowBytes.size && pos < nv21.size) {
+                        nv21[pos++] = rowBytes[idx]
+                    }
+                }
+            }
+        }
+
+        val vRowStride = vPlane.rowStride
+        val vPixelStride = vPlane.pixelStride
+        val uRowStride = uPlane.rowStride
+        val uPixelStride = uPlane.pixelStride
+
+        val vRow = ByteArray(vRowStride)
+        val uRow = ByteArray(uRowStride)
+
+        for (row in 0 until height / 2) {
+            val vLen = vRowStride.coerceAtMost(vBuffer.remaining())
+            val uLen = uRowStride.coerceAtMost(uBuffer.remaining())
+            if (vLen > 0) vBuffer.get(vRow, 0, vLen)
+            if (uLen > 0) uBuffer.get(uRow, 0, uLen)
+            for (col in 0 until width / 2) {
+                val vIdx = col * vPixelStride
+                val uIdx = col * uPixelStride
+                if (vIdx < vLen && uIdx < uLen && pos < nv21.size - 1) {
+                    nv21[pos++] = vRow[vIdx]
+                    nv21[pos++] = uRow[uIdx]
+                }
+            }
+        }
+
+        val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
         val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), quality, out)
+        yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, out)
         return out.toByteArray()
     }
 }
