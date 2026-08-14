@@ -23,6 +23,7 @@ import org.asr.runtime.R
 import org.asr.runtime.audio.AudioRuntime
 import org.asr.runtime.audio.SpeakerManager
 import org.asr.runtime.battery.BatteryManager
+import org.asr.runtime.common.ModuleState
 import org.asr.runtime.camera.CameraConfig
 import org.asr.runtime.camera.CameraManager
 import org.asr.runtime.camera.CameraPipeline
@@ -82,7 +83,7 @@ class AsrService : LifecycleService() {
             "mapping"     to listOf("camera", "imu"),
             "teleop"      to listOf("camera", "audio", "speaker"),
             "navigation"  to listOf("imu", "gps", "battery"),
-            "full_sensor" to listOf("camera", "imu", "gps", "audio", "battery", "environment")
+            "full_sensor" to listOf("camera", "imu", "gps", "audio", "speaker", "battery", "environment")
         )
     }
 
@@ -284,7 +285,7 @@ class AsrService : LifecycleService() {
         imuManager         = ImuManager(this, transportManager, deviceId)
         environmentManager = EnvironmentManager(this, transportManager, deviceId)
         motionManager      = MotionManager(this)
-        audioRuntime       = AudioRuntime(this)
+        audioRuntime       = AudioRuntime(this, transportManager, deviceId)
         batteryManager     = BatteryManager(this, transportManager, deviceId)
         speakerManager     = SpeakerManager(this)
         gpsManager         = GpsManager(this, transportManager, deviceId)
@@ -341,7 +342,10 @@ class AsrService : LifecycleService() {
             ACTION_START          -> handleStart()
             ACTION_STOP           -> handleStop()
             ACTION_RESTART        -> handleRestart()
-            ACTION_SPEAK          -> intent.getStringExtra("text")?.let { speakerManager.speak(it) }
+            ACTION_SPEAK          -> {
+                val text = intent.getStringExtra("text") ?: "ASR speaker test successful"
+                speakerManager.speak(text)
+            }
             ACTION_MODULE_START   -> intent.getStringExtra("module_id")?.let {
                 Log.i(TAG, "[CMD] Starting module: $it")
                 moduleRegistry.startModule(it)
@@ -409,13 +413,22 @@ class AsrService : LifecycleService() {
             }
         })
         // Speaker
+        val speakerHandler = object : CommandHandler {
+            override val command = "speaker.speak"
+            override fun execute(params: JSONObject): Result<String> {
+                val text = params.optString("text", "ASR speaker test")
+                if (speakerManager.state == ModuleState.STOPPED) {
+                    Log.i(TAG, "[CMD] Auto-starting speaker module...")
+                    speakerManager.start()
+                }
+                val success = speakerManager.speak(text)
+                return if (success) Result.success("Speaking: $text") else Result.failure(Exception("Speaker not ready"))
+            }
+        }
+        commandDispatcher.register(speakerHandler)
         commandDispatcher.register(object : CommandHandler {
             override val command = "speak"
-            override fun execute(params: JSONObject): Result<String> {
-                val text = params.getString("text")
-                speakerManager.speak(text)
-                return Result.success("Speaking: $text")
-            }
+            override fun execute(params: JSONObject): Result<String> = speakerHandler.execute(params)
         })
         // Profile
         commandDispatcher.register(object : CommandHandler {
@@ -428,7 +441,15 @@ class AsrService : LifecycleService() {
                 return Result.success("Profile '$profileId' enabled: $modules")
             }
         })
-        // Runtime stop
+        // Flashlight / Torch
+        commandDispatcher.register(object : CommandHandler {
+            override val command = "flashlight.set"
+            override fun execute(params: JSONObject): Result<String> {
+                val isOn = params.optBoolean("on", false)
+                val success = cameraManager.setTorch(isOn)
+                return if (success) Result.success("Flashlight set to $isOn") else Result.failure(Exception("Camera not active or torch unavailable"))
+            }
+        })
         commandDispatcher.register(object : CommandHandler {
             override val command = "runtime.stop"
             override fun execute(params: JSONObject): Result<String> {
@@ -544,6 +565,7 @@ class AsrService : LifecycleService() {
         moduleRegistry.startModule("imu")
         moduleRegistry.startModule("camera")
         moduleRegistry.startModule("gps")
+        moduleRegistry.startModule("speaker")
         isRunning = true
         startHeartbeatLoop()
         Log.i(TAG, "[ASR] Runtime started (sensors active). DeviceId=$deviceId Commands=${commandDispatcher.registeredCommands()}")

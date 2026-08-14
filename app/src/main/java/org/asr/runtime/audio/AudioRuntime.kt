@@ -11,14 +11,25 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import org.asr.runtime.common.ModuleState
 import org.asr.runtime.common.SensorModule
+import org.asr.runtime.protocol.AsrPacket
+import org.asr.runtime.protocol.PacketSerializer
+import org.asr.runtime.protocol.TopicId
+import org.asr.runtime.transport.TransportManager
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import kotlin.math.log10
 import kotlin.math.sqrt
 
-class AudioRuntime(private val context: Context) : SensorModule {
+class AudioRuntime(
+    private val context: Context,
+    private val transportManager: TransportManager? = null,
+    private val deviceId: Byte = 0
+) : SensorModule {
 
     override val id: String = "audio"
     override var state: ModuleState = ModuleState.STOPPED
+
+    private val seq = AtomicInteger(0)
 
     companion object {
         private const val TAG = "AsrAudio"
@@ -61,16 +72,36 @@ class AudioRuntime(private val context: Context) : SensorModule {
         }
 
         val bufferSizeBytes = minBufferBytes * 2
-        val recorder = AudioRecord(
+        var recorder: AudioRecord? = null
+        val audioSources = listOf(
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.UNPROCESSED,
-            SAMPLE_RATE_HZ,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            bufferSizeBytes
+            MediaRecorder.AudioSource.DEFAULT
         )
 
-        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-            recorder.release()
+        for (source in audioSources) {
+            try {
+                val candidate = AudioRecord(
+                    source,
+                    SAMPLE_RATE_HZ,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSizeBytes
+                )
+                if (candidate.state == AudioRecord.STATE_INITIALIZED) {
+                    recorder = candidate
+                    Log.i(TAG, "AudioRecord initialized using source=$source")
+                    break
+                } else {
+                    candidate.release()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "AudioSource $source failed: ${e.message}")
+            }
+        }
+
+        if (recorder == null || recorder.state != AudioRecord.STATE_INITIALIZED) {
             snapshot = snapshot.copy(lastError = "AudioRecord failed to initialize")
             Log.e(TAG, "Microphone not started: AudioRecord failed to initialize")
             state = ModuleState.ERROR
@@ -133,6 +164,44 @@ class AudioRuntime(private val context: Context) : SensorModule {
                     dbfs = dbfs,
                     lastTimestampNs = System.nanoTime()
                 )
+
+                // Calculate Peak level
+                var maxPeak = 0
+                for (i in 0 until read) {
+                    val absVal = kotlin.math.abs(buffer[i].toInt())
+                    if (absVal > maxPeak) maxPeak = absVal
+                }
+                val peakLevel = (maxPeak / Short.MAX_VALUE.toFloat()).coerceIn(0f, 1f)
+                val rmsNorm = (rms / Short.MAX_VALUE.toDouble()).toFloat().coerceIn(0f, 1f)
+                val voiceActive = rmsNorm > 0.04f || peakLevel > 0.12f
+
+                // Send live Audio telemetry packet (~20-50 Hz)
+                transportManager?.let { tm ->
+                    val payload = PacketSerializer.audioLevel(
+                        rmsLevel = rmsNorm,
+                        peakLevel = peakLevel,
+                        noiseFloorDbfs = dbfs.toFloat(),
+                        voiceActive = voiceActive,
+                        sampleRateHz = SAMPLE_RATE_HZ
+                    )
+                    val packet = AsrPacket.encode(
+                        topicId = TopicId.AUDIO.value,
+                        seq = seq.getAndIncrement(),
+                        payload = payload,
+                        deviceId = deviceId
+                    )
+                    tm.send(packet)
+
+                    // Also stream raw audio PCM packets on RESERVED_10 for live desktop monitor & ROS 2 /audio/raw
+                    val rawPayload = PacketSerializer.audio(buffer, read)
+                    val rawPacket = AsrPacket.encode(
+                        topicId = TopicId.RESERVED_10.value,
+                        seq = seq.getAndIncrement(),
+                        payload = rawPayload,
+                        deviceId = deviceId
+                    )
+                    tm.send(rawPacket)
+                }
 
                 if (buffersRead % LOG_INTERVAL_BUFFERS == 0L) {
                     Log.d(TAG, "[AUDIO] buffers=$buffersRead samples=$samplesRead rms=${"%.1f".format(rms)} dbfs=${"%.1f".format(dbfs)}")

@@ -117,7 +117,31 @@ object PacketSerializer {
     // ── Audio ─────────────────────────────────────────────────────────────────
 
     /**
-     * Audio payload — payload_version=0x01, variable length.
+     * Audio Level / Diagnostics payload — payload_version=0x01, 18 bytes total.
+     * [0]     payload_version  UInt8
+     * [1-4]   rms_level        Float32 (0.0 .. 1.0)
+     * [5-8]   peak_level       Float32 (0.0 .. 1.0)
+     * [9-12]  noise_floor_dbfs Float32 (-120.0 .. 0.0)
+     * [13]    voice_active     UInt8 (0 or 1)
+     * [14-17] sample_rate_hz   Int32 (16000)
+     */
+    fun audioLevel(
+        rmsLevel: Float,
+        peakLevel: Float,
+        noiseFloorDbfs: Float,
+        voiceActive: Boolean,
+        sampleRateHz: Int = 16000
+    ): ByteArray = buf(18).apply {
+        put(AsrVersion.PAYLOAD_VERSION)
+        putFloat(rmsLevel)
+        putFloat(peakLevel)
+        putFloat(noiseFloorDbfs)
+        put(if (voiceActive) 1.toByte() else 0.toByte())
+        putInt(sampleRateHz)
+    }.array()
+
+    /**
+     * Audio Raw PCM payload — payload_version=0x01, variable length.
      *
      * Data format: Signed PCM, 16-bit, Little Endian, Mono, 16 kHz.
      *

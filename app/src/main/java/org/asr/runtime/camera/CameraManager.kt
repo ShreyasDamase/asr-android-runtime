@@ -70,6 +70,20 @@ class CameraManager(
 
     fun isCameraProviderReady(): Boolean = cameraProvider != null
 
+    private var camera: androidx.camera.core.Camera? = null
+
+    fun setTorch(enable: Boolean): Boolean {
+        return try {
+            val cam = camera ?: return false
+            cam.cameraControl.enableTorch(enable)
+            Log.i(TAG, "Torch set to $enable")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to toggle torch: ${e.message}")
+            false
+        }
+    }
+
     fun startCamera(
         lifecycleOwner: LifecycleOwner,
         cameraPipeline: CameraPipeline,
@@ -114,7 +128,7 @@ class CameraManager(
 
         try {
             provider.unbindAll()
-            provider.bindToLifecycle(
+            camera = provider.bindToLifecycle(
                 lifecycleOwner,
                 cameraSelector,
                 imageAnalysis
@@ -131,6 +145,7 @@ class CameraManager(
     fun stopCamera() {
         state = ModuleState.STOPPING
         cameraProvider?.unbindAll()
+        camera = null
         imageAnalysis = null
         Log.i(TAG, "Camera Stopped")
         state = ModuleState.STOPPED
