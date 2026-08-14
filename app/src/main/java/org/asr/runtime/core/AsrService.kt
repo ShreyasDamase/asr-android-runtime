@@ -142,9 +142,11 @@ class AsrService : LifecycleService() {
                     tcpTransport  = tcpTransport
                 )
 
+                val uptimeMs = benchmarkProcessor.getRunningTimeMs()
+
                 // ── Send HEARTBEAT packet to client ──
                 if (tcpTransport.isConnected) {
-                    val payload = PacketSerializer.heartbeat(s.uptimeMs)
+                    val payload = PacketSerializer.heartbeat(uptimeMs)
                     val packet = AsrPacket.encode(
                         topicId = TopicId.HEARTBEAT.value,
                         seq = heartbeatSeq.getAndIncrement(),
@@ -163,7 +165,7 @@ class AsrService : LifecycleService() {
                     reconnectCount   = transportManager.reconnectCount,
                     socketState      = if (tcpTransport.isConnected) "CONNECTED" else "CONNECTING",
                     lastHeartbeat    = System.currentTimeMillis(),
-                    uptimeMs         = s.uptimeMs
+                    uptimeMs         = uptimeMs
                 )
 
                 heartbeatHandler.postDelayed(this, 1000)
@@ -586,7 +588,8 @@ class AsrService : LifecycleService() {
     }
 
     private fun handleRestart() {
-        moduleRegistry.stopAll()
+        Log.i(TAG, "[ASR] Performing full runtime restart")
+        handleStop()
         restartCount++
         startInternal()
     }

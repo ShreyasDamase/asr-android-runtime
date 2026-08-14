@@ -225,7 +225,6 @@ class MainActivity : ComponentActivity() {
 
         binding.btnStartRuntime.setOnClickListener {
             if (allPermissionsGranted()) {
-                viewModel.startRuntime()
                 startServiceIntent(AsrService.ACTION_START)
             } else {
                 requestPermissionsSafely()
@@ -233,11 +232,10 @@ class MainActivity : ComponentActivity() {
         }
         binding.btnStopRuntime.setOnClickListener { 
             viewModel.stopRuntime()
-            startServiceIntent(AsrService.ACTION_STOP)
         }
         binding.btnRestartRuntime.setOnClickListener { 
             viewModel.restartRuntime()
-            startServiceIntent(AsrService.ACTION_RESTART)
+            Toast.makeText(this, "Restarting ASR Runtime...", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnConnectTransport.setOnClickListener {
@@ -266,7 +264,17 @@ class MainActivity : ComponentActivity() {
             viewModel.reconnectTransport(host, port)
         }
 
-        binding.btnEmergencyReset.setOnClickListener { viewModel.resetRuntime() }
+        binding.btnEmergencyReset.setOnClickListener {
+            viewModel.resetRuntime()
+            Toast.makeText(this, "Relaunching App...", Toast.LENGTH_SHORT).show()
+
+            // Trigger fresh application restart
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+            startActivity(intent)
+            Runtime.getRuntime().exit(0)
+        }
     }
 
     /** Returns the host entered by the user, or "127.0.0.1" as the ADB default. */
@@ -325,8 +333,8 @@ class MainActivity : ComponentActivity() {
                         binding.rowReconnects.valDiagnostic.text = diag.reconnectCount.toString()
                         
                         val state = viewModel.runtimeState.value
-                        if (state == RuntimeState.CONNECTED || state == RuntimeState.STREAMING || state == RuntimeState.CONNECTING) {
-                            binding.btnStartRuntime.text = "▶ ${formatUptime(diag.uptimeMs)}"
+                        if (state == RuntimeState.CONNECTED || state == RuntimeState.STREAMING || state == RuntimeState.CONNECTING || state == RuntimeState.STARTING) {
+                            binding.btnStartRuntime.text = "${formatUptime(diag.uptimeMs)}"
                             binding.btnStartRuntime.isEnabled = false
                         } else {
                             binding.btnStartRuntime.text = "START"

@@ -126,29 +126,39 @@ class CameraManager(
             .requireLensFacing(config.lensFacing)
             .build()
 
-        try {
-            provider.unbindAll()
-            camera = provider.bindToLifecycle(
-                lifecycleOwner,
-                cameraSelector,
-                imageAnalysis
-            )
-            Log.i(TAG, "Camera Started with lens facing ${config.lensFacing}")
-            state = ModuleState.RUNNING
-        } catch (exc: Exception) {
-            Log.e(TAG, "Use case binding failed for lens ${config.lensFacing}", exc)
-            state = ModuleState.ERROR
-            onCameraError()
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+        mainExecutor.execute {
+            try {
+                provider.unbindAll()
+                camera = provider.bindToLifecycle(
+                    lifecycleOwner,
+                    cameraSelector,
+                    imageAnalysis
+                )
+                Log.i(TAG, "Camera Started with lens facing ${config.lensFacing}")
+                state = ModuleState.RUNNING
+            } catch (exc: Exception) {
+                Log.e(TAG, "Use case binding failed for lens ${config.lensFacing}", exc)
+                state = ModuleState.ERROR
+                onCameraError()
+            }
         }
     }
 
     fun stopCamera() {
         state = ModuleState.STOPPING
-        cameraProvider?.unbindAll()
-        camera = null
-        imageAnalysis = null
-        Log.i(TAG, "Camera Stopped")
-        state = ModuleState.STOPPED
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+        mainExecutor.execute {
+            try {
+                cameraProvider?.unbindAll()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error unbinding camera: ${e.message}")
+            }
+            camera = null
+            imageAnalysis = null
+            Log.i(TAG, "Camera Stopped")
+            state = ModuleState.STOPPED
+        }
     }
 
     fun shutdown() {
