@@ -1,101 +1,138 @@
-# ASR Runtime (Cameraros)
+# ASR Runtime (Cameraros) — Android Sensor Runtime for Robotics
 
-An Android-based robotics sensor runtime that orchestrates camera, IMU, audio, and environmental sensors into a centralized telemetry stream. Designed to be consumed by ROS 2 environments via a demand-driven architecture.
-
-## Overview
-
-The ASR Runtime acts as a "Hardware abstraction layer" on Android. It exposes low-level Android hardware as manageable modules that can be toggled, configured, and queried remotely via Android Intents (acting as a lightweight bridge for ROS 2 nodes).
+An Android-based robotics sensor runtime that transforms commercial Android smartphones into high-performance, edge-calibrated multi-sensor suites for ROS 2 and robotics platforms.
 
 ---
 
-## Getting Started
+## 1. Quick Start (Terminal & CLI First)
 
-### Prerequisites
-- Android Device (API 26+)
-- `adb` installed on your development machine.
+ASR is designed for headless operation. You can configure, run, and diagnose the entire runtime via standard `adb shell` commands from Linux (Ubuntu), macOS, or Windows terminals.
 
-### Installation
-1. Build and install the APK.
-2. Open the app once to grant permissions via the **Dashboard UI**.
-3. Use the **"App Settings"** button if permissions need manual override.
-
----
-
-## Interface & Control (The "Bridge")
-
-ASR uses **Android Intents** as its control interface. For ROS 2 developers, these map directly to node lifecycle and parameter concepts.
-
-### 1. Lifecycle Control (Service-like)
-Controlled via `am start-foreground-service`.
-
-| ROS Equivalent | CLI Command (adb shell) | Description |
-|:---|:---|:---|
-| `ros2 run` | `am start-foreground-service -a org.asr.runtime.START org.asr.runtime/.core.AsrService` | Bootstraps core modules (`battery`, `diagnostics`). |
-| `sigterm` | `am start-foreground-service -a org.asr.runtime.STOP org.asr.runtime/.core.AsrService` | Shuts down all hardware and the service. |
-| `lifecycle:activate` | `am start-foreground-service -a org.asr.runtime.MODULE_START --es "module_id" "<ID>" org.asr.runtime/.core.AsrService` | Activates a specific hardware module. |
-| `lifecycle:deactivate`| `am start-foreground-service -a org.asr.runtime.MODULE_STOP --es "module_id" "<ID>" org.asr.runtime/.core.AsrService` | Deactivates a specific hardware module. |
-
-### 2. Parameters & Configuration
-Change hardware settings on-the-fly.
-
-| Parameter | Command | Data Types |
-|:---|:---|:---|
-| **Camera Config** | `-a org.asr.runtime.CAMERA_CONFIG --es "lens" "front" --ei "width" 1280 --ei "height" 720` | `lens`: String, `width/height`: Int |
-| **TTS (Speaker)** | `-a org.asr.runtime.SPEAK --es "text" "Obstacle detected"` | `text`: String |
-
-### 3. Profiles (Group Activation)
-Quickly enable hardware sets for common robotics tasks.
-- `profile mapping`: `camera`, `imu`
-- `profile teleop`: `camera`, `audio`, `speaker`
-- `profile navigation`: `imu`, `battery`
-
-Example:
-`adb shell am start-foreground-service -a org.asr.runtime.PROFILE_ENABLE --es "profile" "mapping" org.asr.runtime/.core.AsrService`
-
----
-
-## Telemetry & Data (Topics)
-
-### Status Query (Broadcast)
-To get the current state of all topics and modules:
-`adb shell am broadcast -a org.asr.runtime.STATUS`
-
-**Output (Logcat `PhoneCamera`):**
-```text
-[MODULE STATES]
-camera      : RUNNING
-imu         : STOPPED
-audio       : STOPPED
-battery     : RUNNING
-diagnostics : RUNNING
+### 1.1 One-Click USB Port Forwarding
+```bash
+# Reverse TCP port 4242 to allow the phone to stream directly to your workstation localhost
+adb reverse tcp:4242 tcp:4242
 ```
 
-### Data Pipeline
-- **Camera**: High-frequency YUV_420_888 frames via CameraX.
-- **IMU**: Linear Acceleration, Gyroscope, Rotation Vector (at `SENSOR_DELAY_FASTEST`).
-- **Audio**: 16-bit PCM, 16kHz Mono.
-- **Diagnostics**: Heartbeat with FPS, Latency (ms), and Memory (MB) tracking.
+### 1.2 Start the Runtime Service
+```bash
+adb shell "am start-foreground-service -a org.asr.runtime.START org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+### 1.3 Stop the Runtime Service
+```bash
+adb shell "am start-foreground-service -a org.asr.runtime.STOP org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+### 1.4 Restart the Runtime (Full Re-initialization)
+```bash
+adb shell "am start-foreground-service -a org.asr.runtime.RESTART org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+### 1.5 Emergency Reset & Relaunch App
+```bash
+adb shell "am force-stop org.asr.runtime && am start -n org.asr.runtime/.MainActivity"
+```
 
 ---
 
-## System Architecture
+## 2. Sensor Module Control Reference
 
-### Demand-Driven Design
-ASR follows a **lazy-loading** philosophy. To save CPU and Power, only core modules start by default. Robotics nodes should "Enable" specific sensors only when they are actively needed for a mission.
+Individual hardware modules can be started or stopped dynamically to optimize thermal performance and battery life.
 
-### Module State Machine
-1. `STOPPED`: Module initialized but idle.
-2. `STARTING`: Resources (Camera/Microphone) being acquired.
-3. `RUNNING`: Data flowing to pipeline.
-4. `ERROR`: Hardware failure or permission missing.
-5. `STOPPING`: Resource release in progress.
+| Module ID | Hardware | Output Stream / Topic |
+|:---|:---|:---|
+| `camera` | CameraX Video Stream | 640x480 / 1280x720 JPEG frames (Topic `0x01`) |
+| `imu` | Accel, Gyro, Mag, Rotation | 400 Hz Fused IMU + Raw Mag (Topic `0x02`) |
+| `gps` | GPS / GNSS Location | Lat, Lon, Alt, Speed, Bearing (Topic `0x03`) |
+| `audio` | Microphone Array | 16 kHz Mono PCM + RMS/VAD Telemetry (Topics `0x05`, `0x10`) |
+| `speaker` | Text-To-Speech (TTS) | Robot Voice Synthesis & Alerts (Command Topic `0x08`) |
+| `battery` | Battery & Thermals | Voltage, Level, Temp °C, Charging status (Topic `0x07`) |
+| `environment` | Ambient Light Sensor | Lux illuminance levels (Topic `0x0F`) |
+
+### Starting a Specific Module
+```bash
+# Start Audio Microphone Module
+adb shell "am start-foreground-service -a org.asr.runtime.MODULE_START --es module_id audio org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Start Camera Module
+adb shell "am start-foreground-service -a org.asr.runtime.MODULE_START --es module_id camera org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Start IMU Module
+adb shell "am start-foreground-service -a org.asr.runtime.MODULE_START --es module_id imu org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+### Stopping a Specific Module
+```bash
+# Stop Audio Microphone Module
+adb shell "am start-foreground-service -a org.asr.runtime.MODULE_STOP --es module_id audio org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Stop Camera Module
+adb shell "am start-foreground-service -a org.asr.runtime.MODULE_STOP --es module_id camera org.asr.runtime/org.asr.runtime.core.AsrService"
+```
 
 ---
 
-## Permissions
-The runtime requires the following:
-- `CAMERA` (Image Stream)
-- `RECORD_AUDIO` (Mic Stream)
-- `HIGH_SAMPLING_RATE_SENSORS` (High-freq IMU)
-- `POST_NOTIFICATIONS` (Foreground Service)
-- `ACTIVITY_RECOGNITION` (Step/Motion tracking)
+## 3. Mission Profiles (Group Activation)
+
+Activate preset sensor groups tailored for common autonomous robotics workloads:
+
+```bash
+# Full Sensor Suite (Camera + IMU + GPS + Audio + Speaker + Battery + Environment)
+adb shell "am start-foreground-service -a org.asr.runtime.PROFILE_ENABLE --es profile full_sensor org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Teleoperation Profile (Camera + Audio + Speaker)
+adb shell "am start-foreground-service -a org.asr.runtime.PROFILE_ENABLE --es profile teleop org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# V-SLAM / Mapping Profile (Camera + IMU)
+adb shell "am start-foreground-service -a org.asr.runtime.PROFILE_ENABLE --es profile mapping org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Outdoor Navigation Profile (IMU + GPS + Battery)
+adb shell "am start-foreground-service -a org.asr.runtime.PROFILE_ENABLE --es profile navigation org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+---
+
+## 4. Hardware Parameters & Controls
+
+### 4.1 Camera Configuration
+```bash
+# Switch to Back Camera at 640x480 @ 30 FPS
+adb shell "am start-foreground-service -a org.asr.runtime.CAMERA_CONFIG --es lens back --ei width 640 --ei height 480 --ei fps 30 org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Switch to Front Camera at 1280x720
+adb shell "am start-foreground-service -a org.asr.runtime.CAMERA_CONFIG --es lens front --ei width 1280 --ei height 720 org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+### 4.2 Flashlight / Torch Control
+```bash
+# Turn Flashlight Torch ON
+adb shell "am start-foreground-service -a org.asr.runtime.FLASHLIGHT --ez on true --ef brightness 1.0 org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Turn Flashlight Torch OFF
+adb shell "am start-foreground-service -a org.asr.runtime.FLASHLIGHT --ez on false org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+### 4.3 Text-To-Speech (TTS) Voice Synthesis
+```bash
+# Speak custom voice command
+adb shell "am start-foreground-service -a org.asr.runtime.SPEAK --es text 'ASR robotics runtime active' org.asr.runtime/org.asr.runtime.core.AsrService"
+
+# Trigger obstacle alert
+adb shell "am start-foreground-service -a org.asr.runtime.SPEAK --es text 'Warning. Dynamic obstacle detected ahead.' org.asr.runtime/org.asr.runtime.core.AsrService"
+```
+
+---
+
+## 5. Live Diagnostics & Logcat Telemetry
+
+### Query Live Module Status via Broadcast
+```bash
+adb shell "am broadcast -a org.asr.runtime.STATUS"
+```
+
+### Real-Time Logcat Telemetry Filter
+```bash
+# Stream runtime diagnostics, frame rates, and socket telemetry
+adb logcat -s PhoneCamera:V AsrAudio:V AsrService:V AsrTransport:V
+```

@@ -76,6 +76,7 @@ class AsrService : LifecycleService() {
         const val ACTION_MODULE_STOP    = "org.asr.runtime.MODULE_STOP"
         const val ACTION_PROFILE_ENABLE = "org.asr.runtime.PROFILE_ENABLE"
         const val ACTION_CAMERA_CONFIG  = "org.asr.runtime.CAMERA_CONFIG"
+        const val ACTION_FLASHLIGHT     = "org.asr.runtime.FLASHLIGHT"
         const val ACTION_TCP_CONNECT    = "org.asr.runtime.TCP_CONNECT"
         const val ACTION_DEV_MODE       = "org.asr.runtime.DEV_MODE"
 
@@ -363,6 +364,11 @@ class AsrService : LifecycleService() {
                 }
             }
             ACTION_CAMERA_CONFIG  -> handleCameraConfig(intent)
+            ACTION_FLASHLIGHT     -> {
+                val on = intent.getBooleanExtra("on", false)
+                cameraManager.setTorch(on)
+                Log.i(TAG, "[CMD] Flashlight state set to: on=$on")
+            }
             ACTION_TCP_CONNECT    -> handleTcpConnect(intent)
             ACTION_DEV_MODE       -> handleDevMode(intent)
         }
