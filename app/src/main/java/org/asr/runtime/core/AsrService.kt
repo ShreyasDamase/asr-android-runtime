@@ -335,16 +335,27 @@ class AsrService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        
+
+        // START_STICKY re-delivers a null intent after the process is killed
+        // (e.g. after the Emergency Reset exit(0)). Recover the runtime instead
+        // of sitting idle with no foreground notification.
+        if (intent == null) {
+            Log.i(TAG, "[ASR] Sticky restart (null intent) — restoring foreground runtime")
+            ensureForeground()
+            handleStart()
+            return START_STICKY
+        }
+
         // On modern Android, we MUST call startForeground quickly if started via startForegroundService
-        if (intent?.action == ACTION_START || intent?.action == ACTION_RESTART) {
+        if (intent.action == ACTION_START || intent.action == ACTION_RESTART) {
             ensureForeground()
         }
 
-        when (intent?.action) {
+        when (intent.action) {
             ACTION_START          -> handleStart()
-            ACTION_STOP           -> handleStop()
-            ACTION_RESTART        -> handleRestart()
+            // disconnect() blocks on Thread.join(); keep it off the main thread.
+            ACTION_STOP           -> serviceScope.launch(Dispatchers.Default) { handleStop() }
+            ACTION_RESTART        -> serviceScope.launch(Dispatchers.Default) { handleRestart() }
             ACTION_SPEAK          -> {
                 val text = intent.getStringExtra("text") ?: "ASR speaker test successful"
                 speakerManager.speak(text)
@@ -428,6 +439,12 @@ class AsrService : LifecycleService() {
                 if (speakerManager.state == ModuleState.STOPPED) {
                     Log.i(TAG, "[CMD] Auto-starting speaker module...")
                     speakerManager.start()
+                    // TextToSpeech.onInit is asynchronous; without a short wait the
+                    // first speak() right after auto-start always fails NOT_READY.
+                    val deadline = System.currentTimeMillis() + 2000
+                    while (!speakerManager.isTtsReady && System.currentTimeMillis() < deadline) {
+                        Thread.sleep(50)
+                    }
                 }
                 val success = speakerManager.speak(text)
                 return if (success) Result.success("Speaking: $text") else Result.failure(Exception("Speaker not ready"))
