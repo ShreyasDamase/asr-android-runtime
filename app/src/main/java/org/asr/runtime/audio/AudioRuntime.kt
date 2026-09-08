@@ -30,6 +30,10 @@ class AudioRuntime(
     override var state: ModuleState = ModuleState.STOPPED
 
     private val seq = AtomicInteger(0)
+    // Raw PCM stream is a distinct topic (RESERVED_10) and must carry its own
+    // per-topic sequence, otherwise the receiver's gap detection sees every
+    // other packet missing on both the AUDIO and raw streams.
+    private val rawSeq = AtomicInteger(0)
 
     companion object {
         private const val TAG = "AsrAudio"
@@ -148,7 +152,16 @@ class AudioRuntime(
 
             while (shouldRun) {
                 val read = recorder.read(buffer, 0, buffer.size)
-                if (read <= 0) continue
+                if (read == 0) continue
+                if (read < 0) {
+                    // Negative values are AudioRecord error codes (ERROR_DEAD_OBJECT,
+                    // ERROR_INVALID_OPERATION, ...). Continuing would busy-spin the
+                    // CPU forever, so surface the error and stop the loop.
+                    snapshot = snapshot.copy(isRunning = false, lastError = "AudioRecord.read error $read")
+                    Log.e(TAG, "Microphone read returned error code $read — stopping capture loop")
+                    state = ModuleState.ERROR
+                    break
+                }
 
                 buffersRead++
                 samplesRead += read
@@ -196,7 +209,7 @@ class AudioRuntime(
                     val rawPayload = PacketSerializer.audio(buffer, read)
                     val rawPacket = AsrPacket.encode(
                         topicId = TopicId.RESERVED_10.value,
-                        seq = seq.getAndIncrement(),
+                        seq = rawSeq.getAndIncrement(),
                         payload = rawPayload,
                         deviceId = deviceId
                     )
