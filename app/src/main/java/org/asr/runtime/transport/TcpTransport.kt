@@ -58,6 +58,7 @@ class TcpTransport(
 
     @Volatile private var dropCount = 0L
     @Volatile private var shouldRun = false
+    @Volatile private var hasConnectedOnce = false
 
     private var socket: Socket? = null
     private var outputStream: OutputStream? = null
@@ -94,6 +95,7 @@ class TcpTransport(
 
     override fun disconnect() {
         shouldRun = false
+        hasConnectedOnce = false
         // Drain and unblock sendQueue.take() immediately.
         // Without this, the write thread blocks forever on take() and
         // writeThread.join(500) always times out, leaving a zombie thread.
@@ -124,7 +126,10 @@ class TcpTransport(
                     socket = sock
                     outputStream = sock.getOutputStream()
                     isConnected = true
-                    onReconnect?.invoke()
+                    // Only report *re*connects — the first successful connect is
+                    // not a reconnect and must not inflate reconnectCount.
+                    if (hasConnectedOnce) onReconnect?.invoke()
+                    hasConnectedOnce = true
                     Log.i(TAG, "[TCP] Connected to $host:$port")
 
                     while (shouldRun && !sock.isClosed && !Thread.currentThread().isInterrupted) {
@@ -185,6 +190,15 @@ class TcpTransport(
                         val payloadLen = ByteBuffer.wrap(header, 20, 4)
                             .order(ByteOrder.LITTLE_ENDIAN).int
 
+                        // A corrupt or desynced stream can yield a negative length
+                        // (NegativeArraySizeException) or an enormous one (OutOfMemoryError,
+                        // an Error that the catch below would NOT catch → process crash).
+                        // Bail out of the read loop instead of allocating on a bad length.
+                        if (payloadLen < 0 || payloadLen > MAX_PAYLOAD_BYTES) {
+                            Log.w(TAG, "[TCP] Invalid inbound payload length $payloadLen — aborting read loop")
+                            break
+                        }
+
                         val fullPacket = ByteArray(AsrVersion.HEADER_SIZE + payloadLen)
                         System.arraycopy(header, 0, fullPacket, 0, AsrVersion.HEADER_SIZE)
 
@@ -234,5 +248,12 @@ class TcpTransport(
 
         /** Milliseconds to wait before retrying a failed connection. */
         const val RETRY_DELAY_MS = 2000L
+
+        /**
+         * Upper bound for an inbound packet payload. Inbound packets are COMMAND
+         * JSON (tiny); this is a generous ceiling that still rejects garbage
+         * lengths from a corrupt/desynced stream before they allocate.
+         */
+        const val MAX_PAYLOAD_BYTES = 8 * 1024 * 1024
     }
 }

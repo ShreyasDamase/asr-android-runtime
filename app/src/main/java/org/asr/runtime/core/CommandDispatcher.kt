@@ -48,8 +48,8 @@ class CommandDispatcher(
     fun dispatch(rawPacket: ByteArray) {
         val frame = AsrPacket.decode(rawPacket)
         if (frame == null) {
+            // Too short / bad magic — a framing error, not a CRC error.
             Log.w(TAG, "[CMD] Failed to decode packet (too short or bad magic)")
-            transportManager.notifyCrcFailure()
             return
         }
         if (!frame.crcValid) {
