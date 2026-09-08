@@ -2,6 +2,7 @@ package org.asr.runtime.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.asr.runtime.core.AsrService
@@ -29,21 +30,31 @@ class MainViewModel : ViewModel() {
 
     private var asrService: AsrService? = null
 
+    /** Collectors bound to the current service instance; cancelled on rebind/unbind. */
+    private val serviceJobs = mutableListOf<Job>()
+
     fun setService(service: AsrService?) {
         this.asrService = service
         _isServiceBound.value = (service != null)
+
+        // Tear down collectors from any previous service instance so they don't
+        // pile up (onServiceConnected can fire again after a service crash +
+        // BIND_AUTO_CREATE re-creation), each one leaking an infinite loop.
+        serviceJobs.forEach { it.cancel() }
+        serviceJobs.clear()
+
         if (service != null) {
-            viewModelScope.launch {
+            serviceJobs += viewModelScope.launch {
                 service.runtimeState.collect { _runtimeState.value = it }
             }
-            viewModelScope.launch {
+            serviceJobs += viewModelScope.launch {
                 service.clientInfo.collect { _clientInfo.value = it }
             }
-            viewModelScope.launch {
+            serviceJobs += viewModelScope.launch {
                 service.diagnostics.collect { _diagnostics.value = it }
             }
             // Periodically pull module status from the service
-            viewModelScope.launch {
+            serviceJobs += viewModelScope.launch {
                 while (true) {
                     _moduleStatus.value = service.getModuleStatus()
                     kotlinx.coroutines.delay(1000)

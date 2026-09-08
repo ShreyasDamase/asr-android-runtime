@@ -41,7 +41,9 @@ class BatteryManager(
         override fun onReceive(context: Context, intent: Intent) {
             val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
             val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-            _level = level * 100 / scale.toFloat()
+            // Guard against a missing/zero scale extra, which would otherwise
+            // produce NaN, +Inf, or a negative percentage.
+            _level = if (level >= 0 && scale > 0) level * 100f / scale else -1f
 
             val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
             _isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||

@@ -58,7 +58,8 @@ class CameraManager(
 
     private var cameraProvider: ProcessCameraProvider? = null
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-    private var imageAnalysis: ImageAnalysis? = null
+    // Written on the main executor (bind/unbind), read from binder & TCP threads.
+    @Volatile private var imageAnalysis: ImageAnalysis? = null
 
     fun initialize(onReady: () -> Unit) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -70,7 +71,11 @@ class CameraManager(
 
     fun isCameraProviderReady(): Boolean = cameraProvider != null
 
-    private var camera: androidx.camera.core.Camera? = null
+    // Written on the main executor when the camera binds; read from the binder
+    // thread (ACTION_FLASHLIGHT) and the TCP dispatch thread (flashlight.set).
+    // Without @Volatile those threads can see a stale null and the torch command
+    // silently no-ops even though the camera is bound.
+    @Volatile private var camera: androidx.camera.core.Camera? = null
 
     fun setTorch(enable: Boolean): Boolean {
         return try {
