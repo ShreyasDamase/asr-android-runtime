@@ -3,7 +3,6 @@ package org.asr.runtime.sensor
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
-import android.util.Log
 import org.asr.runtime.protocol.AsrPacket
 import org.asr.runtime.protocol.PacketSerializer
 import org.asr.runtime.protocol.TopicId
@@ -36,7 +35,6 @@ class ImuManager(
     Sensor.TYPE_LINEAR_ACCELERATION
 )) {
     private val seq = AtomicInteger(0)
-    private val rosSamples = AtomicInteger(0)
 
     // Latest values — updated on each sensor event, published on ACCELEROMETER
     @Volatile private var accel    = FloatArray(3)
@@ -52,10 +50,6 @@ class ImuManager(
                 accel = event.values.copyOf(3)
                 lastTs = event.timestamp // Use hardware sensor timestamp
                 publishPacket()
-                val sample = rosSamples.incrementAndGet()
-                if (sample == 1 || sample % 100 == 0) {
-                    Log.i("AsrImu", "ROS sample callback #$sample ts=$lastTs")
-                }
                 onRosSample?.invoke(accel, gyro, rotation, lastTs)
             }
             Sensor.TYPE_GYROSCOPE          -> { gyro     = event.values.copyOf(3) }

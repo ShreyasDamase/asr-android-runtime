@@ -98,18 +98,14 @@ class Ros2Runtime(private val context: Context) {
     }
 
     fun publishImu(accel: FloatArray, gyro: FloatArray, rotation: FloatArray, timestampNs: Long) {
-        if (!ready()) {
-            Log.w(TAG, "Dropping IMU sample: enabled=$enabled runtimeReady=$runtimeReady native=${NativeRos2Bridge.isAvailable()}")
-            return
-        }
-        val published = NativeRos2Bridge.publishImu(
+        if (!ready()) return
+        NativeRos2Bridge.publishImu(
             "/asr_android/imu",
             accel.map { it.toDouble() }.toDoubleArray(),
             gyro.map { it.toDouble() }.toDoubleArray(),
             doubleArrayOf(rotation.getOrElse(0) { 0f }.toDouble(), rotation.getOrElse(1) { 0f }.toDouble(), rotation.getOrElse(2) { 0f }.toDouble(), rotation.getOrElse(3) { 1f }.toDouble()),
             timestampNs
         )
-        if (!published) Log.e(TAG, "Native IMU publish returned false")
     }
 
     fun publishGps(latitude: Double, longitude: Double, altitude: Double, accuracy: Float, timestampNs: Long) {
