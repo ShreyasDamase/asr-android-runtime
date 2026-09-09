@@ -39,6 +39,7 @@ static bool node_ready = false;
 static std::mutex node_mutex;
 
 static std::map<std::string, rcl_publisher_t> publishers;
+static uint64_t imu_publish_count = 0;
 
 static bool ensure_publisher(const char *topic_name, const rosidl_message_type_support_t *ts, rcl_publisher_t **out) {
     auto it = publishers.find(topic_name);
@@ -212,7 +213,16 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
         msg.orientation_covariance[0] = -1.0;
         msg.angular_velocity_covariance[0] = -1.0;
         msg.linear_acceleration_covariance[0] = -1.0;
-        ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
+        const rcl_ret_t ret = rcl_publish(publisher, &msg, nullptr);
+        ++imu_publish_count;
+        if (imu_publish_count == 1 || imu_publish_count % 100 == 0) {
+            LOGI("IMU rcl_publish #%llu ret=%d", static_cast<unsigned long long>(imu_publish_count), ret);
+        }
+        if (ret != RCL_RET_OK) {
+            LOGE("IMU rcl_publish failed ret=%d: %s", ret, rcl_get_error_string().str);
+            rcl_reset_error();
+        }
+        ok = ret == RCL_RET_OK;
         sensor_msgs__msg__Imu__fini(&msg);
     }
     if (accel) env->ReleaseDoubleArrayElements(j_accel, accel, JNI_ABORT);
