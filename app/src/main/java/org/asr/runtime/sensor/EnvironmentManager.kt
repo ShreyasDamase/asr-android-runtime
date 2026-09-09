@@ -27,7 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class EnvironmentManager(
     context: Context,
     private val transportManager: TransportManager,
-    private val deviceId: Byte
+    private val deviceId: Byte,
+    private val onRosSample: ((Int, Float, Long) -> Unit)? = null
 ) : BaseSensorManager(context, "environment", listOf(
     Sensor.TYPE_LIGHT,
     Sensor.TYPE_PRESSURE,
@@ -46,6 +47,14 @@ class EnvironmentManager(
             deviceId = deviceId
         )
         transportManager.send(packet)
+        val kind = when (event.sensor.type) {
+            Sensor.TYPE_LIGHT -> 0
+            Sensor.TYPE_PRESSURE -> 1
+            Sensor.TYPE_AMBIENT_TEMPERATURE -> 2
+            Sensor.TYPE_RELATIVE_HUMIDITY -> 3
+            else -> return
+        }
+        onRosSample?.invoke(kind, event.values[0], event.timestamp)
     }
 
     private fun buildPayload(sensorType: Int, value: Float): ByteArray =

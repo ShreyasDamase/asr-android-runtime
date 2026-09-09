@@ -1,4 +1,4 @@
-package org.asr.runtime.core
+    package org.asr.runtime.core
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -34,6 +34,7 @@ import org.asr.runtime.modules.gps.GpsManager
 import org.asr.runtime.protocol.AsrPacket
 import org.asr.runtime.protocol.PacketSerializer
 import org.asr.runtime.protocol.TopicId
+import org.asr.runtime.ros2.Ros2Runtime
 import org.asr.runtime.sensor.EnvironmentManager
 import org.asr.runtime.sensor.ImuManager
 import org.asr.runtime.sensor.MotionManager
@@ -113,6 +114,7 @@ class AsrService : LifecycleService() {
     // ── Transport ────────────────────────────────────────────────────────────
     private lateinit var transportManager: TransportManager
     private lateinit var tcpTransport:     TcpTransport
+    private lateinit var ros2Runtime:      Ros2Runtime
 
     // ── Core ─────────────────────────────────────────────────────────────────
     private lateinit var benchmarkProcessor:  BenchmarkProcessor
@@ -212,6 +214,7 @@ class AsrService : LifecycleService() {
 
         // ── 1. Stable device ID (SharedPreferences UUID) ──────────────────
         deviceId = getOrCreateDeviceId()
+        ros2Runtime = Ros2Runtime(this)
 
         // ── 2. Transport layer ─────────────────────────────────────────────
         transportManager = TransportManager()
@@ -258,6 +261,7 @@ class AsrService : LifecycleService() {
         )
         transportManager.addTransport(LogTransport())
         transportManager.addTransport(tcpTransport)
+        ros2Runtime.startIfNeeded()
 
         // ── 3. Diagnostics and benchmark ──────────────────────────────────
         benchmarkProcessor = BenchmarkProcessor(this)
@@ -267,7 +271,10 @@ class AsrService : LifecycleService() {
         cameraPipeline = CameraPipeline(
             transportManager = transportManager,
             deviceId         = deviceId,
-            compressor       = JpegCompressor(quality = 85)
+            compressor       = JpegCompressor(quality = 85),
+            onRosCompressedFrame = { data, width, height, timestampNs ->
+                ros2Runtime.publishCameraJpeg(data, width, height, timestampNs)
+            }
         )
 
         // ── 5. Hardware drivers ───────────────────────────────────────────
@@ -285,13 +292,27 @@ class AsrService : LifecycleService() {
             this.config = activeCameraConfig
         }
 
-        imuManager         = ImuManager(this, transportManager, deviceId)
-        environmentManager = EnvironmentManager(this, transportManager, deviceId)
+        imuManager         = ImuManager(this, transportManager, deviceId) { accel, gyro, rotation, timestampNs ->
+            ros2Runtime.publishImu(accel, gyro, rotation, timestampNs)
+        }
+        environmentManager = EnvironmentManager(this, transportManager, deviceId) { kind, value, timestampNs ->
+            ros2Runtime.publishEnvironment(kind, value.toDouble(), timestampNs)
+        }
         motionManager      = MotionManager(this)
         audioRuntime       = AudioRuntime(this, transportManager, deviceId)
-        batteryManager     = BatteryManager(this, transportManager, deviceId)
+        batteryManager     = BatteryManager(this, transportManager, deviceId) { percentage, temperature, voltage, charging ->
+            ros2Runtime.publishBattery(percentage, temperature, voltage, charging)
+        }
         speakerManager     = SpeakerManager(this)
-        gpsManager         = GpsManager(this, transportManager, deviceId)
+        gpsManager         = GpsManager(this, transportManager, deviceId) { location ->
+            ros2Runtime.publishGps(
+                location.latitude,
+                location.longitude,
+                location.altitude,
+                location.accuracy,
+                location.elapsedRealtimeNanos
+            )
+        }
         capabilityManager  = CapabilityManager(this)
 
         // ── 6. Module registry ────────────────────────────────────────────
@@ -555,6 +576,13 @@ class AsrService : LifecycleService() {
         }
     }
 
+    fun setRos2Enabled(enabled: Boolean) {
+        ros2Runtime.setEnabled(enabled)
+        if (enabled) {
+            ros2Runtime.publishStatus("ROS 2 enabled")
+        }
+    }
+
     // ── Handlers ─────────────────────────────────────────────────────────────
 
     private fun handleStart() {
@@ -565,6 +593,7 @@ class AsrService : LifecycleService() {
             return
         }
 
+        ros2Runtime.startIfNeeded()
         if (cameraManager.isCameraProviderReady()) startInternal() else pendingStart = true
     }
 
@@ -605,6 +634,7 @@ class AsrService : LifecycleService() {
         Log.i(TAG, "[ASR] Stopping runtime modules & transport")
         moduleRegistry.stopAll()
         tcpTransport.disconnect()
+        ros2Runtime.shutdown()
         isRunning = false
         _runtimeState.value = RuntimeState.STOPPED
         _clientInfo.value = null

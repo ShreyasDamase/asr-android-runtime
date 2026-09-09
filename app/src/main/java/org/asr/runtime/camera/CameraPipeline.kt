@@ -136,7 +136,8 @@ class RawYuvCompressor : CameraCompressor {
 class CameraPipeline(
     private val transportManager: TransportManager,
     private val deviceId: Byte,
-    var compressor: CameraCompressor = JpegCompressor()
+    var compressor: CameraCompressor = JpegCompressor(),
+    private val onRosCompressedFrame: ((ByteArray, Int, Int, Long) -> Unit)? = null
 ) {
     private val seq = AtomicInteger(0)
     private var lastFrameNs = 0L
@@ -174,6 +175,7 @@ class CameraPipeline(
                 timestampNs = metadata.sensorTimestampNs
             )
             transportManager.send(packet)
+            onRosCompressedFrame?.invoke(compressed, image.width, image.height, metadata.sensorTimestampNs)
 
             if (DevModeConfig.frameDebug) {
                 val pipelineMs = (System.nanoTime() - pipelineStartNs) / 1_000_000f

@@ -38,6 +38,12 @@ import_ros2_library(rcl_interfaces_generator_c librcl_interfaces__rosidl_generat
 import_ros2_library(rcl_interfaces_typesupport_c librcl_interfaces__rosidl_typesupport_c.so)
 import_ros2_library(type_description_generator_c libtype_description_interfaces__rosidl_generator_c.so)
 import_ros2_library(type_description_typesupport_c libtype_description_interfaces__rosidl_typesupport_c.so)
+import_ros2_library(geometry_msgs_generator_c libgeometry_msgs__rosidl_generator_c.so)
+import_ros2_library(geometry_msgs_typesupport_c libgeometry_msgs__rosidl_typesupport_c.so)
+import_ros2_library(sensor_msgs_generator_c libsensor_msgs__rosidl_generator_c.so)
+import_ros2_library(sensor_msgs_typesupport_c libsensor_msgs__rosidl_typesupport_c.so)
+import_ros2_library(sensor_msgs_fastrtps_c libsensor_msgs__rosidl_typesupport_fastrtps_c.so)
+import_ros2_library(geometry_msgs_fastrtps_c libgeometry_msgs__rosidl_typesupport_fastrtps_c.so)
 
 add_library(asr_ros2 SHARED
         NativeRos2Bridge.cpp)
@@ -65,6 +71,12 @@ target_link_libraries(asr_ros2
         rcl_interfaces_generator_c
         type_description_typesupport_c
         type_description_generator_c
+        sensor_msgs_typesupport_c
+        sensor_msgs_generator_c
+        geometry_msgs_typesupport_c
+        geometry_msgs_generator_c
+        sensor_msgs_fastrtps_c
+        geometry_msgs_fastrtps_c
         rosidl_typesupport_c
         rosidl_runtime_c
         rosidl_dynamic_typesupport

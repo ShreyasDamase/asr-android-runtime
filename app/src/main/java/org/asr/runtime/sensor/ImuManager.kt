@@ -25,7 +25,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class ImuManager(
     context: Context,
     private val transportManager: TransportManager,
-    private val deviceId: Byte
+    private val deviceId: Byte,
+    private val onRosSample: ((FloatArray, FloatArray, FloatArray, Long) -> Unit)? = null
 ) : BaseSensorManager(context, "imu", listOf(
     Sensor.TYPE_ACCELEROMETER,
     Sensor.TYPE_GYROSCOPE,
@@ -49,6 +50,7 @@ class ImuManager(
                 accel = event.values.copyOf(3)
                 lastTs = event.timestamp // Use hardware sensor timestamp
                 publishPacket()
+                onRosSample?.invoke(accel, gyro, rotation, lastTs)
             }
             Sensor.TYPE_GYROSCOPE          -> { gyro     = event.values.copyOf(3) }
             Sensor.TYPE_GRAVITY            -> { gravity  = event.values.copyOf(3) }

@@ -29,7 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class GpsManager(
     private val context: Context,
     private val transportManager: TransportManager,
-    private val deviceId: Byte
+    private val deviceId: Byte,
+    private val onRosLocation: ((Location) -> Unit)? = null
 ) : SensorModule, LocationListener {
 
     override val id: String = "gps"
@@ -92,6 +93,7 @@ class GpsManager(
             timestampNs = location.elapsedRealtimeNanos
         )
         transportManager.send(packet)
+        onRosLocation?.invoke(location)
 
         Log.d(TAG, "[GPS] lat=${location.latitude} lon=${location.longitude} acc=${location.accuracy}m seq=${seq.get() - 1}")
     }
