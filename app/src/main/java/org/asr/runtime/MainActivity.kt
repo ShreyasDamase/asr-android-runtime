@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
         setupControls()
+        binding.switchRos2Enabled.isChecked = getSharedPreferences("asr_prefs", MODE_PRIVATE).getBoolean("ros2_enabled", false)
         observeState()
         updatePermissionTable()
         updateHardwareTable()
@@ -216,6 +217,17 @@ class MainActivity : ComponentActivity() {
         binding.editTransportHost.setText("")
         binding.editTransportPort.setText("4242")
         updateTransportModeBadge()
+
+        binding.switchRos2Enabled.setOnCheckedChangeListener { _, isChecked ->
+            getSharedPreferences("asr_prefs", MODE_PRIVATE)
+                .edit()
+                .putBoolean("ros2_enabled", isChecked)
+                .apply()
+            if (viewModel.isServiceBound.value) {
+                viewModel.setRos2Enabled(isChecked)
+                Toast.makeText(this, if (isChecked) "ROS 2 enabled" else "ROS 2 disabled", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         binding.editTransportHost.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) { updateTransportModeBadge() }

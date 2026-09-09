@@ -613,6 +613,7 @@ class AsrService : LifecycleService() {
     private fun startInternal() {
         _runtimeState.value = RuntimeState.CONNECTING
         benchmarkProcessor.reset(restartCount)
+        ros2Runtime.startIfNeeded()
         moduleRegistry.startModule("battery")
         moduleRegistry.startModule("diagnostics")
         moduleRegistry.startModule("transport")

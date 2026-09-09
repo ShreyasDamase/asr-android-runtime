@@ -69,29 +69,29 @@ JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz, jint domain_id, jstring j_node_name) {
     std::lock_guard<std::mutex> lock(node_mutex);
     if (rcl_context_is_valid(&context)) {
-        LOGI("RCL context already valid");
+        LOGI("RCL context already valid; skipping init");
         return JNI_TRUE;
     }
 
+    // Ensure context is clean before init
+    context = rcl_get_zero_initialized_context();
+
     rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-    rcl_ret_t ret = rcl_init_options_init(&init_options, rcl_get_default_allocator());
-    if (ret != RCL_RET_OK) {
+    if (rcl_init_options_init(&init_options, rcl_get_default_allocator()) != RCL_RET_OK) {
         LOGE("Failed to init options: %s", rcl_get_error_string().str);
         rcl_reset_error();
         return JNI_FALSE;
     }
 
-    ret = rcl_init_options_set_domain_id(&init_options, (size_t)domain_id);
-    if (ret != RCL_RET_OK) {
+    if (rcl_init_options_set_domain_id(&init_options, (size_t)domain_id) != RCL_RET_OK) {
         LOGE("Failed to set domain ID: %s", rcl_get_error_string().str);
         rcl_reset_error();
-        rcl_init_options_fini(&init_options);
+        (void)rcl_init_options_fini(&init_options);
         return JNI_FALSE;
     }
 
-    context = rcl_get_zero_initialized_context();
-    ret = rcl_init(0, nullptr, &init_options, &context);
-    rcl_init_options_fini(&init_options);
+    rcl_ret_t ret = rcl_init(0, nullptr, &init_options, &context);
+    (void)rcl_init_options_fini(&init_options);
 
     if (ret != RCL_RET_OK) {
         LOGE("Failed to rcl_init: %s", rcl_get_error_string().str);
@@ -108,17 +108,26 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
     std::lock_guard<std::mutex> lock(node_mutex);
 
     if (!rcl_context_is_valid(&context)) {
-        LOGI("Initializing RCL context automatically");
-        rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-        rcl_init_options_init(&init_options, rcl_get_default_allocator());
-        rcl_init_options_set_domain_id(&init_options, (size_t)domain_id);
+        LOGI("Context invalid; performing automatic RCL initialization");
         context = rcl_get_zero_initialized_context();
-        rcl_init(0, nullptr, &init_options, &context);
-        rcl_init_options_fini(&init_options);
+        rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+        if (rcl_init_options_init(&init_options, rcl_get_default_allocator()) == RCL_RET_OK) {
+            if (rcl_init_options_set_domain_id(&init_options, (size_t)domain_id) == RCL_RET_OK) {
+                rcl_ret_t ret = rcl_init(0, nullptr, &init_options, &context);
+                (void)rcl_init_options_fini(&init_options);
+                if (ret != RCL_RET_OK) {
+                    LOGE("Auto-init failed: %s", rcl_get_error_string().str);
+                    rcl_reset_error();
+                    return JNI_FALSE;
+                }
+            } else {
+                (void)rcl_init_options_fini(&init_options);
+            }
+        }
     }
 
     if (!rcl_context_is_valid(&context)) {
-        LOGE("RCL context remains invalid after auto-init");
+        LOGE("RCL context remains invalid after auto-init attempt");
         return JNI_FALSE;
     }
 
@@ -139,7 +148,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
     }
 
     node_ready = true;
-    LOGI("ROS 2 node /%s started", node_name_str.c_str());
+    LOGI("ROS 2 node /%s started successfully", node_name_str.c_str());
     return JNI_TRUE;
 }
 
@@ -347,18 +356,39 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
 JNIEXPORT void JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_shutdown(JNIEnv *env, jobject thiz) {
     std::lock_guard<std::mutex> lock(node_mutex);
-    if (!node_ready) return;
+    if (!node_ready && !rcl_context_is_valid(&context)) {
+        LOGI("Shutdown requested but ROS 2 already idle; skipping");
+        return;
+    }
+
+    LOGI("Shutting down ROS 2 node and context...");
 
     for (auto &pair : publishers) {
-        rcl_publisher_fini(&pair.second, &node);
+        if (rcl_publisher_fini(&pair.second, &node) != RCL_RET_OK) {
+            LOGE("Error finalizing publisher for %s", pair.first.c_str());
+        }
     }
     publishers.clear();
 
-    rcl_node_fini(&node);
-    rcl_shutdown(&context);
-    rcl_context_fini(&context);
+    if (node_ready) {
+        if (rcl_node_fini(&node) != RCL_RET_OK) {
+            LOGE("Error finalizing node: %s", rcl_get_error_string().str);
+        }
+        node = rcl_get_zero_initialized_node();
+    }
+
+    if (rcl_context_is_valid(&context)) {
+        if (rcl_shutdown(&context) != RCL_RET_OK) {
+            LOGE("Error in rcl_shutdown: %s", rcl_get_error_string().str);
+        }
+        if (rcl_context_fini(&context) != RCL_RET_OK) {
+            LOGE("Error in rcl_context_fini: %s", rcl_get_error_string().str);
+        }
+        context = rcl_get_zero_initialized_context();
+    }
+
     node_ready = false;
-    LOGI("ROS 2 node shutdown complete");
+    LOGI("ROS 2 shutdown sequence complete");
 }
 
 JNIEXPORT jboolean JNICALL

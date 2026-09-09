@@ -102,4 +102,8 @@ class MainViewModel : ViewModel() {
     fun stopTransport() {
         asrService?.stopTransport()
     }
+
+    fun setRos2Enabled(enabled: Boolean) {
+        asrService?.setRos2Enabled(enabled)
+    }
 }

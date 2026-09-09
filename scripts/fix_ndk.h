@@ -3,12 +3,13 @@
 
 #include <time.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Ensure struct tm is fully defined
+// Some NDK versions need these explicitly
 #ifndef _STRUCT_TM
 #define _STRUCT_TM
 struct tm {
@@ -25,6 +26,9 @@ struct tm {
    const char *tm_zone;
 };
 #endif
+
+// Standard time types
+typedef long time_t;
 
 #ifdef __cplusplus
 }

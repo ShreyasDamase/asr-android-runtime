@@ -1,15 +1,50 @@
+# Gradle and Build Outputs
+.gradle/
+build/
+**/build/
+bin/
+gen/
+out/
+captures/
+
+# Android Studio / IDE
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.idea/
+.kotlin/
 local.properties
+
+# Logs and Command Outputs
+*.log
+*.out
+*.err
+log/
+stdout/
+stderr/
+
+# CMake / Ninja / Native Build Intermediates
+.externalNativeBuild/
+.cxx/
+cmake-build-*/
+ninja.build
+.ninja_deps
+.ninja_log
+*.pyc
+*.o
+*.obj
+
+# ROS2 / Colcon / Cross-compilation
+install/
+
+# OS X
+.DS_Store
+
+# Agent / Temporary Files
+.artifacts/
+/implementation_plan.artifact.md
+/task.artifact.md
+/walkthrough.artifact.md
+
+# Virtual Environments
+venv/
+.venv/
+env/

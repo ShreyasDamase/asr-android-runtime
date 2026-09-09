@@ -18,6 +18,7 @@ class Ros2Runtime(private val context: Context) {
     fun isEnabled(): Boolean = enabled
 
     fun setEnabled(value: Boolean) {
+        Log.i(TAG, "setEnabled current=$enabled new=$value")
         enabled = value
         prefs.edit().putBoolean(PREF_ROS2_ENABLED, value).apply()
         if (value) {

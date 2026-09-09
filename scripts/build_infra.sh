@@ -33,10 +33,18 @@ PACKAGES=(
     "ament_cmake"
     "ament_cmake_ros_core"
     "ament_cmake_ros"
+    "rosidl_cli"
+    "rosidl_adapter"
+    "rosidl_parser"
+    "rosidl_generator_type_description"
+    "rosidl_pycommon"
+    "rosidl_cmake"
     "rosidl_typesupport_interface"
     "rosidl_buffer"
     "rosidl_runtime_c"
     "rosidl_runtime_cpp"
+    "rosidl_typesupport_introspection_c"
+    "rosidl_typesupport_introspection_cpp"
 )
 
 IGNORE=(
@@ -71,4 +79,21 @@ IGNORE=(
         -DANDROID_STL=c++_shared \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_TESTING=OFF \
-        -DCMAKE_PREFIX_PATH="$PREFIX"
+        -DCMAKE_PREFIX_PATH="$PREFIX" \
+        -Dament_cmake_DIR="$PREFIX/share/ament_cmake/cmake" \
+        -Dament_cmake_core_DIR="$PREFIX/share/ament_cmake_core/cmake" \
+        -Dament_cmake_libraries_DIR="$PREFIX/share/ament_cmake_libraries/cmake" \
+        -Dament_cmake_export_definitions_DIR="$PREFIX/share/ament_cmake_export_definitions/cmake" \
+        -Dament_cmake_export_dependencies_DIR="$PREFIX/share/ament_cmake_export_dependencies/cmake" \
+        -Dament_cmake_export_include_directories_DIR="$PREFIX/share/ament_cmake_export_include_directories/cmake" \
+        -Dament_cmake_export_libraries_DIR="$PREFIX/share/ament_cmake_export_libraries/cmake" \
+        -Dament_cmake_export_link_flags_DIR="$PREFIX/share/ament_cmake_export_link_flags/cmake" \
+        -Dament_cmake_export_targets_DIR="$PREFIX/share/ament_cmake_export_targets/cmake" \
+        -Dament_cmake_python_DIR="$PREFIX/share/ament_cmake_python/cmake" \
+        -Dament_cmake_target_dependencies_DIR="$PREFIX/share/ament_cmake_target_dependencies/cmake" \
+        -Dament_cmake_test_DIR="$PREFIX/share/ament_cmake_test/cmake" \
+        -Dament_cmake_version_DIR="$PREFIX/share/ament_cmake_version/cmake" \
+        -Dament_cmake_gen_version_h_DIR="$PREFIX/share/ament_cmake_gen_version_h/cmake" \
+        -Dament_cmake_gtest_DIR="$PREFIX/share/ament_cmake_gtest/cmake" \
+        -Dament_cmake_pytest_DIR="$PREFIX/share/ament_cmake_pytest/cmake" \
+        -Dament_cmake_ros_core_DIR="$PREFIX/share/ament_cmake_ros_core/cmake"
