@@ -2,6 +2,9 @@
 #include <string>
 #include <mutex>
 #include <map>
+#include <vector>
+#include <thread>
+#include <atomic>
 #include <algorithm>
 #include <android/log.h>
 
@@ -39,6 +42,93 @@ static bool node_ready = false;
 static std::mutex node_mutex;
 
 static std::map<std::string, rcl_publisher_t> publishers;
+static std::map<std::string, rcl_subscription_t> subscriptions;
+
+static std::thread spinner_thread;
+static std::atomic<bool> spinning{false};
+static JavaVM *g_jvm = nullptr;
+static jobject g_bridge_obj = nullptr;
+
+static void message_received_callback(const char *topic_name, const char *message_content) {
+    if (!g_jvm || !g_bridge_obj) return;
+    JNIEnv *env = nullptr;
+    if (g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != 0) return;
+    }
+
+    jclass cls = env->GetObjectClass(g_bridge_obj);
+    jmethodID mid = env->GetMethodID(cls, "onStringMessageReceived", "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (mid) {
+        jstring j_topic = env->NewStringUTF(topic_name);
+        jstring j_msg = env->NewStringUTF(message_content);
+        env->CallVoidMethod(g_bridge_obj, mid, j_topic, j_msg);
+        env->DeleteLocalRef(j_topic);
+        env->DeleteLocalRef(j_msg);
+    }
+}
+
+static void run_spinner() {
+    LOGI("ROS 2 spinner thread started");
+    while (spinning) {
+        rcl_wait_set_t wait_set = rcl_get_zero_initialized_wait_set();
+        {
+            std::lock_guard<std::mutex> lock(node_mutex);
+            if (!node_ready) break;
+
+            rcl_ret_t ret = rcl_wait_set_init(&wait_set, subscriptions.size(), 0, 0, 0, 0, 0, &context, rcl_get_default_allocator());
+            if (ret != RCL_RET_OK) {
+                LOGE("Failed to init wait set: %s", rcl_get_error_string().str);
+                rcl_reset_error();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+
+            for (auto &pair : subscriptions) {
+                if (rcl_wait_set_add_subscription(&wait_set, &pair.second, nullptr) != RCL_RET_OK) {
+                    LOGE("Failed to add subscription to wait set: %s", rcl_get_error_string().str);
+                    rcl_reset_error();
+                }
+            }
+        }
+
+        rcl_ret_t ret = rcl_wait(&wait_set, RCL_MS_TO_NS(100));
+        if (ret == RCL_RET_TIMEOUT) {
+            rcl_wait_set_fini(&wait_set);
+            continue;
+        }
+
+        if (ret != RCL_RET_OK) {
+            LOGE("Wait failed: %s", rcl_get_error_string().str);
+            rcl_reset_error();
+            rcl_wait_set_fini(&wait_set);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(node_mutex);
+            for (size_t i = 0; i < wait_set.size_of_subscriptions; ++i) {
+                if (wait_set.subscriptions[i]) {
+                    // Find which subscription this is
+                    for (auto &pair : subscriptions) {
+                        if (&pair.second == wait_set.subscriptions[i]) {
+                            std_msgs__msg__String msg;
+                            std_msgs__msg__String__init(&msg);
+                            rmw_message_info_t message_info;
+                            if (rcl_take(wait_set.subscriptions[i], &msg, &message_info, nullptr) == RCL_RET_OK) {
+                                message_received_callback(pair.first.c_str(), msg.data.data);
+                            }
+                            std_msgs__msg__String__fini(&msg);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        rcl_wait_set_fini(&wait_set);
+    }
+    LOGI("ROS 2 spinner thread exiting");
+}
 
 static bool ensure_publisher(const char *topic_name, const rosidl_message_type_support_t *ts, rcl_publisher_t **out) {
     auto it = publishers.find(topic_name);
@@ -64,6 +154,11 @@ static void set_stamp(std_msgs__msg__Header *header, jlong timestamp_ns) {
 }
 
 extern "C" {
+
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
+    g_jvm = vm;
+    return JNI_VERSION_1_6;
+}
 
 JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz, jint domain_id, jstring j_node_name) {
@@ -149,6 +244,55 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
 
     node_ready = true;
     LOGI("ROS 2 node /%s started successfully", node_name_str.c_str());
+
+    if (g_bridge_obj) {
+        env->DeleteGlobalRef(g_bridge_obj);
+    }
+    g_bridge_obj = env->NewGlobalRef(thiz);
+
+    if (!spinning) {
+        spinning = true;
+        spinner_thread = std::thread(run_spinner);
+    }
+
+    return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_subscribeString(JNIEnv *env, jobject thiz, jstring j_topic_name) {
+    std::lock_guard<std::mutex> lock(node_mutex);
+    if (!node_ready) return JNI_FALSE;
+
+    const char *topic_name = env->GetStringUTFChars(j_topic_name, nullptr);
+    if (!topic_name) return JNI_FALSE;
+
+    if (subscriptions.find(topic_name) != subscriptions.end()) {
+        env->ReleaseStringUTFChars(j_topic_name, topic_name);
+        return JNI_TRUE;
+    }
+
+    rcl_subscription_t sub = rcl_get_zero_initialized_subscription();
+    rcl_subscription_options_t sub_options = rcl_subscription_get_default_options();
+
+    rcl_ret_t ret = rcl_subscription_init(
+        &sub,
+        &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+        topic_name,
+        &sub_options
+    );
+
+    if (ret != RCL_RET_OK) {
+        LOGE("Failed to init subscription for %s: %s", topic_name, rcl_get_error_string().str);
+        rcl_reset_error();
+        env->ReleaseStringUTFChars(j_topic_name, topic_name);
+        return JNI_FALSE;
+    }
+
+    subscriptions.emplace(topic_name, sub);
+    LOGI("Subscribed to topic: %s", topic_name);
+
+    env->ReleaseStringUTFChars(j_topic_name, topic_name);
     return JNI_TRUE;
 }
 
@@ -362,6 +506,23 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_shutdown(JNIEnv *env, jobject thiz) {
     }
 
     LOGI("Shutting down ROS 2 node and context...");
+
+    spinning = false;
+    if (spinner_thread.joinable()) {
+        spinner_thread.join();
+    }
+
+    for (auto &pair : subscriptions) {
+        if (rcl_subscription_fini(&pair.second, &node) != RCL_RET_OK) {
+            LOGE("Error finalizing subscription for %s", pair.first.c_str());
+        }
+    }
+    subscriptions.clear();
+
+    if (g_bridge_obj) {
+        env->DeleteGlobalRef(g_bridge_obj);
+        g_bridge_obj = nullptr;
+    }
 
     for (auto &pair : publishers) {
         if (rcl_publisher_fini(&pair.second, &node) != RCL_RET_OK) {

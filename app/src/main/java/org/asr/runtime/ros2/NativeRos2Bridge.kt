@@ -14,8 +14,24 @@ object NativeRos2Bridge {
 
     fun isAvailable(): Boolean = LIB_AVAILABLE
 
+    private var messageListener: MessageListener? = null
+
+    interface MessageListener {
+        fun onStringMessage(topic: String, message: String)
+    }
+
+    fun setMessageListener(listener: MessageListener?) {
+        messageListener = listener
+    }
+
+    // Called from native code
+    fun onStringMessageReceived(topic: String, message: String) {
+        messageListener?.onStringMessage(topic, message)
+    }
+
     external fun initialize(domainId: Int, nodeName: String): Boolean
     external fun startNode(domainId: Int, nodeName: String): Boolean
+    external fun subscribeString(topicName: String): Boolean
     external fun publishString(topicName: String, message: String): Boolean
     external fun publishImu(topicName: String, accel: DoubleArray, gyro: DoubleArray, orientation: DoubleArray, timestampNs: Long): Boolean
     external fun publishNavSatFix(topicName: String, latitude: Double, longitude: Double, altitude: Double, accuracy: Float, timestampNs: Long): Boolean

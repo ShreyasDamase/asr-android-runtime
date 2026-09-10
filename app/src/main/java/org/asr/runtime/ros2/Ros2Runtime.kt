@@ -61,6 +61,15 @@ class Ros2Runtime(private val context: Context) {
                 return
             }
 
+            NativeRos2Bridge.setMessageListener(object : NativeRos2Bridge.MessageListener {
+                override fun onStringMessage(topic: String, message: String) {
+                    Log.i(TAG, "ROS 2 message received on $topic: $message")
+                    // In the future, this can be dispatched to other components
+                }
+            })
+
+            NativeRos2Bridge.subscribeString("/asr_android/test/in")
+
             runtimeReady = true
             publishStatus("ASR Android online")
             scheduleHeartbeat()
@@ -76,6 +85,7 @@ class Ros2Runtime(private val context: Context) {
         heartbeatRunnable = null
         try {
             if (NativeRos2Bridge.isAvailable()) {
+                NativeRos2Bridge.setMessageListener(null)
                 NativeRos2Bridge.shutdown()
             }
         } catch (t: Throwable) {
