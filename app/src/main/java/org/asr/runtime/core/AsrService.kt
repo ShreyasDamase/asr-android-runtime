@@ -685,6 +685,17 @@ class AsrService : LifecycleService() {
 
     private fun handleDevMode(intent: Intent) {
         val flag  = intent.getStringExtra("flag")  ?: return
+        if (flag == "ros2_enabled") {
+            val value = intent.getBooleanExtra("value", false)
+            setRos2Enabled(value)
+            return
+        }
+        if (flag == "ros2_domain_id") {
+            val value = intent.getIntExtra("value", 0)
+            ros2Runtime.setDomainId(value)
+            Log.i(TAG, "[DEV] ROS 2 Domain ID set to $value")
+            return
+        }
         val value = intent.getBooleanExtra("value", false)
         DevModeConfig.applyFlag(flag, value)
         Log.i(TAG, "[DEV] Flag '$flag' = $value")

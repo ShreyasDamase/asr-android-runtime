@@ -7,6 +7,7 @@
 #include <atomic>
 #include <algorithm>
 #include <android/log.h>
+#include <unistd.h>
 
 #include <rcl/rcl.h>
 #include <rcl/error_handling.h>
@@ -70,25 +71,36 @@ static void message_received_callback(const char *topic_name, const char *messag
 static void run_spinner() {
     LOGI("ROS 2 spinner thread started");
     while (spinning) {
+        bool has_subscriptions = false;
         rcl_wait_set_t wait_set = rcl_get_zero_initialized_wait_set();
         {
             std::lock_guard<std::mutex> lock(node_mutex);
             if (!node_ready) break;
 
-            rcl_ret_t ret = rcl_wait_set_init(&wait_set, subscriptions.size(), 0, 0, 0, 0, 0, &context, rcl_get_default_allocator());
-            if (ret != RCL_RET_OK) {
-                LOGE("Failed to init wait set: %s", rcl_get_error_string().str);
-                rcl_reset_error();
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                continue;
-            }
-
-            for (auto &pair : subscriptions) {
-                if (rcl_wait_set_add_subscription(&wait_set, &pair.second, nullptr) != RCL_RET_OK) {
-                    LOGE("Failed to add subscription to wait set: %s", rcl_get_error_string().str);
+            if (subscriptions.empty()) {
+                has_subscriptions = false;
+            } else {
+                rcl_ret_t ret = rcl_wait_set_init(&wait_set, subscriptions.size(), 0, 0, 0, 0, 0, &context, rcl_get_default_allocator());
+                if (ret != RCL_RET_OK) {
+                    LOGE("Failed to init wait set: %s", rcl_get_error_string().str);
                     rcl_reset_error();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    continue;
                 }
+
+                for (auto &pair : subscriptions) {
+                    if (rcl_wait_set_add_subscription(&wait_set, &pair.second, nullptr) != RCL_RET_OK) {
+                        LOGE("Failed to add subscription to wait set: %s", rcl_get_error_string().str);
+                        rcl_reset_error();
+                    }
+                }
+                has_subscriptions = true;
             }
+        }
+
+        if (!has_subscriptions) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
         }
 
         rcl_ret_t ret = rcl_wait(&wait_set, RCL_MS_TO_NS(100));
@@ -168,6 +180,8 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz,
         return JNI_TRUE;
     }
 
+    setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
+
     // Ensure context is clean before init
     context = rcl_get_zero_initialized_context();
 
@@ -194,13 +208,15 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz,
         return JNI_FALSE;
     }
 
-    LOGI("RCL initialized for domain %d", domain_id);
+    LOGI("RCL initialized for domain %d using RMW: %s", domain_id, rmw_get_implementation_identifier());
     return JNI_TRUE;
 }
 
 JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, jint domain_id, jstring j_node_name) {
     std::lock_guard<std::mutex> lock(node_mutex);
+
+    setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
 
     if (!rcl_context_is_valid(&context)) {
         LOGI("Context invalid; performing automatic RCL initialization");
@@ -242,8 +258,12 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
         return JNI_FALSE;
     }
 
+    size_t actual_domain_id = 0;
+    rcl_context_get_domain_id(&context, &actual_domain_id);
+
     node_ready = true;
-    LOGI("ROS 2 node /%s started successfully", node_name_str.c_str());
+    LOGI("ROS 2 node /%s started successfully on domain %zu using RMW: %s",
+         node_name_str.c_str(), actual_domain_id, rmw_get_implementation_identifier());
 
     if (g_bridge_obj) {
         env->DeleteGlobalRef(g_bridge_obj);
