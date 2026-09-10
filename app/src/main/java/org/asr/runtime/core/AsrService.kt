@@ -1,4 +1,4 @@
-    package org.asr.runtime.core
+package org.asr.runtime.core
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -129,10 +129,12 @@ class AsrService : LifecycleService() {
     private var restartCount = 0
     private var pendingStart = false
     private var deviceId: Byte = 0
+    private var nodeName: String = "asr_android"
     private val heartbeatSeq = java.util.concurrent.atomic.AtomicInteger(0)
     private lateinit var heartbeatHandler: Handler
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
@@ -210,10 +212,15 @@ class AsrService : LifecycleService() {
         wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "AsrRuntime:WifiLock")
         wifiLock?.acquire()
 
+        multicastLock = wm.createMulticastLock("AsrRuntime:MulticastLock")
+        multicastLock?.setReferenceCounted(false)
+        multicastLock?.acquire()
+
         Log.i(TAG, "[ASR] Starting Runtime v${BuildConfig.VERSION_NAME}")
 
         // ── 1. Stable device ID (SharedPreferences UUID) ──────────────────
         deviceId = getOrCreateDeviceId()
+        nodeName = "asr_android_${deviceId}"
         ros2Runtime = Ros2Runtime(this)
 
         // ── 2. Transport layer ─────────────────────────────────────────────
@@ -261,7 +268,7 @@ class AsrService : LifecycleService() {
         )
         transportManager.addTransport(LogTransport())
         transportManager.addTransport(tcpTransport)
-        ros2Runtime.startIfNeeded()
+        ros2Runtime.startIfNeeded(nodeName)
 
         // ── 3. Diagnostics and benchmark ──────────────────────────────────
         benchmarkProcessor = BenchmarkProcessor(this)
@@ -407,7 +414,7 @@ class AsrService : LifecycleService() {
         return START_STICKY
     }
 
-    // ── Command handler registration ─────────────────────────────────────────
+    // ── Command handler registration ────────────────────────────────AAAAAAAA─
 
     private fun registerCommandHandlers() {
         // Module lifecycle
@@ -593,7 +600,7 @@ class AsrService : LifecycleService() {
             return
         }
 
-        ros2Runtime.startIfNeeded()
+        ros2Runtime.startIfNeeded(nodeName)
         if (cameraManager.isCameraProviderReady()) startInternal() else pendingStart = true
     }
 
@@ -613,7 +620,7 @@ class AsrService : LifecycleService() {
     private fun startInternal() {
         _runtimeState.value = RuntimeState.CONNECTING
         benchmarkProcessor.reset(restartCount)
-        ros2Runtime.startIfNeeded()
+        ros2Runtime.startIfNeeded(nodeName)
         moduleRegistry.startModule("battery")
         moduleRegistry.startModule("diagnostics")
         moduleRegistry.startModule("transport")
@@ -748,6 +755,14 @@ class AsrService : LifecycleService() {
         return binder
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(TAG, "[ASR] Task removed — app swiped away. Performing clean ROS 2 shutdown.")
+        // If we want the service to stay but the ROS 2 node to restart cleanly on relaunch,
+        // we can shut down the runtime here.
+        ros2Runtime.shutdown()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         serviceScope.cancel()
         super.onDestroy()
@@ -755,6 +770,7 @@ class AsrService : LifecycleService() {
         
         wakeLock?.let { if (it.isHeld) it.release() }
         wifiLock?.let { if (it.isHeld) it.release() }
+        multicastLock?.let { if (it.isHeld) it.release() }
         
         moduleRegistry.releaseAll()
         Log.i(TAG, "[ASR] Runtime destroyed")

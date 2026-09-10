@@ -181,6 +181,9 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz,
     }
 
     setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
+    char domain_str[16];
+    snprintf(domain_str, sizeof(domain_str), "%d", domain_id);
+    setenv("ROS_DOMAIN_ID", domain_str, 1);
 
     // Ensure context is clean before init
     context = rcl_get_zero_initialized_context();
@@ -217,6 +220,9 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
     std::lock_guard<std::mutex> lock(node_mutex);
 
     setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
+    char domain_str[16];
+    snprintf(domain_str, sizeof(domain_str), "%d", domain_id);
+    setenv("ROS_DOMAIN_ID", domain_str, 1);
 
     if (!rcl_context_is_valid(&context)) {
         LOGI("Context invalid; performing automatic RCL initialization");

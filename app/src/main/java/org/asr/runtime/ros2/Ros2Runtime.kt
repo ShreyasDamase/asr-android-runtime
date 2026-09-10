@@ -38,8 +38,8 @@ class Ros2Runtime(private val context: Context) {
         }
     }
 
-    fun startIfNeeded() {
-        Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId")
+    fun startIfNeeded(nodeName: String = "asr_android") {
+        Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId nodeName=$nodeName")
         if (!enabled) {
             Log.i(TAG, "ROS 2 disabled; not initializing the native ROS runtime")
             return
@@ -55,7 +55,7 @@ class Ros2Runtime(private val context: Context) {
                 return
             }
 
-            val started = NativeRos2Bridge.startNode(domainId, "asr_android")
+            val started = NativeRos2Bridge.startNode(domainId, nodeName)
             if (!started) {
                 Log.e(TAG, "Failed to start native ROS 2 node /asr_android on domain $domainId")
                 shutdown()
