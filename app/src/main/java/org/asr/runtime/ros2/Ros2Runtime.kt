@@ -38,8 +38,8 @@ class Ros2Runtime(private val context: Context) {
         }
     }
 
-    fun startIfNeeded(nodeName: String = "asr_android") {
-        Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId nodeName=$nodeName")
+    fun startIfNeeded(persistentBaseName: String = "asr_android") {
+        Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId")
         if (!enabled) {
             Log.i(TAG, "ROS 2 disabled; not initializing the native ROS runtime")
             return
@@ -55,9 +55,13 @@ class Ros2Runtime(private val context: Context) {
                 return
             }
 
-            val started = NativeRos2Bridge.startNode(domainId, nodeName)
+            // Add a random session suffix to ensure discovery works on quick restarts
+            val sessionSuffix = (System.currentTimeMillis() % 10000).toInt()
+            val uniqueNodeName = "${persistentBaseName}_${sessionSuffix}"
+
+            val started = NativeRos2Bridge.startNode(domainId, uniqueNodeName)
             if (!started) {
-                Log.e(TAG, "Failed to start native ROS 2 node /asr_android on domain $domainId")
+                Log.e(TAG, "Failed to start native ROS 2 node /$uniqueNodeName on domain $domainId")
                 shutdown()
                 return
             }
@@ -65,17 +69,16 @@ class Ros2Runtime(private val context: Context) {
             NativeRos2Bridge.setMessageListener(object : NativeRos2Bridge.MessageListener {
                 override fun onStringMessage(topic: String, message: String) {
                     Log.i(TAG, "ROS 2 message received on $topic: $message")
-                    // In the future, this can be dispatched to other components
                 }
             })
 
             NativeRos2Bridge.subscribeString("/asr_android/test/in")
 
             runtimeReady = true
-            publishStatus("ASR Android online")
+            publishStatus("ASR Android online: $uniqueNodeName")
             publishCapabilities()
             scheduleHeartbeat()
-            Log.i(TAG, "Native ROS 2 node started on domain $domainId")
+            Log.i(TAG, "Native ROS 2 node $uniqueNodeName started on domain $domainId")
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to initialize native ROS 2 runtime", t)
             shutdown()

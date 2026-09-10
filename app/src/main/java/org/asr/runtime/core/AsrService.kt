@@ -744,7 +744,7 @@ class AsrService : LifecycleService() {
                 prefs.edit().putString(PREF_DEVICE_ID, it).apply()
                 Log.i(TAG, "[ASR] Generated new device ID UUID: $it")
             }
-        // Truncate UUID hash to single byte (0-255)
+        // Use a 0-255 positive integer for the suffix
         return (uuidStr.hashCode() and 0xFF).toByte()
     }
 

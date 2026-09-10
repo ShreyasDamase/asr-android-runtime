@@ -169,6 +169,8 @@ extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     g_jvm = vm;
+    setenv("ROS_NOSHM", "1", 1);
+    setenv("ROS_LOCALHOST_ONLY", "0", 1);
     return JNI_VERSION_1_6;
 }
 
@@ -181,6 +183,8 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz,
     }
 
     setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
+    setenv("ROS_NOSHM", "1", 1);
+    setenv("ROS_LOCALHOST_ONLY", "0", 1);
     char domain_str[16];
     snprintf(domain_str, sizeof(domain_str), "%d", domain_id);
     setenv("ROS_DOMAIN_ID", domain_str, 1);
@@ -220,6 +224,8 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
     std::lock_guard<std::mutex> lock(node_mutex);
 
     setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
+    setenv("ROS_NOSHM", "1", 1);
+    setenv("ROS_LOCALHOST_ONLY", "0", 1);
     char domain_str[16];
     snprintf(domain_str, sizeof(domain_str), "%d", domain_id);
     setenv("ROS_DOMAIN_ID", domain_str, 1);
