@@ -21,7 +21,7 @@ class BatteryManager(
     private val context: Context,
     private val transportManager: TransportManager,
     private val deviceId: Byte,
-    private val onRosBattery: ((Float, Float, Float, Boolean) -> Unit)? = null
+    private val onRosBattery: ((Float, Float, Float, Boolean, Long) -> Unit)? = null
 ) : SensorModule {
 
     override val id: String = "battery"
@@ -64,7 +64,7 @@ class BatteryManager(
                 deviceId = deviceId
             )
             transportManager.send(packet)
-            onRosBattery?.invoke(_level, _temperature, _voltage.toFloat(), _isCharging)
+            onRosBattery?.invoke(_level, _temperature, _voltage.toFloat(), _isCharging, android.os.SystemClock.elapsedRealtimeNanos())
         }
     }
 

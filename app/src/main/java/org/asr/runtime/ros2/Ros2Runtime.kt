@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import org.json.JSONObject
 
 class Ros2Runtime(private val context: Context) {
 
@@ -72,6 +73,7 @@ class Ros2Runtime(private val context: Context) {
 
             runtimeReady = true
             publishStatus("ASR Android online")
+            publishCapabilities()
             scheduleHeartbeat()
             Log.i(TAG, "Native ROS 2 node started on domain $domainId")
         } catch (t: Throwable) {
@@ -96,15 +98,23 @@ class Ros2Runtime(private val context: Context) {
     }
 
     fun publishStatus(text: String) {
-        if (!enabled || !runtimeReady) {
-            return
-        }
+        if (!ready()) return
         try {
-            if (NativeRos2Bridge.isAvailable()) {
-                NativeRos2Bridge.publishString("/asr_android/status", text)
-            }
+            NativeRos2Bridge.publishString("/asr_android/status", text)
         } catch (t: Throwable) {
             Log.w(TAG, "ROS 2 status publish failed", t)
+        }
+    }
+
+    fun publishCapabilities() {
+        if (!ready()) return
+        try {
+            val caps = org.asr.runtime.core.CapabilityManager(context).discover()
+            val json = JSONObject(caps).toString()
+            NativeRos2Bridge.publishString("/asr_android/capabilities", json)
+            Log.i(TAG, "Published capabilities: $json")
+        } catch (t: Throwable) {
+            Log.w(TAG, "ROS 2 capabilities publish failed", t)
         }
     }
 
@@ -123,8 +133,8 @@ class Ros2Runtime(private val context: Context) {
         if (ready()) NativeRos2Bridge.publishNavSatFix("/asr_android/gps", latitude, longitude, altitude, accuracy, timestampNs)
     }
 
-    fun publishBattery(percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean) {
-        if (ready()) NativeRos2Bridge.publishBattery("/asr_android/battery", percentage, temperature, voltageMv, charging)
+    fun publishBattery(percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean, timestampNs: Long) {
+        if (ready()) NativeRos2Bridge.publishBattery("/asr_android/battery", percentage, temperature, voltageMv, charging, timestampNs)
     }
 
     fun publishEnvironment(kind: Int, value: Double, timestampNs: Long) {

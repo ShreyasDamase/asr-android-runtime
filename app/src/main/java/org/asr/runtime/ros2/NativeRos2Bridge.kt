@@ -35,7 +35,7 @@ object NativeRos2Bridge {
     external fun publishString(topicName: String, message: String): Boolean
     external fun publishImu(topicName: String, accel: DoubleArray, gyro: DoubleArray, orientation: DoubleArray, timestampNs: Long): Boolean
     external fun publishNavSatFix(topicName: String, latitude: Double, longitude: Double, altitude: Double, accuracy: Float, timestampNs: Long): Boolean
-    external fun publishBattery(topicName: String, percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean): Boolean
+    external fun publishBattery(topicName: String, percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean, timestampNs: Long): Boolean
     external fun publishScalar(topicName: String, value: Double, timestampNs: Long, kind: Int): Boolean
     external fun publishCompressedImage(topicName: String, data: ByteArray, format: String, timestampNs: Long): Boolean
     external fun publishCameraInfo(topicName: String, width: Int, height: Int, timestampNs: Long): Boolean

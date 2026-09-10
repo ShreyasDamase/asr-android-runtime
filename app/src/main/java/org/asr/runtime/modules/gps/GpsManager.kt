@@ -62,7 +62,8 @@ class GpsManager(
                 provider,
                 MIN_TIME_MS,
                 MIN_DISTANCE_M,
-                this
+                this,
+                context.mainLooper
             )
             activeProvider = provider
             state = ModuleState.RUNNING

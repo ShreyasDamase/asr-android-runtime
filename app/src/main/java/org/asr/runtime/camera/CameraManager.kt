@@ -114,6 +114,7 @@ class CameraManager(
             .setResolutionSelector(resolutionSelector)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(config.imageFormat)
+            .setTargetRotation(android.view.Surface.ROTATION_90)
 
         // Lock AE frame rate to targetFps via Camera2 interop
         Camera2Interop.Extender(analysisBuilder)

@@ -300,8 +300,8 @@ class AsrService : LifecycleService() {
         }
         motionManager      = MotionManager(this)
         audioRuntime       = AudioRuntime(this, transportManager, deviceId)
-        batteryManager     = BatteryManager(this, transportManager, deviceId) { percentage, temperature, voltage, charging ->
-            ros2Runtime.publishBattery(percentage, temperature, voltage, charging)
+        batteryManager     = BatteryManager(this, transportManager, deviceId) { percentage, temperature, voltage, charging, timestampNs ->
+            ros2Runtime.publishBattery(percentage, temperature, voltage, charging, timestampNs)
         }
         speakerManager     = SpeakerManager(this)
         gpsManager         = GpsManager(this, transportManager, deviceId) { location ->
