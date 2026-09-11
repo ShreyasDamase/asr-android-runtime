@@ -38,8 +38,8 @@ class Ros2Runtime(private val context: Context) {
         }
     }
 
-    fun startIfNeeded(persistentBaseName: String = "asr_android") {
-        Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId")
+    fun startIfNeeded(nodeName: String = "asr_android", nodeNamespace: String = "/") {
+        Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId nodeName=$nodeName ns=$nodeNamespace")
         if (!enabled) {
             Log.i(TAG, "ROS 2 disabled; not initializing the native ROS runtime")
             return
@@ -55,13 +55,9 @@ class Ros2Runtime(private val context: Context) {
                 return
             }
 
-            // Add a random session suffix to ensure discovery works on quick restarts
-            val sessionSuffix = (System.currentTimeMillis() % 10000).toInt()
-            val uniqueNodeName = "${persistentBaseName}_${sessionSuffix}"
-
-            val started = NativeRos2Bridge.startNode(domainId, uniqueNodeName)
+            val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
             if (!started) {
-                Log.e(TAG, "Failed to start native ROS 2 node /$uniqueNodeName on domain $domainId")
+                Log.e(TAG, "Failed to start native ROS 2 node $nodeNamespace/$nodeName on domain $domainId")
                 shutdown()
                 return
             }
@@ -72,13 +68,14 @@ class Ros2Runtime(private val context: Context) {
                 }
             })
 
-            NativeRos2Bridge.subscribeString("/asr_android/test/in")
+            // Topics are now relative to the node namespace if they don't start with /
+            NativeRos2Bridge.subscribeString("test/in")
 
             runtimeReady = true
-            publishStatus("ASR Android online: $uniqueNodeName")
+            publishStatus("ASR Android online")
             publishCapabilities()
             scheduleHeartbeat()
-            Log.i(TAG, "Native ROS 2 node $uniqueNodeName started on domain $domainId")
+            Log.i(TAG, "Native ROS 2 node $nodeName in $nodeNamespace started on domain $domainId")
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to initialize native ROS 2 runtime", t)
             shutdown()
@@ -103,7 +100,7 @@ class Ros2Runtime(private val context: Context) {
     fun publishStatus(text: String) {
         if (!ready()) return
         try {
-            NativeRos2Bridge.publishString("/asr_android/status", text)
+            NativeRos2Bridge.publishString("status", text)
         } catch (t: Throwable) {
             Log.w(TAG, "ROS 2 status publish failed", t)
         }
@@ -114,7 +111,7 @@ class Ros2Runtime(private val context: Context) {
         try {
             val caps = org.asr.runtime.core.CapabilityManager(context).discover()
             val json = JSONObject(caps).toString()
-            NativeRos2Bridge.publishString("/asr_android/capabilities", json)
+            NativeRos2Bridge.publishString("capabilities", json)
             Log.i(TAG, "Published capabilities: $json")
         } catch (t: Throwable) {
             Log.w(TAG, "ROS 2 capabilities publish failed", t)
@@ -124,7 +121,7 @@ class Ros2Runtime(private val context: Context) {
     fun publishImu(accel: FloatArray, gyro: FloatArray, rotation: FloatArray, timestampNs: Long) {
         if (!ready()) return
         NativeRos2Bridge.publishImu(
-            "/asr_android/imu",
+            "imu",
             accel.map { it.toDouble() }.toDoubleArray(),
             gyro.map { it.toDouble() }.toDoubleArray(),
             doubleArrayOf(rotation.getOrElse(0) { 0f }.toDouble(), rotation.getOrElse(1) { 0f }.toDouble(), rotation.getOrElse(2) { 0f }.toDouble(), rotation.getOrElse(3) { 1f }.toDouble()),
@@ -133,28 +130,28 @@ class Ros2Runtime(private val context: Context) {
     }
 
     fun publishGps(latitude: Double, longitude: Double, altitude: Double, accuracy: Float, timestampNs: Long) {
-        if (ready()) NativeRos2Bridge.publishNavSatFix("/asr_android/gps", latitude, longitude, altitude, accuracy, timestampNs)
+        if (ready()) NativeRos2Bridge.publishNavSatFix("gps", latitude, longitude, altitude, accuracy, timestampNs)
     }
 
     fun publishBattery(percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean, timestampNs: Long) {
-        if (ready()) NativeRos2Bridge.publishBattery("/asr_android/battery", percentage, temperature, voltageMv, charging, timestampNs)
+        if (ready()) NativeRos2Bridge.publishBattery("battery", percentage, temperature, voltageMv, charging, timestampNs)
     }
 
     fun publishEnvironment(kind: Int, value: Double, timestampNs: Long) {
         if (!ready()) return
         val topic = when (kind) {
-            0 -> "/asr_android/environment/illuminance"
-            1 -> "/asr_android/environment/pressure"
-            2 -> "/asr_android/environment/temperature"
-            else -> "/asr_android/environment/relative_humidity"
+            0 -> "environment/illuminance"
+            1 -> "environment/pressure"
+            2 -> "environment/temperature"
+            else -> "environment/relative_humidity"
         }
         NativeRos2Bridge.publishScalar(topic, value, timestampNs, kind)
     }
 
     fun publishCameraJpeg(data: ByteArray, width: Int, height: Int, timestampNs: Long) {
         if (ready()) {
-            NativeRos2Bridge.publishCompressedImage("/asr_android/camera/image/compressed", data, "jpeg", timestampNs)
-            NativeRos2Bridge.publishCameraInfo("/asr_android/camera/camera_info", width, height, timestampNs)
+            NativeRos2Bridge.publishCompressedImage("camera/image/compressed", data, "jpeg", timestampNs)
+            NativeRos2Bridge.publishCameraInfo("camera/camera_info", width, height, timestampNs)
         }
     }
 

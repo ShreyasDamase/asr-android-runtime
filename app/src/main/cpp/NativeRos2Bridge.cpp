@@ -121,7 +121,6 @@ static void run_spinner() {
             std::lock_guard<std::mutex> lock(node_mutex);
             for (size_t i = 0; i < wait_set.size_of_subscriptions; ++i) {
                 if (wait_set.subscriptions[i]) {
-                    // Find which subscription this is
                     for (auto &pair : subscriptions) {
                         if (&pair.second == wait_set.subscriptions[i]) {
                             std_msgs__msg__String msg;
@@ -142,11 +141,22 @@ static void run_spinner() {
     LOGI("ROS 2 spinner thread exiting");
 }
 
-static bool ensure_publisher(const char *topic_name, const rosidl_message_type_support_t *ts, rcl_publisher_t **out) {
+static bool ensure_publisher(const char *topic_name, const rosidl_message_type_support_t *ts, rcl_publisher_t **out, int qos_kind = 0) {
     auto it = publishers.find(topic_name);
     if (it == publishers.end()) {
         rcl_publisher_t pub = rcl_get_zero_initialized_publisher();
         rcl_publisher_options_t options = rcl_publisher_get_default_options();
+
+        // QoS kinds: 0=default(reliable), 1=sensor(best_effort), 2=transient_local(reliable)
+        if (qos_kind == 1) {
+            options.qos = rmw_qos_profile_sensor_data;
+        } else if (qos_kind == 2) {
+            options.qos = rmw_qos_profile_default;
+            options.qos.durability = RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+        } else {
+            options.qos = rmw_qos_profile_default;
+        }
+
         if (rcl_publisher_init(&pub, &node, ts, topic_name, &options) != RCL_RET_OK) {
             LOGE("Failed to init publisher for %s: %s", topic_name, rcl_get_error_string().str);
             rcl_reset_error();
@@ -189,9 +199,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz,
     snprintf(domain_str, sizeof(domain_str), "%d", domain_id);
     setenv("ROS_DOMAIN_ID", domain_str, 1);
 
-    // Ensure context is clean before init
     context = rcl_get_zero_initialized_context();
-
     rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
     if (rcl_init_options_init(&init_options, rcl_get_default_allocator()) != RCL_RET_OK) {
         LOGE("Failed to init options: %s", rcl_get_error_string().str);
@@ -220,7 +228,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz,
 }
 
 JNIEXPORT jboolean JNICALL
-Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, jint domain_id, jstring j_node_name) {
+Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, jint domain_id, jstring j_node_name, jstring j_node_namespace) {
     std::lock_guard<std::mutex> lock(node_mutex);
 
     setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
@@ -257,15 +265,24 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
     const char *node_name_chars = env->GetStringUTFChars(j_node_name, nullptr);
     if (!node_name_chars) return JNI_FALSE;
 
+    const char *node_namespace_chars = env->GetStringUTFChars(j_node_namespace, nullptr);
+    if (!node_namespace_chars) {
+        env->ReleaseStringUTFChars(j_node_name, node_name_chars);
+        return JNI_FALSE;
+    }
+
     node = rcl_get_zero_initialized_node();
     rcl_node_options_t node_options = rcl_node_get_default_options();
 
-    rcl_ret_t ret = rcl_node_init(&node, node_name_chars, "", &context, &node_options);
+    rcl_ret_t ret = rcl_node_init(&node, node_name_chars, node_namespace_chars, &context, &node_options);
     std::string node_name_str(node_name_chars);
+    std::string node_namespace_str(node_namespace_chars);
     env->ReleaseStringUTFChars(j_node_name, node_name_chars);
+    env->ReleaseStringUTFChars(j_node_namespace, node_namespace_chars);
 
     if (ret != RCL_RET_OK) {
-        LOGE("Failed to init node /%s: %s", node_name_str.c_str(), rcl_get_error_string().str);
+        LOGE("Failed to init node /%s in namespace %s: %s",
+             node_name_str.c_str(), node_namespace_str.c_str(), rcl_get_error_string().str);
         rcl_reset_error();
         return JNI_FALSE;
     }
@@ -274,8 +291,8 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
     rcl_context_get_domain_id(&context, &actual_domain_id);
 
     node_ready = true;
-    LOGI("ROS 2 node /%s started successfully on domain %zu using RMW: %s",
-         node_name_str.c_str(), actual_domain_id, rmw_get_implementation_identifier());
+    LOGI("ROS 2 node %s/%s started successfully on domain %zu using RMW: %s",
+         node_namespace_str.c_str(), node_name_str.c_str(), actual_domain_id, rmw_get_implementation_identifier());
 
     if (g_bridge_obj) {
         env->DeleteGlobalRef(g_bridge_obj);
@@ -339,8 +356,13 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishString(JNIEnv *env, jobject th
     const char *topic_name = env->GetStringUTFChars(j_topic_name, nullptr);
     if (!topic_name) return JNI_FALSE;
 
+    int qos_kind = 0;
+    if (strstr(topic_name, "capabilities") != nullptr || strstr(topic_name, "status") != nullptr) {
+        qos_kind = 2; // Transient local for caps/status
+    }
+
     rcl_publisher_t *publisher = nullptr;
-    if (!ensure_publisher(topic_name, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String), &publisher)) {
+    if (!ensure_publisher(topic_name, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String), &publisher, qos_kind)) {
         env->ReleaseStringUTFChars(j_topic_name, topic_name);
         return JNI_FALSE;
     }
@@ -382,7 +404,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
     jdouble *orientation = env->GetDoubleArrayElements(j_orientation, nullptr);
     rcl_publisher_t *publisher = nullptr;
     bool ok = topic && accel && gyro && orientation &&
-              ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Imu)(), &publisher);
+              ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Imu)(), &publisher, 1);
     if (ok) {
         sensor_msgs__msg__Imu msg;
         sensor_msgs__msg__Imu__init(&msg);
@@ -420,7 +442,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishNavSatFix(JNIEnv *env, jobject
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, NavSatFix)(), &publisher);
+    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, NavSatFix)(), &publisher, 1);
     if (ok) {
         sensor_msgs__msg__NavSatFix msg;
         sensor_msgs__msg__NavSatFix__init(&msg);
@@ -450,7 +472,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishBattery(JNIEnv *env, jobject, 
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, BatteryState)(), &publisher);
+    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, BatteryState)(), &publisher, 0);
     if (ok) {
         sensor_msgs__msg__BatteryState msg;
         sensor_msgs__msg__BatteryState__init(&msg);
@@ -482,16 +504,16 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishScalar(JNIEnv *env, jobject, j
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     bool ok = false;
     if (topic && kind == 0) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Illuminance)(), &publisher);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Illuminance)(), &publisher, 1);
         if (ok) { sensor_msgs__msg__Illuminance msg; sensor_msgs__msg__Illuminance__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.illuminance = value; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Illuminance__fini(&msg); }
     } else if (topic && kind == 1) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, FluidPressure)(), &publisher);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, FluidPressure)(), &publisher, 1);
         if (ok) { sensor_msgs__msg__FluidPressure msg; sensor_msgs__msg__FluidPressure__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.fluid_pressure = value * 100.0; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__FluidPressure__fini(&msg); }
     } else if (topic && kind == 2) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Temperature)(), &publisher);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Temperature)(), &publisher, 1);
         if (ok) { sensor_msgs__msg__Temperature msg; sensor_msgs__msg__Temperature__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.temperature = value; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Temperature__fini(&msg); }
     } else if (topic && kind == 3) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, RelativeHumidity)(), &publisher);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, RelativeHumidity)(), &publisher, 1);
         if (ok) { sensor_msgs__msg__RelativeHumidity msg; sensor_msgs__msg__RelativeHumidity__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.relative_humidity = value / 100.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__RelativeHumidity__fini(&msg); }
     }
     if (topic) env->ReleaseStringUTFChars(j_topic, topic);
@@ -507,7 +529,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCompressedImage(JNIEnv *env, j
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     const char *format = env->GetStringUTFChars(j_format, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && format && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CompressedImage)(), &publisher);
+    bool ok = topic && format && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CompressedImage)(), &publisher, 1);
     if (ok) {
         jsize size = env->GetArrayLength(j_data);
         sensor_msgs__msg__CompressedImage msg;
@@ -531,7 +553,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CameraInfo)(), &publisher);
+    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CameraInfo)(), &publisher, 1);
     if (ok) {
         sensor_msgs__msg__CameraInfo msg;
         sensor_msgs__msg__CameraInfo__init(&msg);

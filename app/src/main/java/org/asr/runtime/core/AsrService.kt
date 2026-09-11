@@ -66,6 +66,7 @@ class AsrService : LifecycleService() {
         private const val NOTIFICATION_ID = 101
         private const val PREFS_NAME     = "asr_prefs"
         private const val PREF_DEVICE_ID = "device_id"
+        private const val PREF_NODE_ALIAS = "node_alias"
 
         // ADB broadcast actions
         const val ACTION_START          = "org.asr.runtime.START"
@@ -80,6 +81,7 @@ class AsrService : LifecycleService() {
         const val ACTION_FLASHLIGHT     = "org.asr.runtime.FLASHLIGHT"
         const val ACTION_TCP_CONNECT    = "org.asr.runtime.TCP_CONNECT"
         const val ACTION_DEV_MODE       = "org.asr.runtime.DEV_MODE"
+        const val ACTION_SET_ALIAS      = "org.asr.runtime.SET_ALIAS"
 
         val PROFILES = mapOf(
             "mapping"     to listOf("camera", "imu"),
@@ -129,7 +131,6 @@ class AsrService : LifecycleService() {
     private var restartCount = 0
     private var pendingStart = false
     private var deviceId: Byte = 0
-    private var nodeName: String = "asr_android"
     private val heartbeatSeq = java.util.concurrent.atomic.AtomicInteger(0)
     private lateinit var heartbeatHandler: Handler
     private var wakeLock: PowerManager.WakeLock? = null
@@ -220,7 +221,6 @@ class AsrService : LifecycleService() {
 
         // ── 1. Stable device ID (SharedPreferences UUID) ──────────────────
         deviceId = getOrCreateDeviceId()
-        nodeName = "asr_android_${deviceId}"
         ros2Runtime = Ros2Runtime(this)
 
         // ── 2. Transport layer ─────────────────────────────────────────────
@@ -268,7 +268,8 @@ class AsrService : LifecycleService() {
         )
         transportManager.addTransport(LogTransport())
         transportManager.addTransport(tcpTransport)
-        ros2Runtime.startIfNeeded(nodeName)
+        
+        startRos2()
 
         // ── 3. Diagnostics and benchmark ──────────────────────────────────
         benchmarkProcessor = BenchmarkProcessor(this)
@@ -350,6 +351,7 @@ class AsrService : LifecycleService() {
             addAction(ACTION_STATUS)
             addAction(ACTION_TCP_CONNECT)
             addAction(ACTION_DEV_MODE)
+            addAction(ACTION_SET_ALIAS)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(controlReceiver, filter, Context.RECEIVER_EXPORTED)
@@ -364,9 +366,6 @@ class AsrService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
-        // START_STICKY re-delivers a null intent after the process is killed
-        // (e.g. after the Emergency Reset exit(0)). Recover the runtime instead
-        // of sitting idle with no foreground notification.
         if (intent == null) {
             Log.i(TAG, "[ASR] Sticky restart (null intent) — restoring foreground runtime")
             ensureForeground()
@@ -374,14 +373,19 @@ class AsrService : LifecycleService() {
             return START_STICKY
         }
 
-        // On modern Android, we MUST call startForeground quickly if started via startForegroundService
         if (intent.action == ACTION_START || intent.action == ACTION_RESTART) {
             ensureForeground()
         }
 
         when (intent.action) {
             ACTION_START          -> handleStart()
-            // disconnect() blocks on Thread.join(); keep it off the main thread.
+            ACTION_SET_ALIAS      -> {
+                val alias = intent.getStringExtra("alias")
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(PREF_NODE_ALIAS, alias).apply()
+                Log.i(TAG, "Node alias set to: $alias. Restarting ROS 2...")
+                ros2Runtime.shutdown()
+                startRos2()
+            }
             ACTION_STOP           -> serviceScope.launch(Dispatchers.Default) { handleStop() }
             ACTION_RESTART        -> serviceScope.launch(Dispatchers.Default) { handleRestart() }
             ACTION_SPEAK          -> {
@@ -414,10 +418,7 @@ class AsrService : LifecycleService() {
         return START_STICKY
     }
 
-    // ── Command handler registration ────────────────────────────────AAAAAAAA─
-
     private fun registerCommandHandlers() {
-        // Module lifecycle
         commandDispatcher.register(object : CommandHandler {
             override val command = "module.start"
             override fun execute(params: JSONObject): Result<String> {
@@ -434,7 +435,6 @@ class AsrService : LifecycleService() {
                 return Result.success("Module '$id' stopped")
             }
         })
-        // Camera commands
         commandDispatcher.register(object : CommandHandler {
             override val command = "camera.set_fps"
             override fun execute(params: JSONObject): Result<String> {
@@ -454,12 +454,11 @@ class AsrService : LifecycleService() {
         commandDispatcher.register(object : CommandHandler {
             override val command = "camera.set_encoding"
             override fun execute(params: JSONObject): Result<String> {
-                val enc = params.getString("encoding") // "JPEG" or "RAW_YUV"
+                val enc = params.getString("encoding")
                 cameraManager.configure("""{"encoding":"$enc"}""")
                 return Result.success("Encoding set to $enc")
             }
         })
-        // Speaker
         val speakerHandler = object : CommandHandler {
             override val command = "speaker.speak"
             override fun execute(params: JSONObject): Result<String> {
@@ -467,8 +466,6 @@ class AsrService : LifecycleService() {
                 if (speakerManager.state == ModuleState.STOPPED) {
                     Log.i(TAG, "[CMD] Auto-starting speaker module...")
                     speakerManager.start()
-                    // TextToSpeech.onInit is asynchronous; without a short wait the
-                    // first speak() right after auto-start always fails NOT_READY.
                     val deadline = System.currentTimeMillis() + 2000
                     while (!speakerManager.isTtsReady && System.currentTimeMillis() < deadline) {
                         Thread.sleep(50)
@@ -483,7 +480,6 @@ class AsrService : LifecycleService() {
             override val command = "speak"
             override fun execute(params: JSONObject): Result<String> = speakerHandler.execute(params)
         })
-        // Profile
         commandDispatcher.register(object : CommandHandler {
             override val command = "profile.enable"
             override fun execute(params: JSONObject): Result<String> {
@@ -494,7 +490,6 @@ class AsrService : LifecycleService() {
                 return Result.success("Profile '$profileId' enabled: $modules")
             }
         })
-        // Flashlight / Torch
         commandDispatcher.register(object : CommandHandler {
             override val command = "flashlight.set"
             override fun execute(params: JSONObject): Result<String> {
@@ -511,13 +506,7 @@ class AsrService : LifecycleService() {
                 return Result.success("ASR Runtime modules stopped")
             }
         })
-
-        Log.i(TAG, "[CMD] Registered ${commandDispatcher.registeredCommands().size} command handlers: ${commandDispatcher.registeredCommands()}")
     }
-
-    // ── Handlers ─────────────────────────────────────────────────────────────
-
-    // ── Public Controller Methods ───────────────────────────────────────────
 
     fun startRuntime() {
         if (isRunning) return
@@ -552,22 +541,13 @@ class AsrService : LifecycleService() {
     }
 
     fun reconnectTransport() {
-        Log.i(TAG, "[CMD] Manual Transport Reconnect (current host=${tcpTransport.host}:${tcpTransport.port})")
         serviceScope.launch(Dispatchers.IO) {
             tcpTransport.disconnect()
             tcpTransport.connect()
         }
     }
 
-    /**
-     * Connects the TCP transport to a specific [host]:[port].
-     *
-     * Wi-Fi mode:   host = desktop LAN IP (e.g. "192.168.1.42"), port = 4242
-     * ADB mode:     host = "127.0.0.1", port = 4242
-     *               (requires:  adb forward tcp:4242 tcp:4242  on the host machine)
-     */
     fun reconnectTransport(host: String, port: Int) {
-        Log.i(TAG, "[CMD] Transport connect → $host:$port")
         serviceScope.launch(Dispatchers.IO) {
             tcpTransport.disconnect()
             tcpTransport.host = host
@@ -577,7 +557,6 @@ class AsrService : LifecycleService() {
     }
 
     fun stopTransport() {
-        Log.i(TAG, "[CMD] Transport stop")
         serviceScope.launch(Dispatchers.IO) {
             tcpTransport.disconnect()
         }
@@ -587,20 +566,14 @@ class AsrService : LifecycleService() {
         ros2Runtime.setEnabled(enabled)
         if (enabled) {
             ros2Runtime.publishStatus("ROS 2 enabled")
+            startRos2()
         }
     }
 
-    // ── Handlers ─────────────────────────────────────────────────────────────
-
     private fun handleStart() {
         ensureForeground()
-
-        if (isRunning) {
-            Log.i(TAG, "AsrService is already running, skipping internal start")
-            return
-        }
-
-        ros2Runtime.startIfNeeded(nodeName)
+        if (isRunning) return
+        startRos2()
         if (cameraManager.isCameraProviderReady()) startInternal() else pendingStart = true
     }
 
@@ -617,10 +590,19 @@ class AsrService : LifecycleService() {
         }
     }
 
+    private fun startRos2() {
+        val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(PREF_NODE_ALIAS, null)
+        val baseName = alias ?: "asr_android"
+        val sessionSuffix = (System.currentTimeMillis() % 10000).toInt()
+        val nodeName = "${baseName}_${deviceId}_${sessionSuffix}"
+        val nodeNamespace = "/asr_android_${deviceId}"
+        ros2Runtime.startIfNeeded(nodeName, nodeNamespace)
+    }
+
     private fun startInternal() {
         _runtimeState.value = RuntimeState.CONNECTING
         benchmarkProcessor.reset(restartCount)
-        ros2Runtime.startIfNeeded(nodeName)
+        startRos2()
         moduleRegistry.startModule("battery")
         moduleRegistry.startModule("diagnostics")
         moduleRegistry.startModule("transport")
@@ -630,7 +612,7 @@ class AsrService : LifecycleService() {
         moduleRegistry.startModule("speaker")
         isRunning = true
         startHeartbeatLoop()
-        Log.i(TAG, "[ASR] Runtime started (sensors active). DeviceId=$deviceId Commands=${commandDispatcher.registeredCommands()}")
+        Log.i(TAG, "[ASR] Runtime started. DeviceId=$deviceId")
     }
 
     private fun startHeartbeatLoop() {
@@ -639,7 +621,6 @@ class AsrService : LifecycleService() {
     }
 
     private fun handleStop() {
-        Log.i(TAG, "[ASR] Stopping runtime modules & transport")
         moduleRegistry.stopAll()
         tcpTransport.disconnect()
         ros2Runtime.shutdown()
@@ -649,7 +630,6 @@ class AsrService : LifecycleService() {
     }
 
     private fun handleRestart() {
-        Log.i(TAG, "[ASR] Performing full runtime restart")
         handleStop()
         restartCount++
         startInternal()
@@ -669,7 +649,6 @@ class AsrService : LifecycleService() {
             lensFacing = newLensFacing,
             resolution = android.util.Size(width, height)
         )
-        Log.i(TAG, "[CMD] Camera config: ${activeCameraConfig.toLogString()}")
         if (cameraManager.state == org.asr.runtime.common.ModuleState.RUNNING) {
             cameraManager.stop()
             cameraManager.config = activeCameraConfig
@@ -680,13 +659,8 @@ class AsrService : LifecycleService() {
     }
 
     private fun handleTcpConnect(intent: Intent) {
-        // Extract extras immediately (before launching coroutine — intent extras may be recycled).
         val host = intent.getStringExtra("host") ?: "127.0.0.1"
         val port = intent.getIntExtra("port", 4242)
-        Log.i(TAG, "[ADB] TCP connect → $host:$port")
-        // Delegate to reconnectTransport() which runs on Dispatchers.IO.
-        // Do NOT call tcpTransport.disconnect() here directly — it calls Thread.join()
-        // which would block the main/binder thread for up to 1 second.
         reconnectTransport(host, port)
     }
 
@@ -700,16 +674,14 @@ class AsrService : LifecycleService() {
         if (flag == "ros2_domain_id") {
             val value = intent.getIntExtra("value", 0)
             ros2Runtime.setDomainId(value)
-            Log.i(TAG, "[DEV] ROS 2 Domain ID set to $value")
             return
         }
         val value = intent.getBooleanExtra("value", false)
         DevModeConfig.applyFlag(flag, value)
-        Log.i(TAG, "[DEV] Flag '$flag' = $value")
     }
 
     private fun logStatus() {
-        val s           = benchmarkProcessor.snapshot
+        val s = benchmarkProcessor.snapshot
         val moduleStatus = moduleRegistry.getModuleStatus()
         val capabilities = capabilityManager.discover()
 
@@ -722,33 +694,21 @@ class AsrService : LifecycleService() {
             appendLine("Latency      : ${String.format(Locale.US, "%.1f", s.latencyMs)} ms")
             appendLine("Battery      : ${String.format(Locale.US, "%.1f", batteryManager.level)}%  ${batteryManager.temperature}°C")
             appendLine("Uptime       : ${s.uptimeMs / 1000}s")
-            appendLine("Transport    : pkts=${transportManager.totalPacketsSent} drops=${transportManager.totalPacketDrops} crc=${transportManager.totalCrcFailures} q=${tcpTransport.queueDepth}")
             appendLine("Capabilities : $capabilities")
-            appendLine()
             appendLine("[MODULE STATES]")
             moduleStatus.entries.forEach { appendLine("  ${it.key.padEnd(12)}: ${it.value}") }
             append("======================================")
         })
     }
 
-    // ── Device ID ─────────────────────────────────────────────────────────────
-
-    /**
-     * Generates a stable device ID from a random UUID stored in SharedPreferences.
-     * Survives reboots. Does not use any hardware identifiers.
-     */
     private fun getOrCreateDeviceId(): Byte {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val uuidStr = prefs.getString(PREF_DEVICE_ID, null)
             ?: UUID.randomUUID().toString().also {
                 prefs.edit().putString(PREF_DEVICE_ID, it).apply()
-                Log.i(TAG, "[ASR] Generated new device ID UUID: $it")
             }
-        // Use a 0-255 positive integer for the suffix
         return (uuidStr.hashCode() and 0xFF).toByte()
     }
-
-    // ── Android lifecycle ─────────────────────────────────────────────────────
 
     override fun onBind(intent: Intent): IBinder {
         super.onBind(intent)
@@ -756,9 +716,6 @@ class AsrService : LifecycleService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.i(TAG, "[ASR] Task removed — app swiped away. Performing clean ROS 2 shutdown.")
-        // If we want the service to stay but the ROS 2 node to restart cleanly on relaunch,
-        // we can shut down the runtime here.
         ros2Runtime.shutdown()
         super.onTaskRemoved(rootIntent)
     }
@@ -766,17 +723,12 @@ class AsrService : LifecycleService() {
     override fun onDestroy() {
         serviceScope.cancel()
         super.onDestroy()
-        try { unregisterReceiver(controlReceiver) } catch (e: Exception) { /* already unregistered */ }
-        
+        try { unregisterReceiver(controlReceiver) } catch (e: Exception) { }
         wakeLock?.let { if (it.isHeld) it.release() }
         wifiLock?.let { if (it.isHeld) it.release() }
         multicastLock?.let { if (it.isHeld) it.release() }
-        
         moduleRegistry.releaseAll()
-        Log.i(TAG, "[ASR] Runtime destroyed")
     }
-
-    // ── Notification ──────────────────────────────────────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -788,7 +740,7 @@ class AsrService : LifecycleService() {
     private fun createNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ASR Runtime Active")
-            .setContentText("Transport: TCP | DeviceId: $deviceId")
+            .setContentText("DeviceId: $deviceId")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .build()

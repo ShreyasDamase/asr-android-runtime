@@ -30,7 +30,13 @@ object NativeRos2Bridge {
     }
 
     external fun initialize(domainId: Int, nodeName: String): Boolean
-    external fun startNode(domainId: Int, nodeName: String): Boolean
+    /**
+     * Initializes the native ROS 2 node.
+     * @param domainId The ROS_DOMAIN_ID.
+     * @param nodeName Unique name for this node (e.g. asr_android_9_1234).
+     * @param nodeNamespace Namespace for all topics (e.g. /asr_android_9).
+     */
+    external fun startNode(domainId: Int, nodeName: String, nodeNamespace: String): Boolean
     external fun subscribeString(topicName: String): Boolean
     external fun publishString(topicName: String, message: String): Boolean
     external fun publishImu(topicName: String, accel: DoubleArray, gyro: DoubleArray, orientation: DoubleArray, timestampNs: Long): Boolean
