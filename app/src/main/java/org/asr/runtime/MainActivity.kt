@@ -6,11 +6,10 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.hardware.Sensor
 import android.hardware.SensorManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.view.Gravity
 import android.widget.TableLayout
 import android.widget.TableRow
@@ -19,6 +18,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -26,6 +26,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import org.asr.runtime.core.AsrService
 import org.asr.runtime.core.RuntimeState
+import org.asr.runtime.ros2.Ros2State
 import org.asr.runtime.databinding.ActivityMainBinding
 import org.asr.runtime.ui.MainViewModel
 import java.text.SimpleDateFormat
@@ -38,15 +39,6 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
-    private val handler = Handler(Looper.getMainLooper())
-    private val refreshRunnable = object : Runnable {
-        override fun run() {
-            updatePermissionTable()
-            updateHardwareTable()
-            handler.postDelayed(this, 1000)
-        }
-    }
-
     private val PERMISSION_REQUEST_CODE = 1001
     private val requiredPermissions: Array<String> by lazy {
         val permissions = mutableListOf(
@@ -82,6 +74,7 @@ class MainActivity : ComponentActivity() {
 
         setupControls()
         binding.switchRos2Enabled.isChecked = getSharedPreferences("asr_prefs", MODE_PRIVATE).getBoolean("ros2_enabled", false)
+        updateDeviceIdentity()
         observeState()
         updatePermissionTable()
         updateHardwareTable()
@@ -93,14 +86,35 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        updateDeviceIdentity()
         updatePermissionTable()
         updateHardwareTable()
-        handler.post(refreshRunnable)
     }
 
-    override fun onPause() {
-        super.onPause()
-        handler.removeCallbacks(refreshRunnable)
+    private fun updateDeviceIdentity() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val uuidStr = prefs.getString("device_id", null)
+            ?: UUID.randomUUID().toString().also {
+                prefs.edit().putString("device_id", it).apply()
+            }
+        val deviceId = (uuidStr.hashCode() and 0xFF).toByte()
+        val alias = prefs.getString("node_alias", null) ?: "asr_android"
+        val ros2 = viewModel.ros2Status.value
+        val domainId = ros2.domainId
+
+        binding.txtDeviceId.text = "Device ID: asr_android_$deviceId"
+        binding.txtRos2NodeName.text = ros2.nodeName ?: "${alias}_${deviceId}"
+        binding.txtRos2Namespace.text = ros2.nodeNamespace ?: "/asr_android_${deviceId}"
+        binding.txtRos2DomainId.text = domainId.toString()
+
+        binding.txtRos2Status.text = "● ${ros2.state.name}"
+        binding.txtRos2Status.setTextColor(when (ros2.state) {
+            Ros2State.ACTIVE -> Color.parseColor("#2E7D32")
+            Ros2State.INITIALIZING -> Color.parseColor("#3182CE")
+            Ros2State.ERROR -> Color.parseColor("#E53E3E")
+            Ros2State.DISCONNECTED -> Color.parseColor("#F9A825")
+            Ros2State.DISABLED -> Color.parseColor("#9AA0A6")
+        })
     }
 
     private fun updatePermissionTable() {
@@ -127,8 +141,13 @@ class MainActivity : ComponentActivity() {
         }
 
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        val isLocationEnabled = locationManager?.let { LocationManagerCompat.isLocationEnabled(it) } ?: false
+        val hasGpsPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val moduleStatus = viewModel.moduleStatus.value
-        
+        val ros2Enabled = getSharedPreferences("asr_prefs", MODE_PRIVATE).getBoolean("ros2_enabled", false)
+        val isRuntimeRunning = viewModel.runtimeState.value in listOf(RuntimeState.CONNECTED, RuntimeState.STREAMING, RuntimeState.STARTING, RuntimeState.CONNECTING)
+
         val hardwareMap = listOf(
             Triple("Camera", packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY), "camera"),
             Triple("Microphone", packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE), "audio"),
@@ -141,49 +160,107 @@ class MainActivity : ComponentActivity() {
         )
 
         hardwareMap.forEach { (name, isPresent, moduleId) ->
-            val liveState = moduleStatus[moduleId] ?: "STOPPED"
-            addHardwareRow(table, name, if (isPresent) "YES" else "NO", isPresent, liveState)
+            var liveState = moduleStatus[moduleId] ?: "STOPPED"
+
+            // Distinguish BLOCKED states
+            if (name == "GPS" && isPresent) {
+                if (!isLocationEnabled || !hasGpsPermission) {
+                    if (isRuntimeRunning) {
+                        liveState = "BLOCKED"
+                    }
+                }
+            } else if (name == "Camera" && isPresent) {
+                val hasCamPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                if (!hasCamPerm && isRuntimeRunning) {
+                    liveState = "BLOCKED"
+                }
+            } else if (name == "Microphone" && isPresent) {
+                val hasMicPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                if (!hasMicPerm && isRuntimeRunning) {
+                    liveState = "BLOCKED"
+                }
+            }
+
+            val rosState = when {
+                !isPresent -> "N/A"
+                !ros2Enabled -> "NOT PUBLISHING"
+                liveState == "RUNNING" || liveState == "STREAMING" -> "PUBLISHING"
+                else -> "NOT PUBLISHING"
+            }
+
+            addHardwareRow(
+                table,
+                name,
+                if (isPresent) "AVAILABLE" else "NOT AVAILABLE",
+                isPresent,
+                liveState,
+                rosState
+            )
         }
     }
 
-    private fun addHardwareRow(table: TableLayout, label: String, present: String, isPresent: Boolean, liveState: String) {
+    private fun addHardwareRow(
+        table: TableLayout,
+        label: String,
+        hardwareAvailability: String,
+        isPresent: Boolean,
+        liveState: String,
+        rosPublishState: String
+    ) {
         val row = TableRow(this).apply {
             setPadding(0, 4, 0, 4)
         }
         
         val labelText = TextView(this).apply {
             text = label
-            setPadding(8, 8, 8, 8)
-            textSize = 14f
+            setPadding(6, 6, 6, 6)
+            textSize = 12f
+            setTextColor(Color.parseColor("#2D3748"))
         }
         
-        val presentText = TextView(this).apply {
-            text = present
-            setPadding(8, 8, 8, 8)
+        val hwText = TextView(this).apply {
+            text = hardwareAvailability
+            setPadding(6, 6, 6, 6)
             gravity = Gravity.CENTER
-            setTextColor(if (isPresent) Color.parseColor("#2E7D32") else Color.RED)
+            setTextColor(if (isPresent) Color.parseColor("#2E7D32") else Color.parseColor("#A0AEC0"))
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-            textSize = 14f
+            textSize = 11f
         }
 
         val stateText = TextView(this).apply {
             text = liveState
-            setPadding(8, 8, 8, 8)
+            setPadding(6, 6, 6, 6)
             gravity = Gravity.CENTER
             val color = when(liveState) {
                 "RUNNING", "STREAMING" -> Color.parseColor("#2E7D32")
-                "ERROR" -> Color.RED
-                "STARTING", "STOPPING", "CONNECTING" -> Color.BLUE
-                else -> Color.GRAY
+                "ERROR" -> Color.parseColor("#E53E3E")
+                "BLOCKED" -> Color.parseColor("#DD6B20")
+                "STARTING", "STOPPING", "CONNECTING" -> Color.parseColor("#3182CE")
+                else -> Color.parseColor("#718096")
             }
             setTextColor(color)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-            textSize = 14f
+            textSize = 11f
+        }
+
+        val rosText = TextView(this).apply {
+            text = rosPublishState
+            setPadding(6, 6, 6, 6)
+            gravity = Gravity.CENTER
+            val color = when(rosPublishState) {
+                "PUBLISHING" -> Color.parseColor("#1565C0")
+                "NOT PUBLISHING" -> Color.parseColor("#718096")
+                else -> Color.parseColor("#A0AEC0")
+            }
+            setTextColor(color)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            textSize = 11f
         }
 
         row.addView(labelText)
-        row.addView(presentText)
+        row.addView(hwText)
         row.addView(stateText)
+        row.addView(rosText)
         table.addView(row)
     }
 
@@ -223,6 +300,8 @@ class MainActivity : ComponentActivity() {
                 .edit()
                 .putBoolean("ros2_enabled", isChecked)
                 .apply()
+            updateDeviceIdentity()
+            updateHardwareTable()
             if (viewModel.isServiceBound.value) {
                 viewModel.setRos2Enabled(isChecked)
                 Toast.makeText(this, if (isChecked) "ROS 2 enabled" else "ROS 2 disabled", Toast.LENGTH_SHORT).show()
@@ -327,17 +406,32 @@ class MainActivity : ComponentActivity() {
                     viewModel.runtimeState.collect { state ->
                         binding.txtRuntimeStatus.text = "● ${state.name}"
                         binding.txtRuntimeStatus.setTextColor(when(state) {
-                            RuntimeState.STREAMING -> Color.GREEN
-                            RuntimeState.CONNECTED -> Color.CYAN
-                            RuntimeState.STARTING, RuntimeState.STOPPING -> Color.BLUE
-                            RuntimeState.ERROR -> Color.RED
-                            else -> Color.GRAY
+                            RuntimeState.STREAMING, RuntimeState.CONNECTED -> Color.parseColor("#2E7D32")
+                            RuntimeState.STARTING, RuntimeState.STOPPING, RuntimeState.CONNECTING -> Color.parseColor("#3182CE")
+                            RuntimeState.ERROR -> Color.parseColor("#E53E3E")
+                            else -> Color.parseColor("#9AA0A6")
                         })
+                        updateDeviceIdentity()
+                        updateHardwareTable()
+                    }
+                }
+
+                launch {
+                    viewModel.ros2Status.collect {
+                        updateDeviceIdentity()
+                        updateHardwareTable()
+                    }
+                }
+
+                launch {
+                    viewModel.moduleStatus.collect {
+                        updateHardwareTable()
                     }
                 }
 
                 launch {
                     viewModel.diagnostics.collect { diag ->
+                        binding.txtUptimeValue.text = formatUptime(diag.uptimeMs)
                         binding.rowPacketsSent.valDiagnostic.text = diag.packetsSent.toString()
                         binding.rowPacketsReceived.valDiagnostic.text = diag.packetsReceived.toString()
                         binding.rowQueueDepth.valDiagnostic.text = diag.queueDepth.toString()

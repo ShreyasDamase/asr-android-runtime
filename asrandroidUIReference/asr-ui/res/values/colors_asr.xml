@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Screen -->
+    <color name="asr_screen_bg">#F4F5F7</color>
+    <color name="asr_card_bg">#FFFFFF</color>
+    <color name="asr_divider">#E3E5E8</color>
+    <color name="asr_text_primary">#1B1F23</color>
+    <color name="asr_text_secondary">#6B7280</color>
+
+    <!-- Runtime / Hardware states -->
+    <color name="asr_status_running">#2E7D32</color>
+    <color name="asr_status_stopped">#9AA0A6</color>
+    <color name="asr_status_connecting">#F9A825</color>
+    <color name="asr_status_blocked">#F9A825</color>
+    <color name="asr_status_error">#C62828</color>
+    <color name="asr_status_not_available">#C7CBD1</color>
+
+    <!-- ROS states -->
+    <color name="asr_ros_publishing">#1565C0</color>
+    <color name="asr_ros_discovering">#F9A825</color>
+    <color name="asr_ros_not_publishing">#9AA0A6</color>
+
+    <!-- Control source badges -->
+    <color name="asr_control_local">#455A64</color>
+    <color name="asr_control_remote">#6A1B9A</color>
+    <color name="asr_control_auto">#00838F</color>
+    <color name="asr_control_bg">#F0F1F3</color>
+
+    <!-- Danger -->
+    <color name="asr_danger">#D32F2F</color>
+    <color name="asr_danger_bg">#FDECEC</color>
+</resources>

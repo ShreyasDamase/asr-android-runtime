@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginTop="12dp"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/asr_divider"
+    app:cardBackgroundColor="@color/asr_card_bg">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="ROS 2 TRANSPORT"
+            android:textSize="13sp"
+            android:letterSpacing="0.08"
+            android:textStyle="bold"
+            android:textColor="@color/asr_text_secondary"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/switchRos" />
+
+        <!--
+          ENABLE/DISABLE is a switch (binary), separate from the discovery
+          state chip below it. Never conflate "enabled" with "connected" —
+          a phone can be ENABLED and still DISCOVERING.
+        -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchRos"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toTopOf="@id/tvTitle"
+            app:layout_constraintBottom_toBottomOf="@id/tvTitle"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <View
+            android:id="@+id/divider1"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="12dp"
+            android:background="@color/asr_divider"
+            app:layout_constraintTop_toBottomOf="@id/tvTitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <com.asr.runtime.ui.StatusIndicatorView
+            android:id="@+id/statusRos"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:layout_constraintTop_toBottomOf="@id/divider1"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:ignore="MissingConstraints" />
+
+        <!-- Identity block: domain / node / namespace, all read-only display -->
+        <TextView
+            android:id="@+id/tvDomainLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Domain"
+            android:textSize="12sp"
+            android:textColor="@color/asr_text_secondary"
+            app:layout_constraintTop_toBottomOf="@id/statusRos"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <TextView
+            android:id="@+id/tvDomainValue"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:textColor="@color/asr_text_primary"
+            android:gravity="end"
+            app:layout_constraintTop_toTopOf="@id/tvDomainLabel"
+            app:layout_constraintBottom_toBottomOf="@id/tvDomainLabel"
+            app:layout_constraintStart_toEndOf="@id/tvDomainLabel"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:text="0" />
+
+        <TextView
+            android:id="@+id/tvNodeLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Node"
+            android:textSize="12sp"
+            android:textColor="@color/asr_text_secondary"
+            app:layout_constraintTop_toBottomOf="@id/tvDomainLabel"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <TextView
+            android:id="@+id/tvNodeValue"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:textColor="@color/asr_text_primary"
+            android:gravity="end"
+            app:layout_constraintTop_toTopOf="@id/tvNodeLabel"
+            app:layout_constraintBottom_toBottomOf="@id/tvNodeLabel"
+            app:layout_constraintStart_toEndOf="@id/tvNodeLabel"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:text="asr_android_7f21" />
+
+        <TextView
+            android:id="@+id/tvNamespaceLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Namespace"
+            android:textSize="12sp"
+            android:textColor="@color/asr_text_secondary"
+            app:layout_constraintTop_toBottomOf="@id/tvNodeLabel"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <TextView
+            android:id="@+id/tvNamespaceValue"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="13sp"
+            android:textColor="@color/asr_text_primary"
+            android:gravity="end"
+            app:layout_constraintTop_toTopOf="@id/tvNamespaceLabel"
+            app:layout_constraintBottom_toBottomOf="@id/tvNamespaceLabel"
+            app:layout_constraintStart_toEndOf="@id/tvNamespaceLabel"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:text="/asr_android_7f21" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.material.card.MaterialCardView>

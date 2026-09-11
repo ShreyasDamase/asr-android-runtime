@@ -4,7 +4,25 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+
+enum class Ros2State {
+    DISABLED,
+    INITIALIZING,
+    ACTIVE,
+    DISCONNECTED,
+    ERROR
+}
+
+data class Ros2Status(
+    val state: Ros2State,
+    val nodeName: String? = null,
+    val nodeNamespace: String? = null,
+    val domainId: Int = 0
+)
 
 class Ros2Runtime(private val context: Context) {
 
@@ -15,6 +33,10 @@ class Ros2Runtime(private val context: Context) {
     private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
     private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
     private var runtimeReady = false
+    private val _status = MutableStateFlow(
+        Ros2Status(if (enabled) Ros2State.DISCONNECTED else Ros2State.DISABLED, domainId = domainId)
+    )
+    val status: StateFlow<Ros2Status> = _status.asStateFlow()
 
     fun isEnabled(): Boolean = enabled
 
@@ -22,26 +44,26 @@ class Ros2Runtime(private val context: Context) {
         Log.i(TAG, "setEnabled current=$enabled new=$value")
         enabled = value
         prefs.edit().putBoolean(PREF_ROS2_ENABLED, value).apply()
-        if (value) {
-            startIfNeeded()
+        if (!value) {
+            shutdown(disabled = true)
         } else {
-            shutdown()
+            // The service owns device identity and supplies it to startIfNeeded().
+            // Starting here would silently create the default /asr_android node.
+            _status.value = Ros2Status(Ros2State.DISCONNECTED, domainId = domainId)
         }
     }
 
     fun setDomainId(value: Int) {
         domainId = value
         prefs.edit().putInt(PREF_ROS2_DOMAIN_ID, value).apply()
-        if (enabled && runtimeReady) {
-            shutdown()
-            startIfNeeded()
-        }
+        _status.value = _status.value.copy(domainId = domainId)
     }
 
     fun startIfNeeded(nodeName: String = "asr_android", nodeNamespace: String = "/") {
         Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId nodeName=$nodeName ns=$nodeNamespace")
         if (!enabled) {
             Log.i(TAG, "ROS 2 disabled; not initializing the native ROS runtime")
+            _status.value = Ros2Status(Ros2State.DISABLED, domainId = domainId)
             return
         }
         if (runtimeReady) {
@@ -50,15 +72,17 @@ class Ros2Runtime(private val context: Context) {
         }
 
         try {
+            _status.value = Ros2Status(Ros2State.INITIALIZING, nodeName, nodeNamespace, domainId)
             if (!NativeRos2Bridge.isAvailable()) {
-                Log.w(TAG, "Native ROS 2 bridge library is not packaged for this build; leaving the runtime disabled")
+                Log.w(TAG, "Native ROS 2 bridge library is not packaged for this build")
+                _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId)
                 return
             }
 
             val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
             if (!started) {
                 Log.e(TAG, "Failed to start native ROS 2 node $nodeNamespace/$nodeName on domain $domainId")
-                shutdown()
+                _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId)
                 return
             }
 
@@ -72,17 +96,19 @@ class Ros2Runtime(private val context: Context) {
             NativeRos2Bridge.subscribeString("test/in")
 
             runtimeReady = true
+            _status.value = Ros2Status(Ros2State.ACTIVE, nodeName, nodeNamespace, domainId)
             publishStatus("ASR Android online")
             publishCapabilities()
             scheduleHeartbeat()
             Log.i(TAG, "Native ROS 2 node $nodeName in $nodeNamespace started on domain $domainId")
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to initialize native ROS 2 runtime", t)
-            shutdown()
+            runtimeReady = false
+            _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId)
         }
     }
 
-    fun shutdown() {
+    fun shutdown(disabled: Boolean = !enabled) {
         heartbeatRunnable?.let { mainHandler.removeCallbacks(it) }
         heartbeatRunnable = null
         try {
@@ -94,6 +120,10 @@ class Ros2Runtime(private val context: Context) {
             Log.w(TAG, "ROS 2 shutdown warning", t)
         } finally {
             runtimeReady = false
+            _status.value = Ros2Status(
+                if (disabled) Ros2State.DISABLED else Ros2State.DISCONNECTED,
+                domainId = domainId
+            )
         }
     }
 

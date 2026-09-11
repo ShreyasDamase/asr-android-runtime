@@ -35,6 +35,7 @@ import org.asr.runtime.protocol.AsrPacket
 import org.asr.runtime.protocol.PacketSerializer
 import org.asr.runtime.protocol.TopicId
 import org.asr.runtime.ros2.Ros2Runtime
+import org.asr.runtime.ros2.Ros2Status
 import org.asr.runtime.sensor.EnvironmentManager
 import org.asr.runtime.sensor.ImuManager
 import org.asr.runtime.sensor.MotionManager
@@ -117,6 +118,7 @@ class AsrService : LifecycleService() {
     private lateinit var transportManager: TransportManager
     private lateinit var tcpTransport:     TcpTransport
     private lateinit var ros2Runtime:      Ros2Runtime
+    val ros2Status: StateFlow<Ros2Status> get() = ros2Runtime.status
 
     // ── Core ─────────────────────────────────────────────────────────────────
     private lateinit var benchmarkProcessor:  BenchmarkProcessor
@@ -593,8 +595,7 @@ class AsrService : LifecycleService() {
     private fun startRos2() {
         val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(PREF_NODE_ALIAS, null)
         val baseName = alias ?: "asr_android"
-        val sessionSuffix = (System.currentTimeMillis() % 10000).toInt()
-        val nodeName = "${baseName}_${deviceId}_${sessionSuffix}"
+        val nodeName = "${baseName}_${deviceId}"
         val nodeNamespace = "/asr_android_${deviceId}"
         ros2Runtime.startIfNeeded(nodeName, nodeNamespace)
     }
@@ -674,6 +675,10 @@ class AsrService : LifecycleService() {
         if (flag == "ros2_domain_id") {
             val value = intent.getIntExtra("value", 0)
             ros2Runtime.setDomainId(value)
+            if (ros2Runtime.isEnabled()) {
+                ros2Runtime.shutdown()
+                startRos2()
+            }
             return
         }
         val value = intent.getBooleanExtra("value", false)

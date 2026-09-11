@@ -9,6 +9,8 @@ import org.asr.runtime.core.AsrService
 import org.asr.runtime.core.ClientInfo
 import org.asr.runtime.core.DiagnosticsSnapshot
 import org.asr.runtime.core.RuntimeState
+import org.asr.runtime.ros2.Ros2State
+import org.asr.runtime.ros2.Ros2Status
 
 class MainViewModel : ViewModel() {
 
@@ -23,6 +25,9 @@ class MainViewModel : ViewModel() {
 
     private val _moduleStatus = MutableStateFlow<Map<String, String>>(emptyMap())
     val moduleStatus: StateFlow<Map<String, String>> = _moduleStatus.asStateFlow()
+
+    private val _ros2Status = MutableStateFlow(Ros2Status(Ros2State.DISABLED))
+    val ros2Status: StateFlow<Ros2Status> = _ros2Status.asStateFlow()
 
     /** True once onServiceConnected fires; false when service is unbound/destroyed. */
     private val _isServiceBound = MutableStateFlow(false)
@@ -53,6 +58,9 @@ class MainViewModel : ViewModel() {
             serviceJobs += viewModelScope.launch {
                 service.diagnostics.collect { _diagnostics.value = it }
             }
+            serviceJobs += viewModelScope.launch {
+                service.ros2Status.collect { _ros2Status.value = it }
+            }
             // Periodically pull module status from the service
             serviceJobs += viewModelScope.launch {
                 while (true) {
@@ -66,6 +74,7 @@ class MainViewModel : ViewModel() {
             _clientInfo.value = null
             _diagnostics.value = DiagnosticsSnapshot()
             _moduleStatus.value = emptyMap()
+            _ros2Status.value = Ros2Status(Ros2State.DISABLED)
         }
     }
 

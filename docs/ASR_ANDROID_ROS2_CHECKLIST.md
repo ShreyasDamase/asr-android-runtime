@@ -56,18 +56,22 @@ This checklist tracks the implementation status of ROS 2 features in the ASR And
     - [x] Added `onTaskRemoved` cleanup for clean ROS 2 node shutdown on app swipe.
     - [x] Forced `ROS_NOSHM=1` and `ROS_LOCALHOST_ONLY=0` for Wi-Fi reliability.
     - [x] Implemented dynamic session suffix to prevent discovery collisions.
-- [/] 9. Persistent automatic ROS device identity
+- [x] 9. Persistent automatic ROS device identity
     - Reuse existing persistent ASR device ID
-- [ ] 10. ROS namespace isolation
-    - `/asr_android/<persistent-device-id>/...`
-- [ ] 11. Friendly device/camera naming
-    - Alias-based naming
+- [x] 10. ROS namespace isolation
+    - Topics now isolated under `/asr_android_<persistent-device-id>/`
+- [x] 11. Friendly device/camera naming
+    - Alias-based naming support added via `ACTION_SET_ALIAS` intent.
 
 ## PHASE 6 — RELIABILITY AND PERFORMANCE
 
-- [ ] 12. Review ROS QoS
-- [ ] 13. Repeated Wi-Fi failure/recovery testing
-- [ ] 14. ROS 2 + existing TCP simultaneously
+- [x] 12. Review ROS QoS
+    - Implemented `Best Effort` for high-rate sensors (IMU, GPS, Camera)
+    - Implemented `Reliable` + `Transient Local` for Status and Capabilities.
+- [x] 13. Repeated Wi-Fi failure/recovery testing
+    - Verified stable discovery on Domain 0 with MulticastLock and clean session naming.
+- [x] 14. ROS 2 + existing TCP simultaneously
+    - Verified both transports operational at the same time.
 
 ## PHASE 7 — ASR STUDIO ROS SUPPORT
 
