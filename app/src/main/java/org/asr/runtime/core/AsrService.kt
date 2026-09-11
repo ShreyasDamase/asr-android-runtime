@@ -117,7 +117,7 @@ class AsrService : LifecycleService() {
     // ── Transport ────────────────────────────────────────────────────────────
     private lateinit var transportManager: TransportManager
     private lateinit var tcpTransport:     TcpTransport
-    private lateinit var ros2Runtime:      Ros2Runtime
+    lateinit var ros2Runtime:      Ros2Runtime
     val ros2Status: StateFlow<Ros2Status> get() = ros2Runtime.status
 
     // ── Core ─────────────────────────────────────────────────────────────────
@@ -187,6 +187,9 @@ class AsrService : LifecycleService() {
     }
 
     fun getModuleStatus(): Map<String, String> = moduleRegistry.getModuleStatus()
+
+    fun startModule(id: String) = moduleRegistry.startModule(id)
+    fun stopModule(id: String) = moduleRegistry.stopModule(id)
 
     // ── Broadcast receivers ──────────────────────────────────────────────────
 
@@ -565,10 +568,11 @@ class AsrService : LifecycleService() {
     }
 
     fun setRos2Enabled(enabled: Boolean) {
-        ros2Runtime.setEnabled(enabled)
         if (enabled) {
-            ros2Runtime.publishStatus("ROS 2 enabled")
+            ros2Runtime.setEnabled(true)
             startRos2()
+        } else {
+            ros2Runtime.setEnabled(false)
         }
     }
 

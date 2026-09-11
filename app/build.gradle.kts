@@ -37,6 +37,7 @@ android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
+        dataBinding = true
     }
     buildTypes {
         release {
@@ -55,6 +56,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.google.material)
 
     // CameraX
     implementation(libs.androidx.camera.core)

@@ -1,570 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F7FA">
+    android:background="@color/asr_screen_bg"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingBottom="24dp">
 
         <TextView
+            android:id="@+id/tvTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="20dp"
             android:text="ASR v1.0 Runtime"
-            android:textColor="#1A202C"
-            android:textSize="28sp"
+            android:textSize="24sp"
             android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
+            android:textColor="@color/asr_text_primary" />
+
+        <include layout="@layout/card_runtime" android:id="@+id/cardRuntime" />
+
+        <include layout="@layout/card_transport_tcp" android:id="@+id/cardTcp" />
+        <include layout="@layout/card_transport_ros2" android:id="@+id/cardRos2" />
 
         <TextView
-            android:id="@+id/txtDeviceId"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Device: —"
-            android:textSize="12sp"
-            android:textColor="#718096"
-            android:fontFamily="monospace"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="20dp"
+            android:text="SENSORS"
+            android:textSize="13sp"
+            android:letterSpacing="0.08"
+            android:textStyle="bold"
+            android:textColor="@color/asr_text_secondary" />
 
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <!-- ASR RUNTIME CARD                                          -->
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <LinearLayout
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvSensors"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="ASR RUNTIME"
-                    android:textStyle="bold"
-                    android:textSize="12sp"
-                    android:textColor="#718096"
-                    android:letterSpacing="0.08"/>
-                <TextView
-                    android:id="@+id/txtRuntimeStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="● STOPPED"
-                    android:textColor="#9AA0A6"
-                    android:textStyle="bold"
-                    android:textSize="13sp"/>
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="12dp"/>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
-                <TextView
-                    android:id="@+id/txtUptimeLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Uptime"
-                    android:textSize="12sp"
-                    android:textColor="#718096"
-                    android:layout_marginEnd="8dp"/>
-                <TextView
-                    android:id="@+id/txtUptimeValue"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="00:00:00"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:textColor="#1A202C"
-                    android:fontFamily="monospace"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <Button
-                    android:id="@+id/btnStartRuntime"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1.2"
-                    android:text="START"
-                    android:textSize="12sp"
-                    android:singleLine="true"
-                    android:layout_marginEnd="4dp" />
-                <Button
-                    android:id="@+id/btnStopRuntime"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="STOP"
-                    android:textSize="12sp"
-                    android:singleLine="true"
-                    android:layout_marginStart="2dp"
-                    android:layout_marginEnd="2dp" />
-                <Button
-                    android:id="@+id/btnRestartRuntime"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1.2"
-                    android:text="RESTART"
-                    android:textSize="11sp"
-                    android:singleLine="true"
-                    android:layout_marginStart="2dp" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <!-- TCP TRANSPORT CARD                                        -->
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="TCP TRANSPORT"
-                    android:textStyle="bold"
-                    android:textSize="12sp"
-                    android:textColor="#718096"
-                    android:letterSpacing="0.08"/>
-                <TextView
-                    android:id="@+id/txtTransportMode"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Wi-Fi"
-                    android:textSize="12sp"
-                    android:textColor="#3182CE"
-                    android:textStyle="bold"
-                    android:background="#EBF8FF"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingTop="2dp"
-                    android:paddingBottom="2dp"/>
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="12dp"/>
-
-            <!-- Host row -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-                <TextView
-                    android:layout_width="56dp"
-                    android:layout_height="wrap_content"
-                    android:text="Host"
-                    android:textSize="13sp"
-                    android:textColor="#2D3748"
-                    android:textStyle="bold"/>
-                <EditText
-                    android:id="@+id/editTransportHost"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="192.168.x.x  (or 127.0.0.1 for ADB)"
-                    android:inputType="textUri"
-                    android:singleLine="true"
-                    android:textSize="14sp"
-                    android:textColor="#1A202C"
-                    android:textColorHint="#718096"
-                    android:padding="10dp"
-                    android:background="#EDF2F7"/>
-            </LinearLayout>
-
-            <!-- Port row -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-                <TextView
-                    android:layout_width="56dp"
-                    android:layout_height="wrap_content"
-                    android:text="Port"
-                    android:textSize="13sp"
-                    android:textColor="#2D3748"
-                    android:textStyle="bold"/>
-                <EditText
-                    android:id="@+id/editTransportPort"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="4242"
-                    android:inputType="number"
-                    android:singleLine="true"
-                    android:textSize="14sp"
-                    android:textColor="#1A202C"
-                    android:textColorHint="#718096"
-                    android:padding="10dp"
-                    android:background="#EDF2F7"/>
-            </LinearLayout>
-
-            <!-- ADB hint -->
-            <TextView
-                android:id="@+id/txtAdbHint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="ADB mode: run  adb reverse tcp:4242 tcp:4242  then use 127.0.0.1"
-                android:textSize="11sp"
-                android:textColor="#4A5568"
-                android:fontFamily="monospace"
-                android:background="#EDF2F7"
-                android:padding="8dp"
-                android:layout_marginBottom="12dp"
-                android:visibility="gone"/>
-
-            <!-- TCP buttons -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <Button
-                    android:id="@+id/btnConnectTransport"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="CONNECT"
-                    android:textSize="12sp"
-                    android:singleLine="true"
-                    android:layout_marginEnd="2dp" />
-                <Button
-                    android:id="@+id/btnDisconnectTransport"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="DISCONNECT"
-                    android:textSize="11sp"
-                    android:singleLine="true"
-                    android:layout_marginStart="2dp"
-                    android:layout_marginEnd="2dp" />
-                <Button
-                    android:id="@+id/btnReconnectTransport"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="RECONNECT"
-                    android:textSize="11sp"
-                    android:singleLine="true"
-                    android:layout_marginStart="2dp" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <!-- ROS 2 TRANSPORT CARD  (sibling of TCP — never merged)     -->
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="ROS 2 TRANSPORT"
-                    android:textStyle="bold"
-                    android:textSize="12sp"
-                    android:textColor="#718096"
-                    android:letterSpacing="0.08"/>
-                <TextView
-                    android:id="@+id/txtRos2Status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="● DISABLED"
-                    android:textColor="#9AA0A6"
-                    android:textStyle="bold"
-                    android:textSize="13sp"
-                    android:layout_marginEnd="12dp"/>
-                <Switch
-                    android:id="@+id/switchRos2Enabled"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"/>
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="12dp"/>
-
-            <!-- ROS 2 identity info — read-only display -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="4dp">
-                <TextView
-                    android:layout_width="80dp"
-                    android:layout_height="wrap_content"
-                    android:text="Node"
-                    android:textSize="12sp"
-                    android:textColor="#718096"/>
-                <TextView
-                    android:id="@+id/txtRos2NodeName"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="—"
-                    android:textSize="12sp"
-                    android:textColor="#1A202C"
-                    android:fontFamily="monospace"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="4dp">
-                <TextView
-                    android:layout_width="80dp"
-                    android:layout_height="wrap_content"
-                    android:text="Namespace"
-                    android:textSize="12sp"
-                    android:textColor="#718096"/>
-                <TextView
-                    android:id="@+id/txtRos2Namespace"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="—"
-                    android:textSize="12sp"
-                    android:textColor="#1A202C"
-                    android:fontFamily="monospace"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <TextView
-                    android:layout_width="80dp"
-                    android:layout_height="wrap_content"
-                    android:text="Domain ID"
-                    android:textSize="12sp"
-                    android:textColor="#718096"/>
-                <TextView
-                    android:id="@+id/txtRos2DomainId"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="0"
-                    android:textSize="12sp"
-                    android:textColor="#1A202C"
-                    android:fontFamily="monospace"/>
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <!-- CONNECTED CLIENT CARD                                     -->
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="CONNECTED CLIENT"
-                android:textStyle="bold"
-                android:textSize="12sp"
-                android:textColor="#718096"
-                android:letterSpacing="0.08"
-                android:layout_marginBottom="8dp"/>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="8dp"/>
-
-            <LinearLayout
-                android:id="@+id/layoutClientInfo"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientStatus"/>
-                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientApp"/>
-                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientHost"/>
-                <include layout="@layout/item_diagnostic_row" android:id="@+id/rowClientSince"/>
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <!-- PERMISSIONS CARD                                          -->
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="PERMISSIONS"
-                android:textStyle="bold"
-                android:textSize="12sp"
-                android:textColor="#718096"
-                android:letterSpacing="0.08"
-                android:layout_marginBottom="8dp"/>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="4dp"/>
-
-            <TableLayout
-                android:id="@+id/permissionTable"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:stretchColumns="0"
-                android:background="#F7FAFC">
-                <TableRow android:background="#EDF2F7">
-                    <TextView android:text="Permission" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568"/>
-                    <TextView android:text="Status" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
-                </TableRow>
-            </TableLayout>
-        </LinearLayout>
-
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <!-- HARDWARE / SENSORS CARD                                   -->
-        <!-- Hardware availability | Runtime state | ROS publish state -->
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="HARDWARE / SENSORS"
-                android:textStyle="bold"
-                android:textSize="12sp"
-                android:textColor="#718096"
-                android:letterSpacing="0.08"
-                android:layout_marginBottom="8dp"/>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="4dp"/>
-
-            <TableLayout
-                android:id="@+id/hardwareTable"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:stretchColumns="0"
-                android:background="#F7FAFC">
-                <TableRow android:background="#EDF2F7">
-                    <TextView android:text="Sensor" android:padding="6dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568"/>
-                    <TextView android:text="Hardware" android:padding="6dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
-                    <TextView android:text="Runtime" android:padding="6dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
-                    <TextView android:text="ROS 2" android:padding="6dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
-                </TableRow>
-            </TableLayout>
-        </LinearLayout>
-
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <!-- DIAGNOSTICS CARD                                          -->
-        <!-- ══════════════════════════════════════════════════════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#FFFFFF"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="DIAGNOSTICS"
-                android:textStyle="bold"
-                android:textSize="12sp"
-                android:textColor="#718096"
-                android:letterSpacing="0.08"
-                android:layout_marginBottom="8dp"/>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E2E8F0"
-                android:layout_marginBottom="4dp"/>
-
-            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowPacketsSent"/>
-            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowPacketsReceived"/>
-            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowQueueDepth"/>
-            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowDropped"/>
-            <include layout="@layout/item_diagnostic_row" android:id="@+id/rowReconnects"/>
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btnEmergencyReset"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="⚠ RESET RUNTIME"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#E53E3E"
             android:layout_marginTop="4dp"
-            android:layout_marginBottom="32dp"/>
+            android:nestedScrollingEnabled="false"
+            android:clipToPadding="false"
+            tools:listitem="@layout/item_sensor"
+            tools:itemCount="8" />
+
+        <include layout="@layout/card_diagnostics" android:id="@+id/cardDiagnostics" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnResetRuntime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            android:text="⚠ RESET RUNTIME"
+            app:backgroundTint="@color/asr_danger_bg"
+            android:textColor="@color/asr_danger" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

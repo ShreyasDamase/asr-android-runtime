@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginTop="12dp"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="@color/asr_divider"
+        app:cardBackgroundColor="@color/asr_card_bg">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="TCP TRANSPORT"
+                android:textSize="13sp"
+                android:letterSpacing="0.08"
+                android:textStyle="bold"
+                android:textColor="@color/asr_text_secondary"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/statusTcp" />
+
+            <org.asr.runtime.ui.StatusIndicatorView
+                android:id="@+id/statusTcp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:layout_constraintTop_toTopOf="@id/tvTitle"
+                app:layout_constraintBottom_toBottomOf="@id/tvTitle"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <View
+                android:id="@+id/divider1"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:background="@color/asr_divider"
+                app:layout_constraintTop_toBottomOf="@id/tvTitle"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilHost"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="Host"
+                app:layout_constraintTop_toBottomOf="@id/divider1"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/tilPort"
+                app:layout_constraintWidth_percent="0.66"
+                android:layout_marginEnd="10dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etHost"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textUri"
+                    tools:text="192.168.1.42" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilPort"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:hint="Port"
+                app:layout_constraintTop_toTopOf="@id/tilHost"
+                app:layout_constraintStart_toEndOf="@id/tilHost"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etPort"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    tools:text="4242" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchAdb"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="ADB loopback mode"
+                android:textSize="14sp"
+                app:layout_constraintTop_toBottomOf="@id/tilHost"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <TextView
+                android:id="@+id/tvAdbHint"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@color/asr_control_bg"
+                android:padding="10dp"
+                android:fontFamily="monospace"
+                android:textSize="11sp"
+                android:textColor="@color/asr_text_secondary"
+                android:text="adb reverse tcp:4242 tcp:4242\nthen use 127.0.0.1"
+                android:visibility="gone"
+                tools:visibility="visible"
+                app:layout_constraintTop_toBottomOf="@id/switchAdb"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnConnect"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="CONNECT"
+                app:layout_constraintTop_toBottomOf="@id/tvAdbHint"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/btnDisconnect"
+                android:layout_marginEnd="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDisconnect"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="DISCONNECT"
+                app:layout_constraintTop_toTopOf="@id/btnConnect"
+                app:layout_constraintStart_toEndOf="@id/btnConnect"
+                app:layout_constraintEnd_toStartOf="@id/btnReconnect"
+                android:layout_marginEnd="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReconnect"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="RECONNECT"
+                app:layout_constraintTop_toTopOf="@id/btnConnect"
+                app:layout_constraintStart_toEndOf="@id/btnDisconnect"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <TextView
+                android:id="@+id/tvClientLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Client"
+                android:textSize="12sp"
+                android:textColor="@color/asr_text_secondary"
+                app:layout_constraintTop_toBottomOf="@id/btnConnect"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <TextView
+                android:id="@+id/tvClientValue"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="@color/asr_text_primary"
+                android:gravity="end"
+                app:layout_constraintTop_toTopOf="@id/tvClientLabel"
+                app:layout_constraintBottom_toBottomOf="@id/tvClientLabel"
+                app:layout_constraintStart_toEndOf="@id/tvClientLabel"
+                app:layout_constraintEnd_toEndOf="parent"
+                tools:text="Not connected" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </com.google.android.material.card.MaterialCardView>
+</layout>

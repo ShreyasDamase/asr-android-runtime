@@ -404,7 +404,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
     jdouble *orientation = env->GetDoubleArrayElements(j_orientation, nullptr);
     rcl_publisher_t *publisher = nullptr;
     bool ok = topic && accel && gyro && orientation &&
-              ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Imu)(), &publisher, 1);
+              ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Imu)(), &publisher, 0);
     if (ok) {
         sensor_msgs__msg__Imu msg;
         sensor_msgs__msg__Imu__init(&msg);
@@ -442,7 +442,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishNavSatFix(JNIEnv *env, jobject
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, NavSatFix)(), &publisher, 1);
+    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, NavSatFix)(), &publisher, 0);
     if (ok) {
         sensor_msgs__msg__NavSatFix msg;
         sensor_msgs__msg__NavSatFix__init(&msg);
@@ -504,16 +504,16 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishScalar(JNIEnv *env, jobject, j
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     bool ok = false;
     if (topic && kind == 0) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Illuminance)(), &publisher, 1);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Illuminance)(), &publisher, 0);
         if (ok) { sensor_msgs__msg__Illuminance msg; sensor_msgs__msg__Illuminance__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.illuminance = value; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Illuminance__fini(&msg); }
     } else if (topic && kind == 1) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, FluidPressure)(), &publisher, 1);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, FluidPressure)(), &publisher, 0);
         if (ok) { sensor_msgs__msg__FluidPressure msg; sensor_msgs__msg__FluidPressure__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.fluid_pressure = value * 100.0; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__FluidPressure__fini(&msg); }
     } else if (topic && kind == 2) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Temperature)(), &publisher, 1);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Temperature)(), &publisher, 0);
         if (ok) { sensor_msgs__msg__Temperature msg; sensor_msgs__msg__Temperature__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.temperature = value; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Temperature__fini(&msg); }
     } else if (topic && kind == 3) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, RelativeHumidity)(), &publisher, 1);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, RelativeHumidity)(), &publisher, 0);
         if (ok) { sensor_msgs__msg__RelativeHumidity msg; sensor_msgs__msg__RelativeHumidity__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.relative_humidity = value / 100.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__RelativeHumidity__fini(&msg); }
     }
     if (topic) env->ReleaseStringUTFChars(j_topic, topic);
@@ -529,7 +529,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCompressedImage(JNIEnv *env, j
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     const char *format = env->GetStringUTFChars(j_format, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && format && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CompressedImage)(), &publisher, 1);
+    bool ok = topic && format && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CompressedImage)(), &publisher, 0);
     if (ok) {
         jsize size = env->GetArrayLength(j_data);
         sensor_msgs__msg__CompressedImage msg;
@@ -553,7 +553,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CameraInfo)(), &publisher, 1);
+    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CameraInfo)(), &publisher, 0);
     if (ok) {
         sensor_msgs__msg__CameraInfo msg;
         sensor_msgs__msg__CameraInfo__init(&msg);
