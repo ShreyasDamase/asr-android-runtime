@@ -33,6 +33,8 @@ class Ros2Runtime(private val context: Context) {
     private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
     private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
     private var runtimeReady = false
+    private var lastNodeName: String? = null
+    private var lastNodeNamespace: String? = null
     private val _status = MutableStateFlow(
         Ros2Status(if (enabled) Ros2State.DISCONNECTED else Ros2State.DISABLED, domainId = domainId)
     )
@@ -59,13 +61,26 @@ class Ros2Runtime(private val context: Context) {
         _status.value = _status.value.copy(domainId = domainId)
     }
 
-    fun startIfNeeded(nodeName: String = "asr_android", nodeNamespace: String = "/") {
+    fun startIfNeeded(nodeName: String, nodeNamespace: String) {
         Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId nodeName=$nodeName ns=$nodeNamespace")
+
+        val nameChanged = lastNodeName != null && lastNodeName != nodeName
+        val nsChanged = lastNodeNamespace != null && lastNodeNamespace != nodeNamespace
+
+        lastNodeName = nodeName
+        lastNodeNamespace = nodeNamespace
+
         if (!enabled) {
             Log.i(TAG, "ROS 2 disabled; not initializing the native ROS runtime")
             _status.value = Ros2Status(Ros2State.DISABLED, domainId = domainId)
             return
         }
+
+        if (runtimeReady && (nameChanged || nsChanged)) {
+            Log.i(TAG, "ROS 2 name or namespace changed; restarting node")
+            shutdown()
+        }
+
         if (runtimeReady) {
             Log.i(TAG, "ROS 2 runtime already initialized")
             return
@@ -92,7 +107,7 @@ class Ros2Runtime(private val context: Context) {
                 }
             })
 
-            // Topics are now relative to the node namespace if they don't start with /
+            // Relative names are expanded against the node namespace by rcl.
             NativeRos2Bridge.subscribeString("test/in")
 
             runtimeReady = true
