@@ -7,7 +7,10 @@ import android.hardware.SensorEvent
 /**
  * Manages motion detection and step tracking.
  */
-class MotionManager(context: Context) : BaseSensorManager(context, "motion", listOf(
+class MotionManager(
+    context: Context,
+    private val onRosSteps: ((Int) -> Unit)? = null
+) : BaseSensorManager(context, "motion", listOf(
     Sensor.TYPE_STEP_COUNTER,
     Sensor.TYPE_STEP_DETECTOR,
     Sensor.TYPE_SIGNIFICANT_MOTION,
@@ -17,5 +20,9 @@ class MotionManager(context: Context) : BaseSensorManager(context, "motion", lis
 
     override fun onSensorChanged(event: SensorEvent) {
         totalEvents.incrementAndGet()
+        if (event.sensor.type == Sensor.TYPE_STEP_COUNTER) {
+            val steps = event.values[0].toInt()
+            onRosSteps?.invoke(steps)
+        }
     }
 }

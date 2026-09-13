@@ -8,10 +8,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+import java.io.File
 
 enum class Ros2State {
     DISABLED,
     INITIALIZING,
+    DDS_INITIALIZING,
+    NODE_READY,
+    WAITING_FOR_DISCOVERY,
     ACTIVE,
     DISCONNECTED,
     ERROR
@@ -26,10 +30,18 @@ data class Ros2Status(
 
 class Ros2Runtime(private val context: Context) {
 
+    interface Listener {
+        fun onFlashlightCommand(on: Boolean)
+        fun onSpeakerCommand(text: String)
+    }
+
+    var listener: Listener? = null
+
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var heartbeatRunnable: Runnable? = null
+    private var discoveryPollingRunnable: Runnable? = null
     private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
     private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
     private var runtimeReady = false
@@ -94,6 +106,13 @@ class Ros2Runtime(private val context: Context) {
                 return
             }
 
+            // ── Fast DDS Discovery Optimization ──
+            _status.value = _status.value.copy(state = Ros2State.DDS_INITIALIZING)
+            val configPath = writeFastDdsConfig()
+            if (configPath != null) {
+                NativeRos2Bridge.setFastDdsConfigPath(configPath)
+            }
+
             val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
             if (!started) {
                 Log.e(TAG, "Failed to start native ROS 2 node $nodeNamespace/$nodeName on domain $domainId")
@@ -101,20 +120,35 @@ class Ros2Runtime(private val context: Context) {
                 return
             }
 
+            _status.value = _status.value.copy(state = Ros2State.NODE_READY)
+
             NativeRos2Bridge.setMessageListener(object : NativeRos2Bridge.MessageListener {
                 override fun onStringMessage(topic: String, message: String) {
                     Log.i(TAG, "ROS 2 message received on $topic: $message")
+                    when {
+                        topic.contains("flashlight") -> {
+                            listener?.onFlashlightCommand(message.trim().lowercase() == "true")
+                        }
+                        topic.contains("speaker") -> {
+                            listener?.onSpeakerCommand(message)
+                        }
+                    }
                 }
             })
 
             // Relative names are expanded against the node namespace by rcl.
             NativeRos2Bridge.subscribeString("test/in")
+            NativeRos2Bridge.subscribeString("flashlight")
+            NativeRos2Bridge.subscribeString("speaker/speech")
 
             runtimeReady = true
-            _status.value = Ros2Status(Ros2State.ACTIVE, nodeName, nodeNamespace, domainId)
+            _status.value = Ros2Status(Ros2State.WAITING_FOR_DISCOVERY, nodeName, nodeNamespace, domainId)
+            
             publishStatus("ASR Android online")
             publishCapabilities()
             scheduleHeartbeat()
+            startDiscoveryPolling()
+            
             Log.i(TAG, "Native ROS 2 node $nodeName in $nodeNamespace started on domain $domainId")
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to initialize native ROS 2 runtime", t)
@@ -123,9 +157,69 @@ class Ros2Runtime(private val context: Context) {
         }
     }
 
+    private fun writeFastDdsConfig(): String? {
+        try {
+            val file = File(context.cacheDir, "fastdds_asr.xml")
+            val xml = """
+                <?xml version="1.0" encoding="UTF-8" ?>
+                <profiles xmlns="http://www.eprosima.com/XMLSchemas/fastrtps_profiles">
+                    <participant profile_name="asr_participant_profile" is_default_profile="true">
+                        <rtps>
+                            <builtin>
+                                <discovery_config>
+                                    <initial_announcements>
+                                        <count>5</count>
+                                        <period>
+                                            <sec>0</sec>
+                                            <nanosec>200000000</nanosec>
+                                        </period>
+                                    </initial_announcements>
+                                    <leaseDuration>
+                                        <sec>10</sec>
+                                    </leaseDuration>
+                                    <leaseAnnouncementPeriod>
+                                        <sec>2</sec>
+                                    </leaseAnnouncementPeriod>
+                                </discovery_config>
+                            </builtin>
+                        </rtps>
+                    </participant>
+                </profiles>
+            """.trimIndent()
+            file.writeText(xml)
+            return file.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write Fast DDS config", e)
+            return null
+        }
+    }
+
+    private fun startDiscoveryPolling() {
+        discoveryPollingRunnable?.let { mainHandler.removeCallbacks(it) }
+        discoveryPollingRunnable = object : Runnable {
+            override fun run() {
+                if (!runtimeReady) return
+                val count = NativeRos2Bridge.getDiscoveredParticipantCount()
+                if (count > 1) {
+                    if (_status.value.state == Ros2State.WAITING_FOR_DISCOVERY) {
+                        Log.i(TAG, "DDS Discovery successful: $count participants found")
+                        _status.value = _status.value.copy(state = Ros2State.ACTIVE)
+                    }
+                    // Stop polling once active
+                    discoveryPollingRunnable = null
+                    return
+                }
+                mainHandler.postDelayed(this, 1000)
+            }
+        }
+        mainHandler.post(discoveryPollingRunnable!!)
+    }
+
     fun shutdown(disabled: Boolean = !enabled) {
         heartbeatRunnable?.let { mainHandler.removeCallbacks(it) }
         heartbeatRunnable = null
+        discoveryPollingRunnable?.let { mainHandler.removeCallbacks(it) }
+        discoveryPollingRunnable = null
         try {
             if (NativeRos2Bridge.isAvailable()) {
                 NativeRos2Bridge.setMessageListener(null)
@@ -176,6 +270,14 @@ class Ros2Runtime(private val context: Context) {
 
     fun publishGps(latitude: Double, longitude: Double, altitude: Double, accuracy: Float, timestampNs: Long) {
         if (ready()) NativeRos2Bridge.publishNavSatFix("gps", latitude, longitude, altitude, accuracy, timestampNs)
+    }
+
+    fun publishSteps(steps: Int) {
+        if (ready()) NativeRos2Bridge.publishUInt32("motion/steps", steps)
+    }
+
+    fun publishAudio(data: ShortArray) {
+        if (ready()) NativeRos2Bridge.publishInt16MultiArray("audio/raw", data)
     }
 
     fun publishBattery(percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean, timestampNs: Long) {
