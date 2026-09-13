@@ -218,6 +218,38 @@
                     android:layout_height="wrap_content"/>
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="ROS 2 Status"
+                    android:textSize="13sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold"/>
+                <TextView
+                    android:id="@+id/txtRos2Status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DISABLED"
+                    android:textSize="12sp"
+                    android:textColor="#718096"
+                    android:textStyle="bold"/>
+                <ProgressBar
+                    android:id="@+id/progressRos2"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="8dp"
+                    android:visibility="gone"
+                    android:indeterminate="true"
+                    style="?android:attr/progressBarStyleSmall" />
+            </LinearLayout>
+
             <!-- ADB hint -->
             <TextView
                 android:id="@+id/txtAdbHint"

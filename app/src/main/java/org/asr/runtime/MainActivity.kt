@@ -26,6 +26,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import org.asr.runtime.core.AsrService
 import org.asr.runtime.core.RuntimeState
+import org.asr.runtime.ros2.Ros2State
 import org.asr.runtime.databinding.ActivityMainBinding
 import org.asr.runtime.ui.MainViewModel
 import java.text.SimpleDateFormat
@@ -395,6 +396,33 @@ class MainActivity : ComponentActivity() {
                             binding.btnConnectTransport.isEnabled = viewModel.isServiceBound.value
                             binding.btnDisconnectTransport.isEnabled = false
                             binding.btnReconnectTransport.isEnabled = false
+                        }
+                    }
+                }
+
+                launch {
+                    viewModel.ros2Status.collect { status ->
+                        binding.txtRos2Status.text = when (status.state) {
+                            Ros2State.INITIALIZING -> "INITIALIZING"
+                            Ros2State.DDS_INITIALIZING -> "DDS INIT"
+                            Ros2State.NODE_READY -> "NODE READY"
+                            Ros2State.WAITING_FOR_DISCOVERY -> "WAITING DISCOVERY"
+                            Ros2State.ACTIVE -> "ACTIVE (DISCOVERED)"
+                            Ros2State.ERROR -> "ERROR"
+                            Ros2State.DISCONNECTED -> "DISCONNECTED"
+                            Ros2State.DISABLED -> "DISABLED"
+                        }
+                        binding.txtRos2Status.setTextColor(when(status.state) {
+                            Ros2State.ACTIVE -> Color.parseColor("#2E7D32")
+                            Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
+                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY -> Color.BLUE
+                            Ros2State.ERROR -> Color.RED
+                            else -> Color.GRAY
+                        })
+                        binding.progressRos2.visibility = when(status.state) {
+                            Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
+                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY -> android.view.View.VISIBLE
+                            else -> android.view.View.GONE
                         }
                     }
                 }

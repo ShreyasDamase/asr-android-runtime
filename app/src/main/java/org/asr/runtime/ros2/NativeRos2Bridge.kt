@@ -45,6 +45,12 @@ object NativeRos2Bridge {
     external fun publishScalar(topicName: String, value: Double, timestampNs: Long, kind: Int): Boolean
     external fun publishCompressedImage(topicName: String, data: ByteArray, format: String, timestampNs: Long): Boolean
     external fun publishCameraInfo(topicName: String, width: Int, height: Int, timestampNs: Long): Boolean
+    
+    external fun publishUInt32(topicName: String, value: Int): Boolean
+    external fun publishInt16MultiArray(topicName: String, data: ShortArray): Boolean
+    external fun getDiscoveredParticipantCount(): Int
+    external fun setFastDdsConfigPath(path: String): Boolean
+
     external fun shutdown()
     external fun isNodeReady(): Boolean
 }

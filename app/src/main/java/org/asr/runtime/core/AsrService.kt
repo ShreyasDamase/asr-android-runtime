@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.net.wifi.WifiManager
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -57,7 +58,7 @@ import java.util.UUID
 /**
  * Foreground Service that owns and orchestrates the ASR hardware runtime.
  */
-class AsrService : LifecycleService() {
+class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -212,21 +213,20 @@ class AsrService : LifecycleService() {
         // ── Acquire Locks for Robotics Workload ──
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AsrRuntime:WakeLock")
-        wakeLock?.acquire(10 * 60 * 60 * 1000L) // 10 hour timeout
 
         val wm = getSystemService(Context.WIFI_SERVICE) as WifiManager
         wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "AsrRuntime:WifiLock")
-        wifiLock?.acquire()
 
         multicastLock = wm.createMulticastLock("AsrRuntime:MulticastLock")
         multicastLock?.setReferenceCounted(false)
-        multicastLock?.acquire()
 
         Log.i(TAG, "[ASR] Starting Runtime v${BuildConfig.VERSION_NAME}")
 
-        // ── 1. Stable device ID (SharedPreferences UUID) ──────────────────
+        // ── 1. Stable device ID (SharedPreferences UUID + Android ID) ──────
         deviceId = getOrCreateDeviceId()
-        ros2Runtime = Ros2Runtime(this)
+        ros2Runtime = Ros2Runtime(this).apply {
+            listener = this@AsrService
+        }
 
         // ── 2. Transport layer ─────────────────────────────────────────────
         transportManager = TransportManager()
@@ -311,8 +311,12 @@ class AsrService : LifecycleService() {
         environmentManager = EnvironmentManager(this, transportManager, deviceId) { kind, value, timestampNs ->
             ros2Runtime.publishEnvironment(kind, value.toDouble(), timestampNs)
         }
-        motionManager      = MotionManager(this)
-        audioRuntime       = AudioRuntime(this, transportManager, deviceId)
+        motionManager      = MotionManager(this) { steps ->
+            ros2Runtime.publishSteps(steps)
+        }
+        audioRuntime       = AudioRuntime(this, transportManager, deviceId) { data ->
+            ros2Runtime.publishAudio(data)
+        }
         batteryManager     = BatteryManager(this, transportManager, deviceId) { percentage, temperature, voltage, charging, timestampNs ->
             ros2Runtime.publishBattery(percentage, temperature, voltage, charging, timestampNs)
         }
@@ -599,14 +603,21 @@ class AsrService : LifecycleService() {
     private fun startRos2() {
         val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(PREF_NODE_ALIAS, null)
         val baseName = alias ?: "asr_android"
-        val nodeName = "${baseName}_${deviceId}"
-        val nodeNamespace = "/asr_android_${deviceId}"
+        val unsignedId = deviceId.toInt() and 0xFF
+        val nodeName = "${baseName}_${unsignedId}"
+        val nodeNamespace = "/asr_android_${unsignedId}"
         ros2Runtime.startIfNeeded(nodeName, nodeNamespace)
     }
 
     private fun startInternal() {
         _runtimeState.value = RuntimeState.CONNECTING
         benchmarkProcessor.reset(restartCount)
+
+        // Acquire locks only when active
+        wakeLock?.acquire(10 * 60 * 60 * 1000L)
+        wifiLock?.acquire()
+        multicastLock?.acquire()
+
         startRos2()
         moduleRegistry.startModule("battery")
         moduleRegistry.startModule("diagnostics")
@@ -615,6 +626,8 @@ class AsrService : LifecycleService() {
         moduleRegistry.startModule("camera")
         moduleRegistry.startModule("gps")
         moduleRegistry.startModule("speaker")
+        moduleRegistry.startModule("motion")
+        moduleRegistry.startModule("audio")
         isRunning = true
         startHeartbeatLoop()
         Log.i(TAG, "[ASR] Runtime started. DeviceId=$deviceId")
@@ -629,6 +642,12 @@ class AsrService : LifecycleService() {
         moduleRegistry.stopAll()
         tcpTransport.disconnect()
         ros2Runtime.shutdown()
+        
+        // Release locks
+        if (wakeLock?.isHeld == true) wakeLock?.release()
+        if (wifiLock?.isHeld == true) wifiLock?.release()
+        if (multicastLock?.isHeld == true) multicastLock?.release()
+
         isRunning = false
         _runtimeState.value = RuntimeState.STOPPED
         _clientInfo.value = null
@@ -712,11 +731,34 @@ class AsrService : LifecycleService() {
 
     private fun getOrCreateDeviceId(): Byte {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val uuidStr = prefs.getString(PREF_DEVICE_ID, null)
-            ?: UUID.randomUUID().toString().also {
-                prefs.edit().putString(PREF_DEVICE_ID, it).apply()
-            }
-        return (uuidStr.hashCode() and 0xFF).toByte()
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+        
+        // To handle copied/cloned pref files, we check if the device ID matches the current ANDROID_ID
+        val storedAndroidId = prefs.getString("generated_android_id", null)
+        var uuidStr = prefs.getString(PREF_DEVICE_ID, null)
+
+        if (uuidStr == null || storedAndroidId != androidId) {
+            uuidStr = UUID.randomUUID().toString()
+            prefs.edit()
+                .putString(PREF_DEVICE_ID, uuidStr)
+                .putString("generated_android_id", androidId)
+                .apply()
+            Log.i(TAG, "Regenerated unique device identity for ANDROID_ID: $androidId")
+        }
+
+        // Salt the persistent UUID with the hardware ANDROID_ID to ensure uniqueness across devices
+        val combinedHash = uuidStr.hashCode() xor androidId.hashCode()
+        var id = combinedHash and 0xFF
+        if (id == 0) id = 1 // Avoid 0 as it often denotes 'unknown' or 'broadcast'
+        return id.toByte()
+    }
+
+    override fun onFlashlightCommand(on: Boolean) {
+        cameraManager.setTorch(on)
+    }
+
+    override fun onSpeakerCommand(text: String) {
+        speakerManager.speak(text)
     }
 
     override fun onBind(intent: Intent): IBinder {

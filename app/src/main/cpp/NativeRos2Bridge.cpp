@@ -6,12 +6,17 @@
 #include <thread>
 #include <atomic>
 #include <algorithm>
+#include <limits>
 #include <android/log.h>
 #include <unistd.h>
 
 #include <rcl/rcl.h>
+#include <rcl/graph.h>
 #include <rcl/error_handling.h>
 #include <std_msgs/msg/string.h>
+#include <std_msgs/msg/u_int32.h>
+#include <std_msgs/msg/int16_multi_array.h>
+#include <std_msgs/msg/bool.h>
 #include <sensor_msgs/msg/imu.h>
 #include <sensor_msgs/msg/nav_sat_fix.h>
 #include <sensor_msgs/msg/battery_state.h>
@@ -123,13 +128,23 @@ static void run_spinner() {
                 if (wait_set.subscriptions[i]) {
                     for (auto &pair : subscriptions) {
                         if (&pair.second == wait_set.subscriptions[i]) {
-                            std_msgs__msg__String msg;
-                            std_msgs__msg__String__init(&msg);
-                            rmw_message_info_t message_info;
-                            if (rcl_take(wait_set.subscriptions[i], &msg, &message_info, nullptr) == RCL_RET_OK) {
-                                message_received_callback(pair.first.c_str(), msg.data.data);
+                            if (strstr(pair.first.c_str(), "flashlight") != nullptr) {
+                                std_msgs__msg__Bool bool_msg;
+                                std_msgs__msg__Bool__init(&bool_msg);
+                                rmw_message_info_t message_info;
+                                if (rcl_take(wait_set.subscriptions[i], &bool_msg, &message_info, nullptr) == RCL_RET_OK) {
+                                    message_received_callback(pair.first.c_str(), bool_msg.data ? "true" : "false");
+                                }
+                                std_msgs__msg__Bool__fini(&bool_msg);
+                            } else {
+                                std_msgs__msg__String msg;
+                                std_msgs__msg__String__init(&msg);
+                                rmw_message_info_t message_info;
+                                if (rcl_take(wait_set.subscriptions[i], &msg, &message_info, nullptr) == RCL_RET_OK) {
+                                    message_received_callback(pair.first.c_str(), msg.data.data);
+                                }
+                                std_msgs__msg__String__fini(&msg);
                             }
-                            std_msgs__msg__String__fini(&msg);
                             break;
                         }
                     }
@@ -323,10 +338,15 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_subscribeString(JNIEnv *env, jobject 
     rcl_subscription_t sub = rcl_get_zero_initialized_subscription();
     rcl_subscription_options_t sub_options = rcl_subscription_get_default_options();
 
+    const rosidl_message_type_support_t *ts = ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String);
+    if (strstr(topic_name, "flashlight") != nullptr) {
+        ts = ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool);
+    }
+
     rcl_ret_t ret = rcl_subscription_init(
         &sub,
         &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+        ts,
         topic_name,
         &sub_options
     );
@@ -485,6 +505,14 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishBattery(JNIEnv *env, jobject, 
                                            : sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
         msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_HEALTH_UNKNOWN;
         msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
+
+        // Populate unmeasured fields with quiet_NaN as per ROS2 guidelines
+        float nan_val = std::numeric_limits<float>::quiet_NaN();
+        msg.current = nan_val;
+        msg.charge = nan_val;
+        msg.capacity = nan_val;
+        msg.design_capacity = nan_val;
+
         ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
         if (!ok) {
             LOGE("Failed to publish battery: %s", rcl_get_error_string().str);
@@ -657,6 +685,76 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_shutdown(JNIEnv *env, jobject thiz) {
 JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_isNodeReady(JNIEnv *env, jobject thiz) {
     return node_ready ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_publishUInt32(JNIEnv *env, jobject, jstring j_topic, jint value) {
+    std::lock_guard<std::mutex> lock(node_mutex);
+    if (!node_ready) return JNI_FALSE;
+    const char *topic = env->GetStringUTFChars(j_topic, nullptr);
+    rcl_publisher_t *publisher = nullptr;
+    bool ok = topic && ensure_publisher(topic, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt32), &publisher, 0);
+    if (ok) {
+        std_msgs__msg__UInt32 msg;
+        std_msgs__msg__UInt32__init(&msg);
+        msg.data = static_cast<uint32_t>(value);
+        ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
+        std_msgs__msg__UInt32__fini(&msg);
+    }
+    if (topic) env->ReleaseStringUTFChars(j_topic, topic);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_publishInt16MultiArray(JNIEnv *env, jobject, jstring j_topic, jshortArray j_data) {
+    std::lock_guard<std::mutex> lock(node_mutex);
+    if (!node_ready) return JNI_FALSE;
+    const char *topic = env->GetStringUTFChars(j_topic, nullptr);
+    rcl_publisher_t *publisher = nullptr;
+    bool ok = topic && ensure_publisher(topic, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int16MultiArray), &publisher, 1); // best effort for high rate audio
+    if (ok) {
+        jsize len = env->GetArrayLength(j_data);
+        std_msgs__msg__Int16MultiArray msg;
+        std_msgs__msg__Int16MultiArray__init(&msg);
+
+        rosidl_runtime_c__int16__Sequence__init(&msg.data, static_cast<size_t>(len));
+        env->GetShortArrayRegion(j_data, 0, len, reinterpret_cast<jshort *>(msg.data.data));
+
+        ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
+        std_msgs__msg__Int16MultiArray__fini(&msg);
+    }
+    if (topic) env->ReleaseStringUTFChars(j_topic, topic);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jint JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_getDiscoveredParticipantCount(JNIEnv *env, jobject thiz) {
+    std::lock_guard<std::mutex> lock(node_mutex);
+    if (!node_ready) return 0;
+
+    rcutils_string_array_t node_names = rcutils_get_zero_initialized_string_array();
+    rcutils_string_array_t node_namespaces = rcutils_get_zero_initialized_string_array();
+
+    rcl_ret_t ret = rcl_get_node_names(&node, rcl_get_default_allocator(), &node_names, &node_namespaces);
+    jint count = 0;
+    if (ret == RCL_RET_OK) {
+        count = static_cast<jint>(node_names.size);
+        rcutils_string_array_fini(&node_names);
+        rcutils_string_array_fini(&node_namespaces);
+    } else {
+        rcl_reset_error();
+    }
+    return count;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_setFastDdsConfigPath(JNIEnv *env, jobject thiz, jstring j_path) {
+    const char *path = env->GetStringUTFChars(j_path, nullptr);
+    if (!path) return JNI_FALSE;
+    setenv("FASTRTPS_DEFAULT_PROFILES_FILE", path, 1);
+    LOGI("Fast DDS profile path set to: %s", path);
+    env->ReleaseStringUTFChars(j_path, path);
+    return JNI_TRUE;
 }
 
 }

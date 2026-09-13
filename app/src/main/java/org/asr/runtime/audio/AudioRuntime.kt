@@ -23,7 +23,8 @@ import kotlin.math.sqrt
 class AudioRuntime(
     private val context: Context,
     private val transportManager: TransportManager? = null,
-    private val deviceId: Byte = 0
+    private val deviceId: Byte = 0,
+    private val onRosAudio: ((ShortArray) -> Unit)? = null
 ) : SensorModule {
 
     override val id: String = "audio"
@@ -215,6 +216,9 @@ class AudioRuntime(
                     )
                     tm.send(rawPacket)
                 }
+
+                // ── Send to ROS 2 ──
+                onRosAudio?.invoke(buffer.copyOf(read))
 
                 if (buffersRead % LOG_INTERVAL_BUFFERS == 0L) {
                     Log.d(TAG, "[AUDIO] buffers=$buffersRead samples=$samplesRead rms=${"%.1f".format(rms)} dbfs=${"%.1f".format(dbfs)}")
