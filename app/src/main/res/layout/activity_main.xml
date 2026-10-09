@@ -324,36 +324,67 @@
             android:background="#FFFFFF"
             android:padding="16dp"
             android:layout_marginBottom="16dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ROS 2 · DDS"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:textColor="#1A202C" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Choose network paths independently; sensor data flows while runtime is on"
+                android:textSize="12sp"
+                android:textColor="#718096" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Wi-Fi DDS"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#2D3748" />
+                <Switch
+                    android:id="@+id/switchDdsWifi"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="Enable DDS over Wi-Fi" />
+            </LinearLayout>
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
-                <LinearLayout
+                <TextView
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="ROS 2 · DDS"
-                        android:textStyle="bold"
-                        android:textSize="18sp"
-                        android:textColor="#1A202C" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="DDS discovery; sensor data flows while runtime is on"
-                        android:textSize="12sp"
-                        android:textColor="#718096" />
-                </LinearLayout>
+                    android:text="USB DDS"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#2D3748" />
                 <Switch
-                    android:id="@+id/switchRos2Enabled"
+                    android:id="@+id/switchDdsUsb"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:contentDescription="Enable ROS 2 DDS transport" />
+                    android:contentDescription="Enable DDS over USB tethering" />
             </LinearLayout>
+            <TextView
+                android:id="@+id/txtDdsPathStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="DDS network paths are disabled"
+                android:textSize="11sp"
+                android:textColor="#718096" />
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"

@@ -751,7 +751,7 @@ JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_setFastDdsConfigPath(JNIEnv *env, jobject thiz, jstring j_path) {
     const char *path = env->GetStringUTFChars(j_path, nullptr);
     if (!path) return JNI_FALSE;
-    setenv("FASTRTPS_DEFAULT_PROFILES_FILE", path, 1);
+    setenv("FASTDDS_DEFAULT_PROFILES_FILE", path, 1);
     LOGI("Fast DDS profile path set to: %s", path);
     env->ReleaseStringUTFChars(j_path, path);
     return JNI_TRUE;

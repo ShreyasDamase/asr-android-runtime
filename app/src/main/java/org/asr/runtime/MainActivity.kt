@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
     private var tcpConnected = false
+    private var initializingControls = true
     private val handler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
@@ -87,8 +88,14 @@ class MainActivity : ComponentActivity() {
 
         setupControls()
         val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
-        binding.switchRos2Enabled.isChecked = prefs.getBoolean("ros2_enabled", false)
+        val legacyRos2Enabled = prefs.getBoolean("ros2_enabled", false)
+        val wifiDdsEnabled = prefs.getBoolean("dds_wifi_enabled", legacyRos2Enabled)
+        val usbDdsEnabled = prefs.getBoolean("dds_usb_enabled", false)
+        binding.switchDdsWifi.isChecked = wifiDdsEnabled
+        binding.switchDdsUsb.isChecked = usbDdsEnabled
+        binding.txtDdsPathStatus.text = buildDdsPathSummary(wifiDdsEnabled, usbDdsEnabled, "")
         binding.switchTcpEnabled.isChecked = prefs.getBoolean("tcp_enabled", false)
+        initializingControls = false
         observeState()
         updatePermissionTable()
         updateHardwareTable()
@@ -225,14 +232,21 @@ class MainActivity : ComponentActivity() {
         binding.editTransportPort.setText("4242")
         updateTransportModeBadge()
 
-        binding.switchRos2Enabled.setOnCheckedChangeListener { _, isChecked ->
-            getSharedPreferences("asr_prefs", MODE_PRIVATE)
-                .edit()
-                .putBoolean("ros2_enabled", isChecked)
-                .apply()
-            startServiceIntent(if (isChecked) AsrService.ACTION_ROS2_ENABLE else AsrService.ACTION_ROS2_DISABLE)
-            Toast.makeText(this, if (isChecked) "ROS 2 enabled" else "ROS 2 disabled", Toast.LENGTH_SHORT).show()
+        val onDdsPathChanged = { _: android.widget.CompoundButton, _: Boolean ->
+            if (!initializingControls) {
+                val wifi = binding.switchDdsWifi.isChecked
+                val usb = binding.switchDdsUsb.isChecked
+                getSharedPreferences("asr_prefs", MODE_PRIVATE).edit()
+                    .putBoolean("dds_wifi_enabled", wifi)
+                    .putBoolean("dds_usb_enabled", usb)
+                    .putBoolean("ros2_enabled", wifi || usb)
+                    .apply()
+                binding.txtDdsPathStatus.text = buildDdsPathSummary(wifi, usb, "")
+                startDdsPathIntent(wifi, usb)
+            }
         }
+        binding.switchDdsWifi.setOnCheckedChangeListener(onDdsPathChanged)
+        binding.switchDdsUsb.setOnCheckedChangeListener(onDdsPathChanged)
 
         binding.switchTcpEnabled.setOnCheckedChangeListener { _, isChecked ->
             getSharedPreferences("asr_prefs", MODE_PRIVATE).edit().putBoolean("tcp_enabled", isChecked).apply()
@@ -370,6 +384,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startDdsPathIntent(wifiEnabled: Boolean, usbEnabled: Boolean) {
+        val intent = Intent(this, AsrService::class.java).apply {
+            action = AsrService.ACTION_DDS_PATHS_SET
+            putExtra("wifi_enabled", wifiEnabled)
+            putExtra("usb_enabled", usbEnabled)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && (wifiEnabled || usbEnabled)) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun buildDdsPathSummary(wifi: Boolean, usb: Boolean, detail: String): String {
+        if (!wifi && !usb) return "DDS network paths are disabled"
+        if (detail.isNotBlank()) return detail
+        val selected = buildList {
+            if (wifi) add("Wi-Fi")
+            if (usb) add("USB")
+        }.joinToString(" + ")
+        return "Selected: $selected"
+    }
+
     private fun observeState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -463,6 +500,7 @@ class MainActivity : ComponentActivity() {
                             Ros2State.DDS_INITIALIZING -> "DDS INIT"
                             Ros2State.NODE_READY -> "NODE READY"
                             Ros2State.WAITING_FOR_DISCOVERY -> "WAITING DISCOVERY"
+                            Ros2State.WAITING_FOR_INTERFACE -> "WAITING FOR LINK"
                             Ros2State.ACTIVE -> "ACTIVE (DISCOVERED)"
                             Ros2State.ERROR -> "ERROR"
                             Ros2State.DISCONNECTED -> "DISCONNECTED"
@@ -471,15 +509,23 @@ class MainActivity : ComponentActivity() {
                         binding.txtRos2Status.setTextColor(when(status.state) {
                             Ros2State.ACTIVE -> Color.parseColor("#2E7D32")
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
-                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY -> Color.BLUE
+                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
+                            Ros2State.WAITING_FOR_INTERFACE -> Color.BLUE
                             Ros2State.ERROR -> Color.RED
                             else -> Color.GRAY
                         })
                         binding.progressRos2.visibility = when(status.state) {
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
-                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY -> android.view.View.VISIBLE
+                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
+                            Ros2State.WAITING_FOR_INTERFACE -> android.view.View.VISIBLE
                             else -> android.view.View.GONE
                         }
+                        val routeDescription = status.pathSummary
+                        binding.txtDdsPathStatus.text = buildDdsPathSummary(
+                            binding.switchDdsWifi.isChecked,
+                            binding.switchDdsUsb.isChecked,
+                            routeDescription
+                        )
                     }
                 }
             }

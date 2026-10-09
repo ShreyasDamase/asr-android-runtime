@@ -83,6 +83,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         private const val PREF_TCP_PORT = "tcp_port"
         private const val PREF_RUNTIME_ENABLED = "runtime_enabled"
         private const val PREF_ROS2_ENABLED = "ros2_enabled"
+        private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
+        private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
         private const val TCP_TRANSPORT_TYPE = "tcp"
 
         // ADB broadcast actions
@@ -101,6 +103,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         const val ACTION_TCP_DISABLE    = "org.asr.runtime.TCP_DISABLE"
         const val ACTION_ROS2_ENABLE    = "org.asr.runtime.ROS2_ENABLE"
         const val ACTION_ROS2_DISABLE   = "org.asr.runtime.ROS2_DISABLE"
+        const val ACTION_DDS_PATHS_SET  = "org.asr.runtime.DDS_PATHS_SET"
         const val ACTION_DEV_MODE       = "org.asr.runtime.DEV_MODE"
         const val ACTION_SET_ALIAS      = "org.asr.runtime.SET_ALIAS"
 
@@ -391,15 +394,20 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             val runtimeEnabled = prefs.getBoolean(PREF_RUNTIME_ENABLED, false)
             val tcpEnabled = prefs.getBoolean(PREF_TCP_ENABLED, false)
             val ros2Enabled = prefs.getBoolean(PREF_ROS2_ENABLED, false)
+            val wifiDdsEnabled = prefs.getBoolean(PREF_DDS_WIFI_ENABLED, ros2Enabled)
+            val usbDdsEnabled = prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
             if (runtimeEnabled || tcpEnabled || ros2Enabled) ensureForeground(sensorRuntime = runtimeEnabled)
             if (tcpEnabled) setTcpEnabled(true)
-            if (ros2Enabled) setRos2Enabled(true)
+            if (ros2Enabled || wifiDdsEnabled || usbDdsEnabled) {
+                setRos2TransportPaths(wifiDdsEnabled, usbDdsEnabled)
+            }
             if (runtimeEnabled) handleStart()
             return START_STICKY
         }
 
         if (intent.action == ACTION_START || intent.action == ACTION_RESTART ||
-            intent.action == ACTION_TCP_ENABLE || intent.action == ACTION_TCP_CONNECT || intent.action == ACTION_ROS2_ENABLE) {
+            intent.action == ACTION_TCP_ENABLE || intent.action == ACTION_TCP_CONNECT ||
+            intent.action == ACTION_ROS2_ENABLE || intent.action == ACTION_DDS_PATHS_SET) {
             ensureForeground(sensorRuntime = isRunning || pendingStart)
         }
 
@@ -449,6 +457,10 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             ACTION_TCP_DISABLE    -> setTcpEnabled(false)
             ACTION_ROS2_ENABLE    -> setRos2Enabled(true)
             ACTION_ROS2_DISABLE   -> setRos2Enabled(false)
+            ACTION_DDS_PATHS_SET  -> setRos2TransportPaths(
+                intent.getBooleanExtra("wifi_enabled", false),
+                intent.getBooleanExtra("usb_enabled", false)
+            )
             ACTION_DEV_MODE       -> handleDevMode(intent)
         }
         return START_STICKY
@@ -569,6 +581,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                 .putBoolean(PREF_RUNTIME_ENABLED, false)
                 .putBoolean(PREF_TCP_ENABLED, false)
                 .putBoolean(PREF_ROS2_ENABLED, false)
+                .putBoolean(PREF_DDS_WIFI_ENABLED, false)
+                .putBoolean(PREF_DDS_USB_ENABLED, false)
                 .apply()
         }
         serviceScope.launch {
@@ -661,9 +675,19 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     fun setRos2Enabled(enabled: Boolean) {
+        // Legacy control action maps to the existing Wi-Fi DDS behavior.
+        setRos2TransportPaths(wifiEnabled = enabled, usbEnabled = false)
+    }
+
+    fun setRos2TransportPaths(wifiEnabled: Boolean, usbEnabled: Boolean) {
+        val enabled = wifiEnabled || usbEnabled
         synchronized(modeRequestLock) {
             if (exitRequested && enabled) return
-            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_ROS2_ENABLED, enabled).apply()
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                .putBoolean(PREF_DDS_WIFI_ENABLED, wifiEnabled)
+                .putBoolean(PREF_DDS_USB_ENABLED, usbEnabled)
+                .putBoolean(PREF_ROS2_ENABLED, enabled)
+                .apply()
             pendingModeTransitions.incrementAndGet()
         }
         if (enabled) {
@@ -672,8 +696,13 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         serviceScope.launch(Dispatchers.IO) {
             try {
                 ros2LifecycleMutex.withLock {
-                    val shouldEnable = !exitRequested && getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                        .getBoolean(PREF_ROS2_ENABLED, false)
+                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val shouldEnable = !exitRequested && prefs.getBoolean(PREF_ROS2_ENABLED, false)
+                    val currentWifi = prefs.getBoolean(PREF_DDS_WIFI_ENABLED, shouldEnable)
+                    val currentUsb = prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
+                    val wasEnabled = ros2Runtime.isEnabled()
+                    if (shouldEnable && wasEnabled) ros2Runtime.shutdown(disabled = false)
+                    ros2Runtime.setTransportPaths(currentWifi, currentUsb)
                     ros2Runtime.setEnabled(shouldEnable)
                     if (shouldEnable) startRos2() else releaseMulticastLock()
                 }
@@ -760,7 +789,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             runCatching { multicastLock?.acquire() }
                 .onFailure { Log.w(TAG, "Unable to acquire DDS multicast lock", it) }
         }
-        val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(PREF_NODE_ALIAS, null)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        ros2Runtime.setTransportPaths(
+            prefs.getBoolean(PREF_DDS_WIFI_ENABLED, prefs.getBoolean(PREF_ROS2_ENABLED, false)),
+            prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
+        )
+        val alias = prefs.getString(PREF_NODE_ALIAS, null)
         val baseName = alias ?: "asr_android"
         val unsignedId = deviceId.toInt() and 0xFF
         val nodeName = "${baseName}_${unsignedId}"
@@ -980,6 +1014,23 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     override fun onSpeakerCommand(text: String) {
         speakerManager.speak(text)
+    }
+
+    override fun onDdsInterfacesChanged() {
+        serviceScope.launch(Dispatchers.IO) {
+            ros2LifecycleMutex.withLock {
+                if (exitRequested || !ros2Runtime.isEnabled()) return@withLock
+                Log.i(TAG, "Restarting ROS 2 participant after a selected network interface changed")
+                ros2Runtime.shutdown(disabled = false)
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                ros2Runtime.setTransportPaths(
+                    prefs.getBoolean(PREF_DDS_WIFI_ENABLED, prefs.getBoolean(PREF_ROS2_ENABLED, false)),
+                    prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
+                )
+                startRos2()
+            }
+            updateDiagnosticsSnapshot()
+        }
     }
 
     override fun onBind(intent: Intent): IBinder {
