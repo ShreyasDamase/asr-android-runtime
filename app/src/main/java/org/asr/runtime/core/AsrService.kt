@@ -57,6 +57,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Foreground Service that owns and orchestrates the ASR hardware runtime.
@@ -64,7 +66,10 @@ import java.util.UUID
 class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val modeRequestLock = Any()
     private val tcpLifecycleMutex = Mutex()
+    private val ros2LifecycleMutex = Mutex()
+    private val pendingModeTransitions = AtomicInteger(0)
 
     companion object {
         private const val TAG            = "PhoneCamera"
@@ -74,7 +79,11 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         private const val PREF_DEVICE_ID = "device_id"
         private const val PREF_NODE_ALIAS = "node_alias"
         private const val PREF_TCP_ENABLED = "tcp_enabled"
+        private const val PREF_TCP_HOST = "tcp_host"
+        private const val PREF_TCP_PORT = "tcp_port"
         private const val PREF_RUNTIME_ENABLED = "runtime_enabled"
+        private const val PREF_ROS2_ENABLED = "ros2_enabled"
+        private const val TCP_TRANSPORT_TYPE = "tcp"
 
         // ADB broadcast actions
         const val ACTION_START          = "org.asr.runtime.START"
@@ -117,7 +126,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     private val _diagnostics = MutableStateFlow(DiagnosticsSnapshot())
     val diagnostics: StateFlow<DiagnosticsSnapshot> = _diagnostics.asStateFlow()
 
-    private var packetsReceivedCount = 0L
+    private val packetsReceivedCount = AtomicLong(0)
 
     // ── Hardware Drivers ─────────────────────────────────────────────────────
     private lateinit var cameraManager:      CameraManager
@@ -144,7 +153,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     private lateinit var commandDispatcher:   CommandDispatcher
 
     private var activeCameraConfig = CameraConfig()
-    private var isRunning  = false
+    @Volatile private var isRunning  = false
     @Volatile private var exitRequested = false
     private var restartCount = 0
     private var pendingStart = false
@@ -181,21 +190,34 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                     transportManager.send(packet)
                 }
 
-                // Update UI Diagnostics
-                _diagnostics.value = DiagnosticsSnapshot(
-                    packetsSent      = transportManager.totalPacketsSent,
-                    packetsReceived  = packetsReceivedCount,
-                    queueDepth       = tcpTransport.queueDepth,
-                    droppedPackets   = transportManager.totalPacketDrops,
-                    reconnectCount   = transportManager.reconnectCount,
-                    socketState      = if (tcpTransport.isConnected) "CONNECTED" else "CONNECTING",
-                    lastHeartbeat    = System.currentTimeMillis(),
-                    uptimeMs         = uptimeMs
-                )
+                updateDiagnosticsSnapshot(heartbeatAt = System.currentTimeMillis())
 
                 heartbeatHandler.postDelayed(this, 1000)
             }
         }
+    }
+
+    private fun updateDiagnosticsSnapshot(heartbeatAt: Long? = null) {
+        val previous = _diagnostics.value
+        val tcpEnabled = transportManager.isTransportEnabled(TCP_TRANSPORT_TYPE)
+        _diagnostics.value = DiagnosticsSnapshot(
+            packetsSent = transportManager.totalPacketsSent,
+            packetsReceived = packetsReceivedCount.get(),
+            queueDepth = tcpTransport.queueDepth,
+            droppedPackets = transportManager.totalPacketDrops + tcpTransport.queueDrops,
+            reconnectCount = transportManager.reconnectCount,
+            socketState = when {
+                !tcpEnabled -> "DISABLED"
+                tcpTransport.isConnected -> "CONNECTED"
+                else -> "CONNECTING"
+            },
+            lastHeartbeat = when {
+                !isRunning -> 0L
+                heartbeatAt != null -> heartbeatAt
+                else -> previous.lastHeartbeat
+            },
+            uptimeMs = if (isRunning) benchmarkProcessor.getRunningTimeMs() else 0L
+        )
     }
 
     private val binder = LocalBinder()
@@ -251,39 +273,17 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
         // ── 2. Transport layer ─────────────────────────────────────────────
         transportManager = TransportManager()
+        val transportPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         tcpTransport = TcpTransport(
-            host             = "127.0.0.1",
-            port             = 4242,
+            host             = transportPrefs.getString(PREF_TCP_HOST, "127.0.0.1") ?: "127.0.0.1",
+            port             = transportPrefs.getInt(PREF_TCP_PORT, 4242).coerceIn(1, 65535),
             onPacketReceived = { 
-                packetsReceivedCount++
-                commandDispatcher.dispatch(it) 
+                packetsReceivedCount.incrementAndGet()
+                commandDispatcher.dispatch(it)
+                updateDiagnosticsSnapshot()
             },
             onReconnect      = { transportManager.notifyReconnect() },
-            onConnectionStateChanged = { connected ->
-                if (connected) {
-                    val clientApp = if (tcpTransport.host == "127.0.0.1") "ASR Studio (ADB)" else "ASR Studio (Wi-Fi)"
-                    _clientInfo.value = ClientInfo(
-                        application = clientApp,
-                        host = tcpTransport.host,
-                        port = tcpTransport.port,
-                        connectedSince = System.currentTimeMillis()
-                    )
-                    // ── Send Handshake: CAPABILITIES ──
-                    val capPayload = capabilityManager.discover().let {
-                        PacketSerializer.capabilities(this@AsrService, deviceId)
-                    }
-                    val capPacket = AsrPacket.encode(
-                        topicId = TopicId.CAPABILITIES.value,
-                        seq = 0,
-                        payload = capPayload,
-                        deviceId = deviceId
-                    )
-                    transportManager.send(capPacket)
-
-                } else {
-                    _clientInfo.value = null
-                }
-            }
+            onConnectionStateChanged = ::handleTcpConnectionStateChanged
         )
         transportManager.addTransport(LogTransport())
         transportManager.addTransport(tcpTransport)
@@ -390,7 +390,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val runtimeEnabled = prefs.getBoolean(PREF_RUNTIME_ENABLED, false)
             val tcpEnabled = prefs.getBoolean(PREF_TCP_ENABLED, false)
-            val ros2Enabled = prefs.getBoolean("ros2_enabled", false)
+            val ros2Enabled = prefs.getBoolean(PREF_ROS2_ENABLED, false)
             if (runtimeEnabled || tcpEnabled || ros2Enabled) ensureForeground(sensorRuntime = runtimeEnabled)
             if (tcpEnabled) setTcpEnabled(true)
             if (ros2Enabled) setRos2Enabled(true)
@@ -406,17 +406,13 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         when (intent.action) {
             ACTION_START          -> {
                 getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
-                if (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(PREF_TCP_ENABLED, false)) {
-                    setTcpEnabled(true)
-                }
                 handleStart()
             }
             ACTION_SET_ALIAS      -> {
                 val alias = intent.getStringExtra("alias")
                 getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(PREF_NODE_ALIAS, alias).apply()
-                Log.i(TAG, "Node alias set to: $alias. Restarting ROS 2...")
-                ros2Runtime.shutdown()
-                startRos2()
+                Log.i(TAG, "Node alias set to: $alias")
+                restartRos2IfEnabled()
             }
             ACTION_STOP           -> { getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, false).apply(); serviceScope.launch { handleStop() } }
             ACTION_RESTART        -> serviceScope.launch { handleRestart() }
@@ -556,9 +552,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     fun stopRuntime() {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, false).apply()
-        if (!isRunning && !pendingStart) return
         serviceScope.launch {
-            _runtimeState.value = RuntimeState.STOPPING
+            if (isRunning || pendingStart) _runtimeState.value = RuntimeState.STOPPING
             handleStop()
             _runtimeState.value = RuntimeState.STOPPED
             stopForegroundIfIdle()
@@ -567,24 +562,30 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     /** Stop all runtime work and the started foreground service before closing the UI. */
     fun shutdownForExit(onComplete: () -> Unit) {
-        if (exitRequested) return
-        exitRequested = true
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .putBoolean(PREF_RUNTIME_ENABLED, false)
-            .putBoolean(PREF_TCP_ENABLED, false)
-            .putBoolean("ros2_enabled", false)
-            .apply()
+        synchronized(modeRequestLock) {
+            if (exitRequested) return
+            exitRequested = true
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                .putBoolean(PREF_RUNTIME_ENABLED, false)
+                .putBoolean(PREF_TCP_ENABLED, false)
+                .putBoolean(PREF_ROS2_ENABLED, false)
+                .apply()
+        }
         serviceScope.launch {
             _runtimeState.value = RuntimeState.STOPPING
             pendingStart = false
             handleStop()
-            releaseMulticastLock()
             withContext(Dispatchers.IO) {
-                tcpLifecycleMutex.withLock { transportManager.stop() }
-                ros2Runtime.setEnabled(false)
+                tcpLifecycleMutex.withLock { transportManager.stopTransport(TCP_TRANSPORT_TYPE) }
+                ros2LifecycleMutex.withLock {
+                    ros2Runtime.setEnabled(false)
+                    releaseMulticastLock()
+                }
             }
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            withContext(Dispatchers.Main.immediate) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
             onComplete()
         }
     }
@@ -601,7 +602,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         Log.w(TAG, "[DEV] Emergency Reset Triggered")
         serviceScope.launch {
             stopSensorModules()
-            packetsReceivedCount = 0
+            packetsReceivedCount.set(0)
             handleRestart()
         }
     }
@@ -619,45 +620,76 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     fun setTcpEnabled(enabled: Boolean, host: String = tcpTransport.host, port: Int = tcpTransport.port) {
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(PREF_TCP_ENABLED, enabled)
-            .apply()
-        if (exitRequested && enabled) return
+        val safePort = port.takeIf { it in 1..65535 } ?: 4242
+        synchronized(modeRequestLock) {
+            if (exitRequested && enabled) return
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_TCP_ENABLED, enabled)
+                .putString(PREF_TCP_HOST, host.ifBlank { "127.0.0.1" })
+                .putInt(PREF_TCP_PORT, safePort)
+                .apply()
+            pendingModeTransitions.incrementAndGet()
+        }
         serviceScope.launch(Dispatchers.IO) {
-            tcpLifecycleMutex.withLock {
-                if (exitRequested || !enabled) {
-                    transportManager.stop()
-                    _clientInfo.value = null
-                } else {
-                    if (tcpTransport.host != host || tcpTransport.port != port) tcpTransport.disconnect()
-                    tcpTransport.host = host
-                    tcpTransport.port = port
-                    transportManager.start()
+            try {
+                tcpLifecycleMutex.withLock {
+                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val shouldEnable = !exitRequested && prefs.getBoolean(PREF_TCP_ENABLED, false)
+                    if (!shouldEnable) {
+                        transportManager.stopTransport(TCP_TRANSPORT_TYPE)
+                        _clientInfo.value = null
+                    } else {
+                        val configuredHost = prefs.getString(PREF_TCP_HOST, "127.0.0.1") ?: "127.0.0.1"
+                        val configuredPort = prefs.getInt(PREF_TCP_PORT, 4242).coerceIn(1, 65535)
+                        if (tcpTransport.host != configuredHost || tcpTransport.port != configuredPort) {
+                            if (transportManager.isTransportEnabled(TCP_TRANSPORT_TYPE)) {
+                                transportManager.stopTransport(TCP_TRANSPORT_TYPE)
+                            }
+                        }
+                        tcpTransport.host = configuredHost
+                        tcpTransport.port = configuredPort
+                        transportManager.startTransport(TCP_TRANSPORT_TYPE)
+                    }
                 }
+            } finally {
+                pendingModeTransitions.decrementAndGet()
+                updateDiagnosticsSnapshot()
+                withContext(Dispatchers.Main.immediate) { stopForegroundIfIdle() }
             }
-            if (!enabled || exitRequested) withContext(Dispatchers.Main.immediate) { stopForegroundIfIdle() }
         }
     }
 
     fun setRos2Enabled(enabled: Boolean) {
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean("ros2_enabled", enabled).apply()
+        synchronized(modeRequestLock) {
+            if (exitRequested && enabled) return
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_ROS2_ENABLED, enabled).apply()
+            pendingModeTransitions.incrementAndGet()
+        }
         if (enabled) {
-            if (exitRequested) return
             ensureForeground(sensorRuntime = isRunning || pendingStart)
-            ros2Runtime.setEnabled(true)
-            startRos2()
-        } else {
-            ros2Runtime.setEnabled(false)
-            releaseMulticastLock()
-            stopForegroundIfIdle()
+        }
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                ros2LifecycleMutex.withLock {
+                    val shouldEnable = !exitRequested && getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .getBoolean(PREF_ROS2_ENABLED, false)
+                    ros2Runtime.setEnabled(shouldEnable)
+                    if (shouldEnable) startRos2() else releaseMulticastLock()
+                }
+            } finally {
+                pendingModeTransitions.decrementAndGet()
+                updateDiagnosticsSnapshot()
+                withContext(Dispatchers.Main.immediate) { stopForegroundIfIdle() }
+            }
         }
     }
 
     private fun stopForegroundIfIdle() {
+        if (exitRequested || pendingModeTransitions.get() > 0) return
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val anyModeEnabled = prefs.getBoolean(PREF_RUNTIME_ENABLED, false) ||
-            prefs.getBoolean(PREF_TCP_ENABLED, false) || prefs.getBoolean("ros2_enabled", false)
+            prefs.getBoolean(PREF_TCP_ENABLED, false) || prefs.getBoolean(PREF_ROS2_ENABLED, false)
         if (!anyModeEnabled) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -669,7 +701,6 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
         ensureForeground(sensorRuntime = true)
         if (isRunning) return
-        startRos2()
         startSensorRuntimeWhenReady()
     }
 
@@ -726,7 +757,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private fun startRos2() {
         if (ros2Runtime.isEnabled() && multicastLock?.isHeld != true) {
-            multicastLock?.acquire()
+            runCatching { multicastLock?.acquire() }
+                .onFailure { Log.w(TAG, "Unable to acquire DDS multicast lock", it) }
         }
         val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(PREF_NODE_ALIAS, null)
         val baseName = alias ?: "asr_android"
@@ -745,7 +777,6 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         wakeLock?.acquire(10 * 60 * 60 * 1000L)
         wifiLock?.acquire()
 
-        startRos2()
         startSensorModules()
         isRunning = true
         _runtimeState.value = RuntimeState.STREAMING
@@ -768,15 +799,19 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
         isRunning = false
         _runtimeState.value = RuntimeState.STOPPED
+        updateDiagnosticsSnapshot()
         stopForegroundIfIdle()
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(PREF_TCP_ENABLED, false) || prefs.getBoolean("ros2_enabled", false)) {
+        if (prefs.getBoolean(PREF_TCP_ENABLED, false) || prefs.getBoolean(PREF_ROS2_ENABLED, false)) {
             ensureForeground(sensorRuntime = false)
         }
     }
 
     private fun releaseMulticastLock() {
-        if (multicastLock?.isHeld == true) multicastLock?.release()
+        if (multicastLock?.isHeld == true) {
+            runCatching { multicastLock?.release() }
+                .onFailure { Log.w(TAG, "Unable to release DDS multicast lock", it) }
+        }
     }
 
     private fun startSensorModules() {
@@ -824,6 +859,60 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         reconnectTransport(host, port)
     }
 
+    private fun handleTcpConnectionStateChanged(connected: Boolean) {
+        // Ignore a late callback from a socket that has already been replaced.
+        if (connected != tcpTransport.isConnected) return
+        if (connected) {
+            val clientApp = if (tcpTransport.host == "127.0.0.1") "ASR Studio (ADB)" else "ASR Studio (Wi-Fi)"
+            _clientInfo.value = ClientInfo(
+                application = clientApp,
+                host = tcpTransport.host,
+                port = tcpTransport.port,
+                connectedSince = System.currentTimeMillis()
+            )
+            val payload = PacketSerializer.capabilities(this, deviceId)
+            val capPacket = AsrPacket.encode(
+                topicId = TopicId.CAPABILITIES.value,
+                seq = 0,
+                payload = payload,
+                deviceId = deviceId
+            )
+            transportManager.send(capPacket)
+        } else {
+            _clientInfo.value = null
+        }
+        updateDiagnosticsSnapshot()
+    }
+
+    private fun restartRos2IfEnabled() {
+        if (exitRequested) return
+        serviceScope.launch(Dispatchers.IO) {
+            ros2LifecycleMutex.withLock {
+                val shouldRun = !exitRequested && getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .getBoolean(PREF_ROS2_ENABLED, false)
+                if (shouldRun) {
+                    ros2Runtime.shutdown(disabled = false)
+                    startRos2()
+                }
+            }
+        }
+    }
+
+    private fun setRos2DomainId(value: Int) {
+        if (exitRequested) return
+        serviceScope.launch(Dispatchers.IO) {
+            ros2LifecycleMutex.withLock {
+                ros2Runtime.setDomainId(value)
+                val shouldRun = !exitRequested && getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .getBoolean(PREF_ROS2_ENABLED, false)
+                if (shouldRun) {
+                    ros2Runtime.shutdown(disabled = false)
+                    startRos2()
+                }
+            }
+        }
+    }
+
     private fun handleDevMode(intent: Intent) {
         val flag  = intent.getStringExtra("flag")  ?: return
         if (flag == "ros2_enabled") {
@@ -833,11 +922,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         }
         if (flag == "ros2_domain_id") {
             val value = intent.getIntExtra("value", 0)
-            ros2Runtime.setDomainId(value)
-            if (ros2Runtime.isEnabled()) {
-                ros2Runtime.shutdown()
-                startRos2()
-            }
+            setRos2DomainId(value)
             return
         }
         val value = intent.getBooleanExtra("value", false)

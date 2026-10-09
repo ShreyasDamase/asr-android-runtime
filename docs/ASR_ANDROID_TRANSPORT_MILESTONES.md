@@ -22,12 +22,22 @@ All milestones are planned for the `feature/asr-android-commissioning-ui` branch
 
 ## Milestone 2 — Lifecycle hardening and module boundaries
 
+- **Status: Complete (2026-10-10).**
 - Exercise TCP only, ROS 2 only, both together, and neither while retaining one set of sensor managers.
 - Audit start, stop, restart, sticky service recovery, pending camera initialization, locks, timers, and shutdown ordering.
 - Make runtime state and diagnostics describe the sensor runtime and each transport accurately.
 - Persist each mode independently and ensure a change in one mode cannot start or stop another.
 
+### Milestone 2 verification
+
+- `:app:assembleDebug` succeeds with no new dependencies.
+- Installed and exercised on the connected Android phone: runtime-only does not enable TCP or DDS; TCP remains connected through runtime start and stop; DDS-only discovers ROS 2 participants with sensors stopped and TCP disabled; TCP and DDS can be enabled together.
+- TCP was verified through the existing ADB reverse test path with a local listener. ROS 2 discovery was verified against the existing Pixi ROS 2 environment (`ros2 node list` showed the Android node alongside `foxglove_bridge` and `talker`).
+- Tested the TCP peer-close/reconnect path; retries remain visible as disconnected/connecting while modes stay independent.
+
 ## Milestone 3 — USB-only DDS discovery
+
+**Status: Next.**
 
 - First validate that the target Android device and robot can establish an IP network link over USB.
 - Configure Fast DDS to use the USB network interface without Wi-Fi DDS discovery when USB-only mode is selected.

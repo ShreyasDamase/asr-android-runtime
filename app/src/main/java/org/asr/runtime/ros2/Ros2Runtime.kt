@@ -42,9 +42,9 @@ class Ros2Runtime(private val context: Context) {
 
     private var heartbeatRunnable: Runnable? = null
     private var discoveryPollingRunnable: Runnable? = null
-    private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
-    private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
-    private var runtimeReady = false
+    @Volatile private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
+    @Volatile private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
+    @Volatile private var runtimeReady = false
     private var lastNodeName: String? = null
     private var lastNodeNamespace: String? = null
     private val _status = MutableStateFlow(

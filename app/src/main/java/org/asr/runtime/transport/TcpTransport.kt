@@ -5,7 +5,6 @@ import org.asr.runtime.common.Transport
 import org.asr.runtime.core.DevModeConfig
 import org.asr.runtime.protocol.AsrVersion
 import java.io.InputStream
-import java.io.OutputStream
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -45,14 +44,8 @@ class TcpTransport(
 
     override val type: String = "tcp"
 
-    @Volatile
-    override var isConnected: Boolean = false
-        private set(value) {
-            if (field != value) {
-                field = value
-                onConnectionStateChanged?.invoke(value)
-            }
-        }
+    @Volatile private var connectedState = false
+    override val isConnected: Boolean get() = connectedState
 
     private val sendQueue = ArrayBlockingQueue<ByteArray>(QUEUE_CAPACITY)
 
@@ -60,8 +53,8 @@ class TcpTransport(
     @Volatile private var shouldRun = false
     @Volatile private var hasConnectedOnce = false
 
-    private var socket: Socket? = null
-    private var outputStream: OutputStream? = null
+    @Volatile private var socket: Socket? = null
+    private val connectionLock = Any()
     private var writeThread: Thread? = null
     private var readThread: Thread? = null
 
@@ -73,6 +66,9 @@ class TcpTransport(
 
     override fun connect() {
         if (shouldRun) return
+        // A disconnect or peer-close wake-up may have left the writer sentinel
+        // in the queue. It belongs to the previous lifecycle, never this one.
+        sendQueue.clear()
         shouldRun = true
         dropCount = 0L
         writeThread = thread(name = "ASR-TcpWrite", isDaemon = true) { writeLoop() }
@@ -94,21 +90,29 @@ class TcpTransport(
     }
 
     override fun disconnect() {
-        shouldRun = false
-        hasConnectedOnce = false
+        val activeSocket: Socket?
+        val notifyDisconnected: Boolean
+        synchronized(connectionLock) {
+            shouldRun = false
+            hasConnectedOnce = false
+            activeSocket = socket
+            socket = null
+            notifyDisconnected = connectedState
+            connectedState = false
+        }
+        if (notifyDisconnected) onConnectionStateChanged?.invoke(false)
         // Drain and unblock sendQueue.take() immediately.
         // Without this, the write thread blocks forever on take() and
         // writeThread.join(500) always times out, leaving a zombie thread.
         sendQueue.clear()
         sendQueue.offer(ByteArray(0))  // sentinel to wake take()
-        runCatching { socket?.close() }
+        runCatching { activeSocket?.close() }
         writeThread?.interrupt()
         readThread?.interrupt()
         writeThread?.join(500)
         readThread?.join(500)
         writeThread = null
         readThread  = null
-        isConnected = false
         Log.i(TAG, "[TCP] Transport stopped")
     }
 
@@ -117,15 +121,25 @@ class TcpTransport(
     private fun writeLoop() {
         try {
             while (shouldRun && !Thread.currentThread().isInterrupted) {
+                val sock = Socket()
                 try {
                     Log.i(TAG, "[TCP] Connecting to $host:$port ...")
-                    val sock = Socket()
                     sock.connect(java.net.InetSocketAddress(host, port), 3000)
                     sock.tcpNoDelay = true
                     sock.keepAlive = true
-                    socket = sock
-                    outputStream = sock.getOutputStream()
-                    isConnected = true
+                    val output = sock.getOutputStream()
+                    val connected = synchronized(connectionLock) {
+                        if (shouldRun) {
+                            socket = sock
+                            val changed = !connectedState
+                            connectedState = true
+                            changed
+                        } else {
+                            false
+                        }
+                    }
+                    if (!shouldRun || socket !== sock) break
+                    if (connected && socket === sock && isConnected) onConnectionStateChanged?.invoke(true)
                     // Only report *re*connects — the first successful connect is
                     // not a reconnect and must not inflate reconnectCount.
                     if (hasConnectedOnce) onReconnect?.invoke()
@@ -140,8 +154,8 @@ class TcpTransport(
                         }
                         if (packet.isEmpty()) break      // disconnect() sentinel — exit write loop cleanly
                         try {
-                            outputStream?.write(packet)
-                            outputStream?.flush()
+                            output.write(packet)
+                            output.flush()
                         } catch (e: Exception) {
                             // Socket closed — break inner loop, outer will reconnect
                             break
@@ -150,19 +164,32 @@ class TcpTransport(
                 } catch (e: InterruptedException) {
                     break
                 } catch (e: Exception) {
-                    isConnected = false
+                    signalConnectionClosed(sock, "write/connect error: ${e.message}")
                     if (shouldRun && !Thread.currentThread().isInterrupted) {
                         Log.w(TAG, "[TCP] Disconnected (${e.message}) — retrying in ${RETRY_DELAY_MS}ms")
-                        try {
-                            Thread.sleep(RETRY_DELAY_MS)
-                        } catch (e: InterruptedException) {
-                            break
-                        }
+                    }
+                } finally {
+                    signalConnectionClosed(sock, "connection closed")
+                    runCatching { sock.close() }
+                }
+                // signalConnectionClosed() wakes a blocked writer with an empty
+                // packet. Consume that old-lifecycle sentinel before reconnecting.
+                sendQueue.clear()
+                if (shouldRun && !Thread.currentThread().isInterrupted) {
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS)
+                    } catch (e: InterruptedException) {
+                        break
                     }
                 }
             }
         } finally {
-            isConnected = false
+            val notifyDisconnected = synchronized(connectionLock) {
+                val changed = connectedState
+                connectedState = false
+                changed
+            }
+            if (notifyDisconnected) onConnectionStateChanged?.invoke(false)
         }
     }
 
@@ -184,7 +211,10 @@ class TcpTransport(
                     val ins = sock.getInputStream()
                     while (shouldRun && !sock.isClosed && !Thread.currentThread().isInterrupted) {
                         val header = ByteArray(AsrVersion.HEADER_SIZE)
-                        if (!readFully(ins, header, 0, AsrVersion.HEADER_SIZE)) break
+                        if (!readFully(ins, header, 0, AsrVersion.HEADER_SIZE)) {
+                            signalConnectionClosed(sock, "peer closed the connection")
+                            break
+                        }
 
                         // Parse payload length from header bytes [20-23]
                         val payloadLen = ByteBuffer.wrap(header, 20, 4)
@@ -196,13 +226,17 @@ class TcpTransport(
                         // Bail out of the read loop instead of allocating on a bad length.
                         if (payloadLen < 0 || payloadLen > MAX_PAYLOAD_BYTES) {
                             Log.w(TAG, "[TCP] Invalid inbound payload length $payloadLen — aborting read loop")
+                            signalConnectionClosed(sock, "invalid inbound payload length")
                             break
                         }
 
                         val fullPacket = ByteArray(AsrVersion.HEADER_SIZE + payloadLen)
                         System.arraycopy(header, 0, fullPacket, 0, AsrVersion.HEADER_SIZE)
 
-                        if (payloadLen > 0 && !readFully(ins, fullPacket, AsrVersion.HEADER_SIZE, payloadLen)) break
+                        if (payloadLen > 0 && !readFully(ins, fullPacket, AsrVersion.HEADER_SIZE, payloadLen)) {
+                            signalConnectionClosed(sock, "peer closed during packet read")
+                            break
+                        }
 
                         onPacketReceived?.invoke(fullPacket)
                     }
@@ -211,17 +245,33 @@ class TcpTransport(
                 } catch (e: Exception) {
                     if (shouldRun && !Thread.currentThread().isInterrupted) {
                         Log.w(TAG, "[TCP] Read error: ${e.message}")
-                        try {
-                            Thread.sleep(200)
-                        } catch (e: InterruptedException) {
-                            break
-                        }
+                        signalConnectionClosed(sock, "read error: ${e.message}")
                     }
                 }
             }
         } finally {
             // Read loop terminated
         }
+    }
+
+    /** Close a failed socket and wake the writer so it can own reconnection. */
+    private fun signalConnectionClosed(sock: Socket, reason: String) {
+        var closedCurrent = false
+        var notifyDisconnected = false
+        synchronized(connectionLock) {
+            if (socket === sock) {
+                socket = null
+                notifyDisconnected = connectedState
+                connectedState = false
+                closedCurrent = true
+            }
+        }
+        if (!closedCurrent) return
+        if (notifyDisconnected) onConnectionStateChanged?.invoke(false)
+        Log.i(TAG, "[TCP] Connection ended ($reason)")
+        sendQueue.clear()
+        sendQueue.offer(ByteArray(0))
+        runCatching { sock.close() }
     }
 
     private fun readFully(ins: InputStream, buf: ByteArray, offset: Int, length: Int): Boolean {
