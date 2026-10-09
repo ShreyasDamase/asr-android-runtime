@@ -112,6 +112,10 @@ class MainViewModel : ViewModel() {
         asrService?.stopTransport()
     }
 
+    fun shutdownForExit(onComplete: () -> Unit) {
+        asrService?.shutdownForExit(onComplete) ?: onComplete()
+    }
+
     fun setRos2Enabled(enabled: Boolean) {
         asrService?.setRos2Enabled(enabled)
     }

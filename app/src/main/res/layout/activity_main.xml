@@ -10,14 +10,39 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ASR v1.0 Runtime"
-            android:textColor="#1A202C"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="16dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ASR Android"
+                    android:textColor="#1A202C"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Robot sensor node"
+                    android:textColor="#718096"
+                    android:textSize="13sp" />
+            </LinearLayout>
+            <Button
+                android:id="@+id/btnExitApp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="64dp"
+                android:text="EXIT"
+                android:contentDescription="Exit ASR Android" />
+        </LinearLayout>
 
         <!-- Runtime Control Card -->
         <LinearLayout
@@ -53,6 +78,13 @@
                         android:textColor="#A0AEC0"
                         android:textStyle="bold"/>
                 </LinearLayout>
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Phone sensors only. TCP and DDS states are shown separately below."
+                    android:textSize="12sp"
+                    android:textColor="#718096" />
 
                 <View
                     android:layout_width="match_parent"
@@ -97,7 +129,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Transport Control Card -->
+        <!-- TCP transport controls for ASR Studio -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -115,9 +147,14 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Transport"
+                    android:text="TCP · ASR Studio"
                     android:textStyle="bold"
                     android:textSize="18sp"/>
+                <Switch
+                    android:id="@+id/switchTcpEnabled"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="Enable TCP connection to ASR Studio" />
                 <TextView
                     android:id="@+id/txtTransportMode"
                     android:layout_width="wrap_content"
@@ -138,7 +175,31 @@
                 android:layout_height="1dp"
                 android:background="#E2E8F0"
                 android:layout_marginTop="8dp"
-                android:layout_marginBottom="12dp"/>
+                android:layout_marginBottom="8dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="TCP link"
+                    android:textSize="13sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtTcpStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="OFF"
+                    android:textSize="12sp"
+                    android:textColor="#718096"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <!-- Host IP row -->
             <LinearLayout
@@ -198,58 +259,6 @@
                     android:background="#EDF2F7"/>
             </LinearLayout>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="ROS 2 transport"
-                    android:textSize="13sp"
-                    android:textColor="#2D3748"
-                    android:textStyle="bold"/>
-                <Switch
-                    android:id="@+id/switchRos2Enabled"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="ROS 2 Status"
-                    android:textSize="13sp"
-                    android:textColor="#2D3748"
-                    android:textStyle="bold"/>
-                <TextView
-                    android:id="@+id/txtRos2Status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="DISABLED"
-                    android:textSize="12sp"
-                    android:textColor="#718096"
-                    android:textStyle="bold"/>
-                <ProgressBar
-                    android:id="@+id/progressRos2"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:layout_marginStart="8dp"
-                    android:visibility="gone"
-                    android:indeterminate="true"
-                    style="?android:attr/progressBarStyleSmall" />
-            </LinearLayout>
-
             <!-- ADB hint -->
             <TextView
                 android:id="@+id/txtAdbHint"
@@ -306,6 +315,104 @@
                     android:layout_marginStart="2dp" />
             </LinearLayout>
         </LinearLayout>
+
+        <!-- ROS 2 / DDS status is independent from the TCP card above. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ROS 2 · DDS"
+                        android:textStyle="bold"
+                        android:textSize="18sp"
+                        android:textColor="#1A202C" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="DDS discovery; sensor data flows while runtime is on"
+                        android:textSize="12sp"
+                        android:textColor="#718096" />
+                </LinearLayout>
+                <Switch
+                    android:id="@+id/switchRos2Enabled"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="Enable ROS 2 DDS transport" />
+            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#E2E8F0"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Discovery status"
+                    android:textSize="13sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/txtRos2Status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DISABLED"
+                    android:textSize="12sp"
+                    android:textColor="#718096"
+                    android:textStyle="bold" />
+                <ProgressBar
+                    android:id="@+id/progressRos2"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="8dp"
+                    android:visibility="gone"
+                    android:indeterminate="true"
+                    style="?android:attr/progressBarStyleSmall" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="ROS 2 discovery status is shown separately from TCP."
+                android:textSize="12sp"
+                android:textColor="#718096" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnDetailsToggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="Show device details and diagnostics" />
+
+        <!-- Less frequently used information stays available but out of the main view. -->
+        <LinearLayout
+            android:id="@+id/layoutAdvancedDetails"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
 
         <!-- Connected Client Card -->
         <LinearLayout
@@ -422,15 +529,7 @@
             <include layout="@layout/item_diagnostic_row" android:id="@+id/rowReconnects"/>
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btnEmergencyReset"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="⚠ RESET RUNTIME"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#E53E3E"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="32dp"/>
+        </LinearLayout>
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

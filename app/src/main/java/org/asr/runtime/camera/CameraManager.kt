@@ -61,12 +61,22 @@ class CameraManager(
     // Written on the main executor (bind/unbind), read from binder & TCP threads.
     @Volatile private var imageAnalysis: ImageAnalysis? = null
 
-    fun initialize(onReady: () -> Unit) {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
-            cameraProvider = cameraProviderFuture.get()
-            onReady()
-        }, ContextCompat.getMainExecutor(context))
+    fun initialize(onReady: () -> Unit, onError: (Throwable) -> Unit = {}) {
+        try {
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+            cameraProviderFuture.addListener({
+                try {
+                    cameraProvider = cameraProviderFuture.get()
+                    onReady()
+                } catch (error: Throwable) {
+                    Log.e(TAG, "Camera provider initialization failed", error)
+                    onError(error)
+                }
+            }, ContextCompat.getMainExecutor(context))
+        } catch (error: Throwable) {
+            Log.e(TAG, "Camera provider initialization could not start", error)
+            onError(error)
+        }
     }
 
     fun isCameraProviderReady(): Boolean = cameraProvider != null

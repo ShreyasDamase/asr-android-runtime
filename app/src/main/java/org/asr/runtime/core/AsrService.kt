@@ -51,6 +51,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
@@ -61,6 +64,7 @@ import java.util.UUID
 class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val tcpLifecycleMutex = Mutex()
 
     companion object {
         private const val TAG            = "PhoneCamera"
@@ -69,6 +73,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         private const val PREFS_NAME     = "asr_prefs"
         private const val PREF_DEVICE_ID = "device_id"
         private const val PREF_NODE_ALIAS = "node_alias"
+        private const val PREF_TCP_ENABLED = "tcp_enabled"
+        private const val PREF_RUNTIME_ENABLED = "runtime_enabled"
 
         // ADB broadcast actions
         const val ACTION_START          = "org.asr.runtime.START"
@@ -82,8 +88,16 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         const val ACTION_CAMERA_CONFIG  = "org.asr.runtime.CAMERA_CONFIG"
         const val ACTION_FLASHLIGHT     = "org.asr.runtime.FLASHLIGHT"
         const val ACTION_TCP_CONNECT    = "org.asr.runtime.TCP_CONNECT"
+        const val ACTION_TCP_ENABLE     = "org.asr.runtime.TCP_ENABLE"
+        const val ACTION_TCP_DISABLE    = "org.asr.runtime.TCP_DISABLE"
+        const val ACTION_ROS2_ENABLE    = "org.asr.runtime.ROS2_ENABLE"
+        const val ACTION_ROS2_DISABLE   = "org.asr.runtime.ROS2_DISABLE"
         const val ACTION_DEV_MODE       = "org.asr.runtime.DEV_MODE"
         const val ACTION_SET_ALIAS      = "org.asr.runtime.SET_ALIAS"
+
+        private val SENSOR_RUNTIME_MODULE_IDS = listOf(
+            "camera", "imu", "environment", "motion", "audio", "battery", "speaker", "gps", "diagnostics"
+        )
 
         val PROFILES = mapOf(
             "mapping"     to listOf("camera", "imu"),
@@ -131,8 +145,10 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private var activeCameraConfig = CameraConfig()
     private var isRunning  = false
+    @Volatile private var exitRequested = false
     private var restartCount = 0
     private var pendingStart = false
+    private var cameraInitializationInProgress = false
     private var deviceId: Byte = 0
     private val heartbeatSeq = java.util.concurrent.atomic.AtomicInteger(0)
     private lateinit var heartbeatHandler: Handler
@@ -189,8 +205,13 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     fun getModuleStatus(): Map<String, String> = moduleRegistry.getModuleStatus()
 
-    fun startModule(id: String) = moduleRegistry.startModule(id)
-    fun stopModule(id: String) = moduleRegistry.stopModule(id)
+    fun startModule(id: String) {
+        if (id == "transport") setTcpEnabled(true) else moduleRegistry.startModule(id)
+    }
+
+    fun stopModule(id: String) {
+        if (id == "transport") setTcpEnabled(false) else moduleRegistry.stopModule(id)
+    }
 
     // ── Broadcast receivers ──────────────────────────────────────────────────
 
@@ -247,10 +268,6 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                         port = tcpTransport.port,
                         connectedSince = System.currentTimeMillis()
                     )
-                    if (_runtimeState.value == RuntimeState.CONNECTING) {
-                        _runtimeState.value = RuntimeState.CONNECTED
-                    }
-                    
                     // ── Send Handshake: CAPABILITIES ──
                     val capPayload = capabilityManager.discover().let {
                         PacketSerializer.capabilities(this@AsrService, deviceId)
@@ -265,16 +282,11 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
                 } else {
                     _clientInfo.value = null
-                    if (_runtimeState.value == RuntimeState.CONNECTED || _runtimeState.value == RuntimeState.STREAMING) {
-                        _runtimeState.value = RuntimeState.CONNECTING
-                    }
                 }
             }
         )
         transportManager.addTransport(LogTransport())
         transportManager.addTransport(tcpTransport)
-        
-        startRos2()
 
         // ── 3. Diagnostics and benchmark ──────────────────────────────────
         benchmarkProcessor = BenchmarkProcessor(this)
@@ -350,10 +362,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         commandDispatcher = CommandDispatcher(transportManager, deviceId)
         registerCommandHandlers()
 
-        // ── 8. Camera async init ──────────────────────────────────────────
-        cameraManager.initialize(onReady = {
-            if (pendingStart) { pendingStart = false; startInternal() }
-        })
+        // CameraX is initialized on demand when the sensor runtime starts.
+        // TCP-only and DDS-only operation do not touch the camera pipeline.
 
         // ── 9. Broadcast control ──────────────────────────────────────────
         val filter = IntentFilter().apply {
@@ -376,18 +386,31 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         super.onStartCommand(intent, flags, startId)
 
         if (intent == null) {
-            Log.i(TAG, "[ASR] Sticky restart (null intent) — restoring foreground runtime")
-            ensureForeground()
-            handleStart()
+            Log.i(TAG, "[ASR] Sticky restart (null intent) — restoring enabled modules")
+            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val runtimeEnabled = prefs.getBoolean(PREF_RUNTIME_ENABLED, false)
+            val tcpEnabled = prefs.getBoolean(PREF_TCP_ENABLED, false)
+            val ros2Enabled = prefs.getBoolean("ros2_enabled", false)
+            if (runtimeEnabled || tcpEnabled || ros2Enabled) ensureForeground(sensorRuntime = runtimeEnabled)
+            if (tcpEnabled) setTcpEnabled(true)
+            if (ros2Enabled) setRos2Enabled(true)
+            if (runtimeEnabled) handleStart()
             return START_STICKY
         }
 
-        if (intent.action == ACTION_START || intent.action == ACTION_RESTART) {
-            ensureForeground()
+        if (intent.action == ACTION_START || intent.action == ACTION_RESTART ||
+            intent.action == ACTION_TCP_ENABLE || intent.action == ACTION_TCP_CONNECT || intent.action == ACTION_ROS2_ENABLE) {
+            ensureForeground(sensorRuntime = isRunning || pendingStart)
         }
 
         when (intent.action) {
-            ACTION_START          -> handleStart()
+            ACTION_START          -> {
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
+                if (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(PREF_TCP_ENABLED, false)) {
+                    setTcpEnabled(true)
+                }
+                handleStart()
+            }
             ACTION_SET_ALIAS      -> {
                 val alias = intent.getStringExtra("alias")
                 getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(PREF_NODE_ALIAS, alias).apply()
@@ -395,19 +418,19 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                 ros2Runtime.shutdown()
                 startRos2()
             }
-            ACTION_STOP           -> serviceScope.launch(Dispatchers.Default) { handleStop() }
-            ACTION_RESTART        -> serviceScope.launch(Dispatchers.Default) { handleRestart() }
+            ACTION_STOP           -> { getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, false).apply(); serviceScope.launch { handleStop() } }
+            ACTION_RESTART        -> serviceScope.launch { handleRestart() }
             ACTION_SPEAK          -> {
                 val text = intent.getStringExtra("text") ?: "ASR speaker test successful"
                 speakerManager.speak(text)
             }
             ACTION_MODULE_START   -> intent.getStringExtra("module_id")?.let {
                 Log.i(TAG, "[CMD] Starting module: $it")
-                moduleRegistry.startModule(it)
+                startModule(it)
             }
             ACTION_MODULE_STOP    -> intent.getStringExtra("module_id")?.let {
                 Log.i(TAG, "[CMD] Stopping module: $it")
-                moduleRegistry.stopModule(it)
+                stopModule(it)
             }
             ACTION_PROFILE_ENABLE -> intent.getStringExtra("profile")?.let { profileId ->
                 PROFILES[profileId]?.forEach { modId ->
@@ -422,6 +445,14 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                 Log.i(TAG, "[CMD] Flashlight state set to: on=$on")
             }
             ACTION_TCP_CONNECT    -> handleTcpConnect(intent)
+            ACTION_TCP_ENABLE     -> setTcpEnabled(
+                enabled = true,
+                host = intent.getStringExtra("host") ?: tcpTransport.host,
+                port = intent.getIntExtra("port", tcpTransport.port)
+            )
+            ACTION_TCP_DISABLE    -> setTcpEnabled(false)
+            ACTION_ROS2_ENABLE    -> setRos2Enabled(true)
+            ACTION_ROS2_DISABLE   -> setRos2Enabled(false)
             ACTION_DEV_MODE       -> handleDevMode(intent)
         }
         return START_STICKY
@@ -432,7 +463,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             override val command = "module.start"
             override fun execute(params: JSONObject): Result<String> {
                 val id = params.getString("id")
-                moduleRegistry.startModule(id)
+                startModule(id)
                 return Result.success("Module '$id' started")
             }
         })
@@ -440,7 +471,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             override val command = "module.stop"
             override fun execute(params: JSONObject): Result<String> {
                 val id = params.getString("id")
-                moduleRegistry.stopModule(id)
+                stopModule(id)
                 return Result.success("Module '$id' stopped")
             }
         })
@@ -511,7 +542,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             override val command = "runtime.stop"
             override fun execute(params: JSONObject): Result<String> {
                 Log.i(TAG, "[CMD] Stop ASR Runtime requested via TCP command")
-                moduleRegistry.stopAll()
+                stopRuntime()
                 return Result.success("ASR Runtime modules stopped")
             }
         })
@@ -524,16 +555,42 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     fun stopRuntime() {
-        if (!isRunning) return
-        serviceScope.launch(Dispatchers.Default) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, false).apply()
+        if (!isRunning && !pendingStart) return
+        serviceScope.launch {
             _runtimeState.value = RuntimeState.STOPPING
             handleStop()
             _runtimeState.value = RuntimeState.STOPPED
+            stopForegroundIfIdle()
+        }
+    }
+
+    /** Stop all runtime work and the started foreground service before closing the UI. */
+    fun shutdownForExit(onComplete: () -> Unit) {
+        if (exitRequested) return
+        exitRequested = true
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(PREF_RUNTIME_ENABLED, false)
+            .putBoolean(PREF_TCP_ENABLED, false)
+            .putBoolean("ros2_enabled", false)
+            .apply()
+        serviceScope.launch {
+            _runtimeState.value = RuntimeState.STOPPING
+            pendingStart = false
+            handleStop()
+            releaseMulticastLock()
+            withContext(Dispatchers.IO) {
+                tcpLifecycleMutex.withLock { transportManager.stop() }
+                ros2Runtime.setEnabled(false)
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            onComplete()
         }
     }
 
     fun restartRuntime() {
-        serviceScope.launch(Dispatchers.Default) {
+        serviceScope.launch {
             _runtimeState.value = RuntimeState.STOPPING
             handleRestart()
             _runtimeState.value = RuntimeState.STARTING
@@ -542,65 +599,135 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     fun resetRuntime() {
         Log.w(TAG, "[DEV] Emergency Reset Triggered")
-        serviceScope.launch(Dispatchers.Default) {
-            moduleRegistry.stopAll()
+        serviceScope.launch {
+            stopSensorModules()
             packetsReceivedCount = 0
             handleRestart()
         }
     }
 
     fun reconnectTransport() {
-        serviceScope.launch(Dispatchers.IO) {
-            tcpTransport.disconnect()
-            tcpTransport.connect()
-        }
+        setTcpEnabled(true, tcpTransport.host, tcpTransport.port)
     }
 
     fun reconnectTransport(host: String, port: Int) {
-        serviceScope.launch(Dispatchers.IO) {
-            tcpTransport.disconnect()
-            tcpTransport.host = host
-            tcpTransport.port = port
-            tcpTransport.connect()
-        }
+        setTcpEnabled(true, host, port)
     }
 
     fun stopTransport() {
+        setTcpEnabled(false)
+    }
+
+    fun setTcpEnabled(enabled: Boolean, host: String = tcpTransport.host, port: Int = tcpTransport.port) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_TCP_ENABLED, enabled)
+            .apply()
+        if (exitRequested && enabled) return
         serviceScope.launch(Dispatchers.IO) {
-            tcpTransport.disconnect()
+            tcpLifecycleMutex.withLock {
+                if (exitRequested || !enabled) {
+                    transportManager.stop()
+                    _clientInfo.value = null
+                } else {
+                    if (tcpTransport.host != host || tcpTransport.port != port) tcpTransport.disconnect()
+                    tcpTransport.host = host
+                    tcpTransport.port = port
+                    transportManager.start()
+                }
+            }
+            if (!enabled || exitRequested) withContext(Dispatchers.Main.immediate) { stopForegroundIfIdle() }
         }
     }
 
     fun setRos2Enabled(enabled: Boolean) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean("ros2_enabled", enabled).apply()
         if (enabled) {
+            if (exitRequested) return
+            ensureForeground(sensorRuntime = isRunning || pendingStart)
             ros2Runtime.setEnabled(true)
             startRos2()
         } else {
             ros2Runtime.setEnabled(false)
+            releaseMulticastLock()
+            stopForegroundIfIdle()
+        }
+    }
+
+    private fun stopForegroundIfIdle() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val anyModeEnabled = prefs.getBoolean(PREF_RUNTIME_ENABLED, false) ||
+            prefs.getBoolean(PREF_TCP_ENABLED, false) || prefs.getBoolean("ros2_enabled", false)
+        if (!anyModeEnabled) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
     private fun handleStart() {
-        ensureForeground()
+        if (exitRequested) return
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
+        ensureForeground(sensorRuntime = true)
         if (isRunning) return
         startRos2()
-        if (cameraManager.isCameraProviderReady()) startInternal() else pendingStart = true
+        startSensorRuntimeWhenReady()
     }
 
-    private fun ensureForeground() {
+    private fun startSensorRuntimeWhenReady() {
+        if (exitRequested) return
+        if (cameraManager.isCameraProviderReady()) {
+            pendingStart = false
+            startInternal()
+            return
+        }
+        pendingStart = true
+        if (cameraInitializationInProgress) return
+        cameraInitializationInProgress = true
+        cameraManager.initialize(
+            onReady = {
+                cameraInitializationInProgress = false
+                if (pendingStart && !exitRequested) {
+                    pendingStart = false
+                    startInternal()
+                }
+            },
+            onError = {
+                cameraInitializationInProgress = false
+                pendingStart = false
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                    .putBoolean(PREF_RUNTIME_ENABLED, false)
+                    .apply()
+                _runtimeState.value = RuntimeState.ERROR
+                stopForegroundIfIdle()
+                if (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .getBoolean(PREF_TCP_ENABLED, false) || ros2Runtime.isEnabled()) {
+                    ensureForeground(sensorRuntime = false)
+                }
+            }
+        )
+    }
+
+    private fun ensureForeground(sensorRuntime: Boolean = false) {
         createNotificationChannel()
         val notification = createNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            startForeground(NOTIFICATION_ID, notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val serviceType = if (sensorRuntime) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            }
+            startForeground(NOTIFICATION_ID, notification, serviceType)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
     }
 
     private fun startRos2() {
+        if (ros2Runtime.isEnabled() && multicastLock?.isHeld != true) {
+            multicastLock?.acquire()
+        }
         val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(PREF_NODE_ALIAS, null)
         val baseName = alias ?: "asr_android"
         val unsignedId = deviceId.toInt() and 0xFF
@@ -610,25 +737,18 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     private fun startInternal() {
-        _runtimeState.value = RuntimeState.CONNECTING
+        if (exitRequested) return
+        _runtimeState.value = RuntimeState.STARTING
         benchmarkProcessor.reset(restartCount)
 
         // Acquire locks only when active
         wakeLock?.acquire(10 * 60 * 60 * 1000L)
         wifiLock?.acquire()
-        multicastLock?.acquire()
 
         startRos2()
-        moduleRegistry.startModule("battery")
-        moduleRegistry.startModule("diagnostics")
-        moduleRegistry.startModule("transport")
-        moduleRegistry.startModule("imu")
-        moduleRegistry.startModule("camera")
-        moduleRegistry.startModule("gps")
-        moduleRegistry.startModule("speaker")
-        moduleRegistry.startModule("motion")
-        moduleRegistry.startModule("audio")
+        startSensorModules()
         isRunning = true
+        _runtimeState.value = RuntimeState.STREAMING
         startHeartbeatLoop()
         Log.i(TAG, "[ASR] Runtime started. DeviceId=$deviceId")
     }
@@ -639,24 +759,40 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     private fun handleStop() {
-        moduleRegistry.stopAll()
-        tcpTransport.disconnect()
-        ros2Runtime.shutdown()
+        pendingStart = false
+        heartbeatHandler.removeCallbacks(heartbeatRunnable)
+        stopSensorModules()
         
-        // Release locks
         if (wakeLock?.isHeld == true) wakeLock?.release()
         if (wifiLock?.isHeld == true) wifiLock?.release()
-        if (multicastLock?.isHeld == true) multicastLock?.release()
 
         isRunning = false
         _runtimeState.value = RuntimeState.STOPPED
-        _clientInfo.value = null
+        stopForegroundIfIdle()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(PREF_TCP_ENABLED, false) || prefs.getBoolean("ros2_enabled", false)) {
+            ensureForeground(sensorRuntime = false)
+        }
+    }
+
+    private fun releaseMulticastLock() {
+        if (multicastLock?.isHeld == true) multicastLock?.release()
+    }
+
+    private fun startSensorModules() {
+        SENSOR_RUNTIME_MODULE_IDS.forEach { moduleRegistry.startModule(it) }
+    }
+
+    private fun stopSensorModules() {
+        SENSOR_RUNTIME_MODULE_IDS.asReversed().forEach { moduleRegistry.stopModule(it) }
     }
 
     private fun handleRestart() {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
         handleStop()
         restartCount++
-        startInternal()
+        ensureForeground(sensorRuntime = true)
+        startSensorRuntimeWhenReady()
     }
 
     private fun handleCameraConfig(intent: Intent) {
@@ -767,18 +903,18 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        ros2Runtime.shutdown()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        serviceScope.cancel()
-        super.onDestroy()
-        try { unregisterReceiver(controlReceiver) } catch (e: Exception) { }
+        runCatching { ros2Runtime.shutdown() }
+        runCatching { moduleRegistry.releaseAll() }
         wakeLock?.let { if (it.isHeld) it.release() }
         wifiLock?.let { if (it.isHeld) it.release() }
         multicastLock?.let { if (it.isHeld) it.release() }
-        moduleRegistry.releaseAll()
+        serviceScope.cancel()
+        super.onDestroy()
+        try { unregisterReceiver(controlReceiver) } catch (e: Exception) { }
     }
 
     private fun createNotificationChannel() {

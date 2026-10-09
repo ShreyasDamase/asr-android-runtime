@@ -1,6 +1,7 @@
 package org.asr.runtime
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -39,11 +40,14 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
+    private var tcpConnected = false
     private val handler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
-            updatePermissionTable()
-            updateHardwareTable()
+            if (binding.layoutAdvancedDetails.visibility == android.view.View.VISIBLE) {
+                updatePermissionTable()
+                updateHardwareTable()
+            }
             handler.postDelayed(this, 1000)
         }
     }
@@ -82,7 +86,9 @@ class MainActivity : ComponentActivity() {
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
         setupControls()
-        binding.switchRos2Enabled.isChecked = getSharedPreferences("asr_prefs", MODE_PRIVATE).getBoolean("ros2_enabled", false)
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        binding.switchRos2Enabled.isChecked = prefs.getBoolean("ros2_enabled", false)
+        binding.switchTcpEnabled.isChecked = prefs.getBoolean("tcp_enabled", false)
         observeState()
         updatePermissionTable()
         updateHardwareTable()
@@ -224,10 +230,15 @@ class MainActivity : ComponentActivity() {
                 .edit()
                 .putBoolean("ros2_enabled", isChecked)
                 .apply()
-            if (viewModel.isServiceBound.value) {
-                viewModel.setRos2Enabled(isChecked)
-                Toast.makeText(this, if (isChecked) "ROS 2 enabled" else "ROS 2 disabled", Toast.LENGTH_SHORT).show()
-            }
+            startServiceIntent(if (isChecked) AsrService.ACTION_ROS2_ENABLE else AsrService.ACTION_ROS2_DISABLE)
+            Toast.makeText(this, if (isChecked) "ROS 2 enabled" else "ROS 2 disabled", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.switchTcpEnabled.setOnCheckedChangeListener { _, isChecked ->
+            getSharedPreferences("asr_prefs", MODE_PRIVATE).edit().putBoolean("tcp_enabled", isChecked).apply()
+            updateTcpStatus()
+            if (isChecked) startTransportServiceIntent(AsrService.ACTION_TCP_ENABLE, resolvedHost(), resolvedPort())
+            else startTransportServiceIntent(AsrService.ACTION_TCP_DISABLE)
         }
 
         binding.editTransportHost.addTextChangedListener(object : android.text.TextWatcher {
@@ -251,43 +262,68 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Restarting ASR Runtime...", Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnConnectTransport.setOnClickListener {
-            if (!viewModel.isServiceBound.value) {
-                Toast.makeText(this, "Runtime not started — tap START first", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        binding.btnExitApp.setOnClickListener { confirmExit() }
+        binding.btnDetailsToggle.setOnClickListener {
+            val showDetails = binding.layoutAdvancedDetails.visibility != android.view.View.VISIBLE
+            binding.layoutAdvancedDetails.visibility = if (showDetails) android.view.View.VISIBLE else android.view.View.GONE
+            binding.btnDetailsToggle.text = if (showDetails) "Hide device details and diagnostics" else "Show device details and diagnostics"
+            if (showDetails) {
+                updatePermissionTable()
+                updateHardwareTable()
             }
-            val host = resolvedHost()
-            val port = resolvedPort()
-            viewModel.reconnectTransport(host, port)
+        }
+
+        binding.btnConnectTransport.setOnClickListener {
+            if (binding.switchTcpEnabled.isChecked) {
+                startTransportServiceIntent(AsrService.ACTION_TCP_ENABLE, resolvedHost(), resolvedPort())
+            } else {
+                binding.switchTcpEnabled.isChecked = true
+            }
         }
         binding.btnDisconnectTransport.setOnClickListener {
-            if (!viewModel.isServiceBound.value) {
-                Toast.makeText(this, "Runtime not started", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            viewModel.stopTransport()
+            binding.switchTcpEnabled.isChecked = false
         }
         binding.btnReconnectTransport.setOnClickListener {
-            if (!viewModel.isServiceBound.value) {
-                Toast.makeText(this, "Runtime not started — tap START first", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+            if (binding.switchTcpEnabled.isChecked) {
+                startTransportServiceIntent(AsrService.ACTION_TCP_ENABLE, resolvedHost(), resolvedPort())
+            } else {
+                binding.switchTcpEnabled.isChecked = true
             }
-            val host = resolvedHost()
-            val port = resolvedPort()
-            viewModel.reconnectTransport(host, port)
         }
 
-        binding.btnEmergencyReset.setOnClickListener {
-            viewModel.resetRuntime()
-            Toast.makeText(this, "Relaunching App...", Toast.LENGTH_SHORT).show()
+    }
 
-            // Trigger fresh application restart
-            val intent = Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    private fun confirmExit() {
+        AlertDialog.Builder(this)
+            .setTitle("Exit ASR Android?")
+            .setMessage("This stops the sensor runtime and shuts down TCP and ROS 2 before closing the app.")
+            .setNegativeButton("No", null)
+            .setPositiveButton("Yes, exit") { _, _ ->
+                binding.btnExitApp.isEnabled = false
+                if (viewModel.isServiceBound.value) {
+                    viewModel.shutdownForExit {
+                        if (!isFinishing) finishAndRemoveTask()
+                    }
+                } else {
+                    stopService(Intent(this, AsrService::class.java))
+                    finishAndRemoveTask()
+                }
             }
-            startActivity(intent)
-            Runtime.getRuntime().exit(0)
+            .show()
+    }
+
+    private fun updateTcpStatus() {
+        val status = when {
+            tcpConnected -> "CONNECTED"
+            binding.switchTcpEnabled.isChecked -> "CONNECTING"
+            else -> "OFF"
         }
+        binding.txtTcpStatus.text = status
+        binding.txtTcpStatus.setTextColor(when (status) {
+            "CONNECTED" -> Color.parseColor("#2E7D32")
+            "CONNECTING" -> Color.parseColor("#3182CE")
+            else -> Color.parseColor("#718096")
+        })
     }
 
     /** Returns the host entered by the user, or "127.0.0.1" as the ADB default. */
@@ -321,15 +357,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startTransportServiceIntent(action: String, host: String? = null, port: Int? = null) {
+        val intent = Intent(this, AsrService::class.java).apply {
+            this.action = action
+            host?.let { putExtra("host", it) }
+            port?.let { putExtra("port", it) }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && action != AsrService.ACTION_TCP_DISABLE && action != AsrService.ACTION_ROS2_DISABLE) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
     private fun observeState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.runtimeState.collect { state ->
-                        binding.txtRuntimeStatus.text = "● ${state.name}"
+                        binding.txtRuntimeStatus.text = "● ${when (state) {
+                            RuntimeState.STOPPED -> "SENSORS STOPPED"
+                            RuntimeState.STARTING -> "SENSORS STARTING"
+                            RuntimeState.STREAMING -> "SENSORS RUNNING"
+                            RuntimeState.STOPPING -> "SENSORS STOPPING"
+                            RuntimeState.ERROR -> "SENSOR ERROR"
+                        }}"
                         binding.txtRuntimeStatus.setTextColor(when(state) {
                             RuntimeState.STREAMING -> Color.GREEN
-                            RuntimeState.CONNECTED -> Color.CYAN
                             RuntimeState.STARTING, RuntimeState.STOPPING -> Color.BLUE
                             RuntimeState.ERROR -> Color.RED
                             else -> Color.GRAY
@@ -346,7 +400,7 @@ class MainActivity : ComponentActivity() {
                         binding.rowReconnects.valDiagnostic.text = diag.reconnectCount.toString()
                         
                         val state = viewModel.runtimeState.value
-                        if (state == RuntimeState.CONNECTED || state == RuntimeState.STREAMING || state == RuntimeState.CONNECTING || state == RuntimeState.STARTING) {
+                        if (state == RuntimeState.STREAMING || state == RuntimeState.STARTING) {
                             binding.btnStartRuntime.text = "${formatUptime(diag.uptimeMs)}"
                             binding.btnStartRuntime.isEnabled = false
                         } else {
@@ -375,6 +429,8 @@ class MainActivity : ComponentActivity() {
 
                 launch {
                     viewModel.clientInfo.collect { info ->
+                        tcpConnected = info != null
+                        updateTcpStatus()
                         val isConnected = (info != null)
                         if (isConnected) {
                             binding.rowClientStatus.valDiagnostic.text = "🟢 Connected"
@@ -466,7 +522,6 @@ class MainActivity : ComponentActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                viewModel.startRuntime()
                 startServiceIntent(AsrService.ACTION_START)
             } else {
                 Toast.makeText(this, "Permissions required for ASR", Toast.LENGTH_LONG).show()
