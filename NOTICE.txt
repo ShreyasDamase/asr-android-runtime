@@ -1,0 +1,18 @@
+ASR Android Runtime
+
+This product includes software and assets developed by third parties:
+
+1. ROS 2 (Robot Operating System 2) Native Libraries
+   License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+   Project: https://ros.org/
+
+2. Eclipse Cyclone DDS
+   License: Eclipse Public License 2.0 / Eclipse Distribution License 1.0
+   Project: https://projects.eclipse.org/projects/iot.cyclonedds
+
+3. eProsima Fast DDS
+   License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+   Project: https://fast-dds.docs.eprosima.com/
+
+4. Kotlin Standard Library & Android Jetpack
+   License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)

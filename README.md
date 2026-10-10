@@ -1,93 +1,137 @@
 # ASR Android Runtime
 
-ASR Runtime turns an Android phone into a ROS 2 sensor node. It publishes phone sensor data over DDS and can also connect to ASR Studio over TCP. Sensor runtime, TCP, and ROS 2 DDS have separate controls and lifecycles.
+ASR Android Runtime turns an Android phone into a ROS 2 sensor node. It publishes phone sensor data over DDS and can stream telemetry to ASR Studio over TCP. These are separate transports with separate controls: starting the sensor runtime does not automatically enable TCP or DDS.
 
-The selected Android DDS backend is **Cyclone DDS**. A Fast DDS build is retained for comparison. This repository contains the Android app and its ROS 2 host-side USB diagnostics package; it does not include ASR Studio.
+The primary DDS backend is Cyclone DDS. A Fast DDS build is retained as a comparison variant. The Android application and ROS 2 USB monitor are maintained here; the monitor is also available as a standalone repository: [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor).
 
-## Current status
+## Capabilities
 
-- Cyclone DDS was tested on Mac over USB tethering and Wi-Fi. Both paths discovered peers in under 10 seconds in the recorded tests; this is an observed result, not a network guarantee.
-- Sensor delivery was observed on both paths. Ubuntu and Raspberry Pi live validation remain outstanding.
-- The USB host monitor is optional for Wi-Fi. See [`asr_ros2/README.md`](asr_ros2/README.md).
-- Source and native ROS 2 libraries are included, but a complete clean-machine native build has not yet been demonstrated. The build currently needs an Android ROS 2 prefix with headers and libraries, as described below.
+- Camera, IMU, GPS, battery, environment, microphone, speaker, and flashlight modules, subject to device hardware and Android permissions.
+- ROS 2 topics under a device-specific `/asr_android_<device-id>` namespace.
+- TCP telemetry to ASR Studio on port `4242`.
+- Wi-Fi DDS and USB-tether DDS. The optional host monitor is for USB DDS diagnostics only; Wi-Fi DDS uses an ordinary ROS 2 subscriber or robot node.
 
 ## Requirements
 
-- Android Studio or Android SDK with API 36, NDK, and CMake 3.22.1.
-- An Android device with **arm64-v8a** support. The Cyclone variant requires Android API 28 or later; the Fast DDS variant has a lower minimum API level.
-- The cross-built Android ROS 2 prefix used by the native bridge. Set `ROS2_ANDROID_PREFIX` to a prefix containing `include/` and `lib/`. The app's JNI `.so` files are tracked under `app/src/main/jniLibs/` and `app/src/cyclone/jniLibs/`.
-- ROS 2 host environment for DDS integration; tested host setup used ROS 2 Lyrical and `rmw_fastrtps_cpp`.
+- Android Studio, Android SDK API 36, Android NDK, and CMake 3.22.1.
+- An `arm64-v8a` Android device. Cyclone DDS requires Android API 28 or later; the Fast DDS variant supports API 26 or later.
+- For a source build, an Android ROS 2 prefix containing `include/` and `lib/`. The original cross-build prefix is not included. Set `ROS2_ANDROID_PREFIX` to a compatible prefix; the scripts under `scripts/` are maintainer-oriented and also need the ROS 2 sources and Android NDK.
+- For DDS, a ROS 2 host using `rmw_fastrtps_cpp` and the same `ROS_DOMAIN_ID` as the phone. The tested default is domain `0`.
 
-The original local cross-build prefix is not part of this repository. Contributors need to provide a compatible Android ROS 2 prefix themselves; the helper scripts in `scripts/` are maintainer-oriented cross-build steps and require the ROS 2 source workspace and Android NDK.
+## Build
 
-## Build the app
-
-From the repository root, set the prefix and build the Cyclone variant:
+From the repository root, set the Android ROS 2 prefix and build the Cyclone variant:
 
 ```bash
 export ROS2_ANDROID_PREFIX=/path/to/android/ros2/install
 ./gradlew :app:assembleCycloneDebug
 ```
 
-To build the Fast DDS comparison variant:
+The Fast DDS comparison variant can be built with:
 
 ```bash
 export ROS2_ANDROID_PREFIX=/path/to/android/ros2/install
 ./gradlew :app:assembleFastddsDebug
 ```
 
-Cyclone and Fast DDS have separate app IDs and can be installed side by side. Do not run both sensor runtimes at the same time: they currently use the same ROS 2 node name on a given device.
+The variants have separate application IDs and can be installed side by side. Do not run both sensor runtimes simultaneously on one device; they use the same ROS 2 node name.
 
-## Run and connect
+The current Android version is `1.0`; the Cyclone build adds the `-cyclone` version suffix. The app displays its selected DDS backend and exact build version beneath the app name.
 
-1. Install and open **ASR Runtime (Cyclone DDS)**, then grant the Android permissions for the sensors you want to use.
-2. Start the sensor runtime in the app. This starts phone sensor capture; it does not automatically enable TCP or DDS.
-3. Enable **Wi-Fi DDS**, **USB DDS**, or both in the ROS 2 section. For USB, also connect the cable and enable Android USB tethering.
-4. Keep the phone and ROS 2 host on the same `ROS_DOMAIN_ID` (default `0`).
-5. Inspect the phone from an existing robot node, or use standard ROS 2 tools on the host.
+## Start the phone runtime
 
-For a USB host-side diagnostic that stays running and reports discovered nodes and received sensor messages:
+1. Install and open **ASR Android Runtime**. Choose the Cyclone DDS build for the primary configuration.
+2. Grant permissions for the sensors you intend to use.
+3. Start **Runtime**. This starts the phone sensor services.
+4. Enable the desired transport separately: **Wi-Fi DDS**, **USB DDS**, or the **TCP · ASR Studio** connection.
+5. Enable the sensor modules required by your application. Available data depends on the phone hardware, permissions, and module state.
 
-```bash
-ros2 launch asr_ros2 connect.launch.py transport:=usb
-```
+## Connect to ASR Studio over TCP
 
-This helper is USB-only. Wi-Fi DDS does not need it; use a normal ROS 2 node or subscriber over Wi-Fi. It is a diagnostic monitor, not a requirement for DDS discovery. Raspberry Pi use is expected with a compatible ROS 2 setup and USB-tether interface, but remains unverified.
+TCP is for the ASR Studio desktop application; it is independent of ROS 2 DDS.
 
-TCP to ASR Studio is separate from DDS. For ADB TCP forwarding, the app’s TCP section shows the required host and port instructions; DDS does not use `adb reverse`.
+### Wi-Fi TCP
 
-## ROS 2 topics
+1. Put the phone and computer on the same reachable network.
+2. In ASR Studio, open **Devices**, select **Wi-Fi**, enter the computer's local IP, then choose **Listen (Server)**.
+3. In the Android app's TCP section, enable the connection and enter the computer IP with port `4242`.
 
-The node namespace is device-specific: `/asr_android_<device-id>`. Topic names below are relative to that namespace, so two phones publish under different namespaces.
+### USB / ADB TCP
 
-| Topic suffix | Type | Notes |
+1. Connect the phone over USB and authorize USB debugging on the computer.
+2. In ASR Studio, open **Devices**, select **USB / ADB**, and press **Auto-Configure USB / ADB (1-Click Setup)**. This runs `adb reverse tcp:4242 tcp:4242` for you.
+3. Choose **Listen (Server)** in ASR Studio.
+4. Enable TCP in the Android app and use host `127.0.0.1`, port `4242`.
+
+USB / ADB TCP forwarding does not enable USB DDS. Configure USB tethering separately for DDS.
+
+## Connect to ROS 2 DDS
+
+The phone uses Cyclone DDS. The documented host configuration uses ROS 2 Lyrical and `rmw_fastrtps_cpp`; the host and Android participant interoperate over the selected network.
+
+### Wi-Fi DDS
+
+1. Connect the phone and ROS 2 host to a network that permits peer-to-peer DDS discovery.
+2. Set the same `ROS_DOMAIN_ID` on both sides (default `0`).
+3. Start the phone runtime, enable **Wi-Fi DDS**, and enable the required sensors.
+4. Discover the device-specific namespace with your normal ROS 2 tools or robot node. **The USB link monitor is not used for Wi-Fi.**
+
+### USB-tether DDS
+
+1. Connect the phone to the ROS 2 host and enable Android **USB tethering** in system settings.
+2. Start the phone runtime and enable **USB DDS**. For an isolated USB check, leave Wi-Fi DDS off.
+3. In a sourced ROS 2 host environment using `rmw_fastrtps_cpp` and the same domain, run the persistent USB diagnostic:
+
+   ```bash
+   ros2 launch asr_ros2 connect.launch.py transport:=usb
+   ```
+
+4. If the host interface cannot be selected automatically, pass its name. For example, some macOS USB-tether setups use `feth0`:
+
+   ```bash
+   ros2 launch asr_ros2 connect.launch.py transport:=usb interface:=feth0
+   ```
+
+This monitor is optional diagnostic software: it reports graph visibility and actual sensor callbacks separately. It does not start Android runtime or enable tethering. Raspberry Pi use is expected with a compatible ROS 2 installation and USB-tether interface, but has not yet been validated on-device.
+
+The standalone package installation and detailed diagnostic interpretation are documented in [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor). A copy is also present under [`asr_ros2/`](asr_ros2/README.md).
+
+## ROS 2 topic reference
+
+Topics are relative to `/asr_android_<device-id>`. For example, a device with ID `168` publishes IMU data on `/asr_android_168/imu`. Sensor availability and message rates depend on hardware, permissions, and module state.
+
+| Topic suffix | ROS 2 type | Description |
 | --- | --- | --- |
-| `status` | `std_msgs/msg/String` | Runtime heartbeat/status |
-| `capabilities` | `std_msgs/msg/String` | Detected phone capabilities |
-| `imu` | `sensor_msgs/msg/Imu` | Accelerometer, gyroscope, orientation |
+| `status` | `std_msgs/msg/String` | Runtime status heartbeat |
+| `capabilities` | `std_msgs/msg/String` | Available device capabilities |
+| `imu` | `sensor_msgs/msg/Imu` | Orientation and inertial data |
 | `gps` | `sensor_msgs/msg/NavSatFix` | Location, when available and permitted |
 | `battery` | `sensor_msgs/msg/BatteryState` | Event-driven battery state |
 | `camera/image/compressed` | `sensor_msgs/msg/CompressedImage` | JPEG camera frames |
 | `camera/camera_info` | `sensor_msgs/msg/CameraInfo` | Camera calibration and image dimensions |
-| `environment/illuminance` | `sensor_msgs/msg/Illuminance` | When supported by phone hardware |
-| `environment/pressure` | `sensor_msgs/msg/FluidPressure` | When supported by phone hardware |
-| `environment/temperature` | `sensor_msgs/msg/Temperature` | When supported by phone hardware |
-| `environment/relative_humidity` | `sensor_msgs/msg/RelativeHumidity` | When supported by phone hardware |
-| `motion/steps` | `std_msgs/msg/UInt32` | When the phone provides a step counter |
+| `environment/illuminance` | `sensor_msgs/msg/Illuminance` | Ambient light, when supported |
+| `environment/pressure` | `sensor_msgs/msg/FluidPressure` | Pressure, when supported |
+| `environment/temperature` | `sensor_msgs/msg/Temperature` | Temperature, when supported |
+| `environment/relative_humidity` | `sensor_msgs/msg/RelativeHumidity` | Humidity, when supported |
+| `motion/steps` | `std_msgs/msg/UInt32` | Step count, when supported |
 | `audio/raw` | `std_msgs/msg/Int16MultiArray` | Microphone samples when audio capture is enabled |
-| `test/in` | `std_msgs/msg/String` | Inbound test/control topic |
+| `test/in` | `std_msgs/msg/String` | Inbound test/control message |
 | `flashlight` | `std_msgs/msg/String` | Inbound flashlight command |
 | `speaker/speech` | `std_msgs/msg/String` | Inbound text-to-speech command |
 
-Hardware and Android permissions determine which sensor topics provide data. Start the sensor runtime and enable the relevant module before expecting sensor messages.
+The helper currently monitors `imu`, `camera/image/compressed`, `battery`, and `status`; it does not subscribe to every topic in this table.
+
+## Validation status
+
+Cyclone DDS was exercised on macOS over Wi-Fi and USB tethering, with ROS graph discovery and sensor delivery observed. These results describe the tested setup, not a guarantee for every network. Ubuntu and Raspberry Pi live transport validation remain outstanding. See [`docs/android-dds-backend-comparison.md`](docs/android-dds-backend-comparison.md) for recorded comparisons and limits.
 
 ## Repository layout
 
-- `app/` — Android application, Java/Kotlin sources, JNI bridge, and packaged native libraries.
-- `asr_ros2/` — optional ROS 2 host-side USB link and sensor-flow monitor.
-- `docs/android-dds-backend-comparison.md` — recorded Cyclone DDS and Fast DDS observations and validation status.
-- `scripts/` — maintainer-oriented Android ROS 2 native cross-build scripts.
+- `app/` — Android application, JNI bridge, and packaged native libraries.
+- `asr_ros2/` — ROS 2 USB link and sensor-flow monitor.
+- `docs/` — transport validation, milestones, and release checklist.
+- `scripts/` — maintainer-oriented native Android ROS 2 cross-build tools.
 
-## Release and licensing
+## Source availability and licensing
 
-This repository is being prepared for an open-source release. **Do not redistribute it until a project license is selected and the license/notice obligations for the vendored source and packaged native libraries are documented.** The current ROS 2 helper package metadata still says `Proprietary` and uses a placeholder maintainer contact. Those fields must also be resolved before release.
+The GitHub repository is public. Public visibility does not itself grant an open-source license. The Android ROS 2 bridge includes vendored or packaged third-party sources and native libraries; their license and notice obligations must be resolved before a distributable open-source release. The embedded ROS 2 helper package also still has a `Proprietary` license field and placeholder maintainer contact in its package metadata. Check the repository's license files and release checklist before redistributing builds or packages.

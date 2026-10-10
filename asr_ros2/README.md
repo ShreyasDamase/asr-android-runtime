@@ -1,6 +1,6 @@
 # ASR ROS 2 host helper
 
-`asr_ros2` is a persistent ROS 2 host node for connecting to the ASR Android Runtime. It discovers the phone's ROS graph, subscribes to available sensor topics, and reports graph visibility separately from actual message delivery. It does not require Foxglove, RQT, or a short-lived ROS 2 CLI command to keep the host participant present.
+`asr_ros2` is a persistent, USB-only ROS 2 host monitor for the ASR Android Runtime. It discovers the phone's ROS graph, subscribes to selected sensor topics, and reports graph visibility separately from actual message delivery. It does not require Foxglove, RQT, or a short-lived ROS 2 CLI command to keep the host participant present. The standalone repository is [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor).
 
 ## Compatibility
 
@@ -99,6 +99,6 @@ The under-10-second target was met in these runs; this is an observed result, no
 
 Stop the helper with Ctrl+C. It shuts down its ROS node and subscriptions cleanly. The optional Discovery Server launch arguments are experimental and are not needed for ordinary USB or Wi-Fi discovery.
 
-## Public release note
+## Source availability and licensing
 
-This package is source-buildable but has not been published to the ROS Index or as a binary package. Before an open-source release, replace the current proprietary license metadata and placeholder maintainer contact with the project's chosen license and a real maintainer address.
+The source is public, but this package has not been published to the ROS Index or as a binary package. Public visibility does not itself grant an open-source license. The package manifest still contains a `Proprietary` license field and placeholder maintainer contact; resolve both before redistributing the package or submitting it to the ROS Index.
