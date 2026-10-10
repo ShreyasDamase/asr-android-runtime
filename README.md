@@ -80,10 +80,14 @@ The phone uses Cyclone DDS. The documented host configuration uses ROS 2 Lyrical
 
 ### Wi-Fi DDS
 
-1. Connect the phone and ROS 2 host to a network that permits peer-to-peer DDS discovery.
-2. Set the same `ROS_DOMAIN_ID` on both sides (default `0`).
-3. Start the phone runtime, enable **Wi-Fi DDS**, and enable the required sensors.
-4. Discover the device-specific namespace with your normal ROS 2 tools or robot node. **The USB link monitor is not used for Wi-Fi.**
+1. Connect the phone and ROS 2 host to the same Wi-Fi network that permits peer-to-peer DDS discovery.
+2. Set matching `ROS_DOMAIN_ID` on both sides (default `0`) and use `rmw_fastrtps_cpp` on the host.
+3. Start phone runtime, enable **Wi-Fi DDS**, and enable the required sensors. The phone will display **"Waiting for discovery"** until a ROS 2 participant or subscriber is active on the network.
+4. Launch the companion helper on the host to monitor the link and activate discovery:
+   ```bash
+   ros2 launch asr_ros2 connect.launch.py transport:=wifi
+   ```
+   Or discover phone topics directly using your robot node or standard ROS 2 tools (`ros2 topic list`, `rqt`). As soon as an active subscriber is listening, the phone transitions into active streaming.
 
 ### USB-tether DDS
 
