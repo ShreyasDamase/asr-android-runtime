@@ -20,9 +20,11 @@ import java.util.concurrent.atomic.AtomicLong
 class TransportManager : SensorModule {
 
     override val id: String = "transport"
+    @Volatile
     override var state: ModuleState = ModuleState.STOPPED
 
     private val transports = mutableListOf<Transport>()
+    private val enabledTransportTypes = mutableSetOf<String>()
 
     private val _totalPacketsSent  = AtomicLong(0)
     private val _totalPacketDrops  = AtomicLong(0)
@@ -38,7 +40,7 @@ class TransportManager : SensorModule {
         transports.add(transport)
     }
 
-    fun isAnyConnected(): Boolean = transports.any { it.isConnected }
+    fun isAnyConnected(): Boolean = transports.any { it.type != "log" && it.isConnected }
 
     /** Called by [org.asr.runtime.transport.TcpTransport] when a reconnect occurs. */
     fun notifyReconnect() {
@@ -50,22 +52,64 @@ class TransportManager : SensorModule {
         _totalCrcFailures.incrementAndGet()
     }
 
+    @Synchronized
+    fun startTransport(type: String) {
+        val transport = transports.firstOrNull { it.type == type }
+        if (transport == null) {
+            Log.w(TAG, "Ignoring start request for unknown transport '$type'")
+            return
+        }
+        if (!enabledTransportTypes.add(type)) return
+        try {
+            transport.connect()
+            updateState()
+        } catch (t: Throwable) {
+            enabledTransportTypes.remove(type)
+            updateState()
+            Log.e(TAG, "Failed to start transport '$type'", t)
+        }
+    }
+
+    @Synchronized
+    fun stopTransport(type: String) {
+        val transport = transports.firstOrNull { it.type == type } ?: return
+        if (!enabledTransportTypes.remove(type)) return
+        try {
+            transport.disconnect()
+        } catch (t: Throwable) {
+            Log.w(TAG, "Error stopping transport '$type'", t)
+        } finally {
+            updateState()
+        }
+    }
+
+    @Synchronized
+    fun isTransportEnabled(type: String): Boolean = type in enabledTransportTypes
+
+    @Synchronized
     override fun start() {
-        state = ModuleState.STARTING
-        transports.forEach { it.connect() }
-        Log.i(TAG, "Transport manager started with ${transports.size} transport(s)")
-        state = ModuleState.RUNNING
+        // Transport lifecycles are controlled by their own switches. This
+        // SensorModule hook runs with the sensor runtime and must not start TCP.
+        updateState()
     }
 
+    @Synchronized
     override fun stop() {
-        state = ModuleState.STOPPING
-        transports.forEach { it.disconnect() }
-        Log.i(TAG, "Transport manager stopped")
-        state = ModuleState.STOPPED
+        // Runtime stop leaves explicitly enabled transports alone.
+        updateState()
     }
 
+    @Synchronized
     override fun release() {
-        stop()
+        // Service destruction is a final cleanup boundary, unlike the runtime
+        // stop hook above. Disconnect any transport still enabled here.
+        transports.forEach { transport ->
+            if (enabledTransportTypes.remove(transport.type)) {
+                runCatching { transport.disconnect() }
+                    .onFailure { Log.w(TAG, "Error releasing transport '${transport.type}'", it) }
+            }
+        }
+        updateState()
         transports.clear()
     }
 
@@ -75,14 +119,14 @@ class TransportManager : SensorModule {
      * Transport never inspects the packet content — it is a pure byte pipe.
      */
     fun send(packet: ByteArray) {
-        var sentToAny = false
+        var sentToNetwork = false
         transports.forEach { transport ->
             if (transport.isConnected) {
                 transport.send(packet)
-                sentToAny = true
+                if (transport.type != "log") sentToNetwork = true
             }
         }
-        if (sentToAny) {
+        if (sentToNetwork) {
             _totalPacketsSent.incrementAndGet()
         } else {
             _totalPacketDrops.incrementAndGet()
@@ -98,6 +142,10 @@ class TransportManager : SensorModule {
         "crc_failures"  to _totalCrcFailures.get(),
         "reconnects"    to _reconnectCount.get()
     )
+
+    private fun updateState() {
+        state = if (enabledTransportTypes.any { it != "log" }) ModuleState.RUNNING else ModuleState.STOPPED
+    }
 
     companion object {
         private const val TAG = "AsrTransport"

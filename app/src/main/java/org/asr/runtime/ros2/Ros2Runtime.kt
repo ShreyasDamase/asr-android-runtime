@@ -3,12 +3,14 @@ package org.asr.runtime.ros2
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 import java.io.File
+import java.net.NetworkInterface
 
 enum class Ros2State {
     DISABLED,
@@ -16,6 +18,7 @@ enum class Ros2State {
     DDS_INITIALIZING,
     NODE_READY,
     WAITING_FOR_DISCOVERY,
+    WAITING_FOR_INTERFACE,
     ACTIVE,
     DISCONNECTED,
     ERROR
@@ -25,7 +28,8 @@ data class Ros2Status(
     val state: Ros2State,
     val nodeName: String? = null,
     val nodeNamespace: String? = null,
-    val domainId: Int = 0
+    val domainId: Int = 0,
+    val pathSummary: String = ""
 )
 
 class Ros2Runtime(private val context: Context) {
@@ -33,6 +37,7 @@ class Ros2Runtime(private val context: Context) {
     interface Listener {
         fun onFlashlightCommand(on: Boolean)
         fun onSpeakerCommand(text: String)
+        fun onDdsInterfacesChanged()
     }
 
     var listener: Listener? = null
@@ -42,11 +47,17 @@ class Ros2Runtime(private val context: Context) {
 
     private var heartbeatRunnable: Runnable? = null
     private var discoveryPollingRunnable: Runnable? = null
-    private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
-    private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
-    private var runtimeReady = false
+    private var interfaceMonitorRunnable: Runnable? = null
+    @Volatile private var discoveryStartedAtMs: Long = 0L
+    @Volatile private var lastDiscoveryLogAtMs: Long = 0L
+    @Volatile private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
+    @Volatile private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
+    @Volatile private var runtimeReady = false
+    @Volatile private var wifiPathEnabled: Boolean = prefs.getBoolean(PREF_DDS_WIFI_ENABLED, prefs.getBoolean(PREF_ROS2_ENABLED, false))
+    @Volatile private var usbPathEnabled: Boolean = prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
     private var lastNodeName: String? = null
     private var lastNodeNamespace: String? = null
+    @Volatile private var lastSelectedInterfaceSnapshot: List<String>? = null
     private val _status = MutableStateFlow(
         Ros2Status(if (enabled) Ros2State.DISCONNECTED else Ros2State.DISABLED, domainId = domainId)
     )
@@ -71,6 +82,12 @@ class Ros2Runtime(private val context: Context) {
         domainId = value
         prefs.edit().putInt(PREF_ROS2_DOMAIN_ID, value).apply()
         _status.value = _status.value.copy(domainId = domainId)
+    }
+
+    fun setTransportPaths(wifiEnabled: Boolean, usbEnabled: Boolean) {
+        wifiPathEnabled = wifiEnabled
+        usbPathEnabled = usbEnabled
+        _status.value = _status.value.copy(pathSummary = describePaths(wifiEnabled, usbEnabled, emptyList()))
     }
 
     fun startIfNeeded(nodeName: String, nodeNamespace: String) {
@@ -99,18 +116,40 @@ class Ros2Runtime(private val context: Context) {
         }
 
         try {
-            _status.value = Ros2Status(Ros2State.INITIALIZING, nodeName, nodeNamespace, domainId)
+            _status.value = Ros2Status(
+                Ros2State.INITIALIZING,
+                nodeName,
+                nodeNamespace,
+                domainId,
+                describePaths(wifiPathEnabled, usbPathEnabled, emptyList())
+            )
             if (!NativeRos2Bridge.isAvailable()) {
                 Log.w(TAG, "Native ROS 2 bridge library is not packaged for this build")
                 _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId)
                 return
             }
 
-            // ── Fast DDS Discovery Optimization ──
+            val selectedInterfaces = resolveSelectedInterfaces()
+            val pathSummary = describePaths(wifiPathEnabled, usbPathEnabled, selectedInterfaces)
+            if (selectedInterfaces.isEmpty()) {
+                _status.value = Ros2Status(
+                    Ros2State.WAITING_FOR_INTERFACE,
+                    nodeName,
+                    nodeNamespace,
+                    domainId,
+                    pathSummary
+                )
+                Log.w(TAG, "No selected DDS network interface is available: $pathSummary")
+                startInterfaceMonitor()
+                return
+            }
+
+            // ── Fast DDS discovery and network-interface configuration ──
             _status.value = _status.value.copy(state = Ros2State.DDS_INITIALIZING)
-            val configPath = writeFastDdsConfig()
-            if (configPath != null) {
-                NativeRos2Bridge.setFastDdsConfigPath(configPath)
+            val configPath = writeFastDdsConfig(selectedInterfaces)
+                ?: throw IllegalStateException("Unable to write Fast DDS profile")
+            if (!NativeRos2Bridge.setFastDdsConfigPath(configPath)) {
+                throw IllegalStateException("Fast DDS rejected the profile path")
             }
 
             val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
@@ -142,7 +181,16 @@ class Ros2Runtime(private val context: Context) {
             NativeRos2Bridge.subscribeString("speaker/speech")
 
             runtimeReady = true
-            _status.value = Ros2Status(Ros2State.WAITING_FOR_DISCOVERY, nodeName, nodeNamespace, domainId)
+            startInterfaceMonitor()
+            _status.value = Ros2Status(
+                Ros2State.WAITING_FOR_DISCOVERY,
+                nodeName,
+                nodeNamespace,
+                domainId,
+                pathSummary
+            )
+            discoveryStartedAtMs = SystemClock.elapsedRealtime()
+            lastDiscoveryLogAtMs = 0L
             
             publishStatus("ASR Android online")
             publishCapabilities()
@@ -157,36 +205,92 @@ class Ros2Runtime(private val context: Context) {
         }
     }
 
-    private fun writeFastDdsConfig(): String? {
+    private fun writeFastDdsConfig(interfaces: List<String>): String? {
         try {
             val file = File(context.cacheDir, "fastdds_asr.xml")
+            // Fast DDS accepts either interface names or IPv4 addresses in its
+            // UDPv4 allowlist. Use the selected interface's concrete address
+            // so the transport binds the intended tether/Wi-Fi path reliably
+            // on Android devices whose native interface lookup differs from
+            // Java's NetworkInterface naming.
+            val allowlistEntries = interfaces.flatMap { name ->
+                val ipv4Addresses = runCatching {
+                    NetworkInterface.getByName(name)?.interfaceAddresses.orEmpty()
+                        .mapNotNull { (it.address as? java.net.Inet4Address)?.hostAddress }
+                }.getOrDefault(emptyList())
+                ipv4Addresses.ifEmpty { listOf(name) }
+            }.distinct()
+            val interfaceRows = allowlistEntries.joinToString("\n") { address ->
+                "                        <interface name=\"${xmlEscape(address)}\" netmask_filter=\"AUTO\"/>"
+            }
+            val discoveryServer = prefs.getString(PREF_DDS_DISCOVERY_SERVER, "").orEmpty()
+            val discoveryServerRows = if (discoveryServer.isEmpty()) {
+                ""
+            } else {
+                val separator = discoveryServer.lastIndexOf(':')
+                require(separator > 0 && separator < discoveryServer.lastIndex) {
+                    "Discovery Server must use IPv4:port format"
+                }
+                val address = discoveryServer.substring(0, separator)
+                val port = discoveryServer.substring(separator + 1).toIntOrNull()
+                require(address.matches(Regex("""\d{1,3}(\.\d{1,3}){3}""")) &&
+                    address.split('.').all { it.toIntOrNull()?.let { octet -> octet in 0..255 } == true }) {
+                    "Discovery Server address must be an IPv4 address"
+                }
+                require(port != null && port in 1..65535) {
+                    "Discovery Server port must be between 1 and 65535"
+                }
+                """
+                                    <discoveryProtocol>CLIENT</discoveryProtocol>
+                                    <discoveryServersList>
+                                        <locator>
+                                            <udpv4>
+                                                <address>${xmlEscape(address)}</address>
+                                                <port>$port</port>
+                                            </udpv4>
+                                        </locator>
+                                    </discoveryServersList>
+                """.trimIndent()
+            }
             val xml = """
                 <?xml version="1.0" encoding="UTF-8" ?>
-                <profiles xmlns="http://www.eprosima.com/XMLSchemas/fastrtps_profiles">
-                    <participant profile_name="asr_participant_profile" is_default_profile="true">
-                        <rtps>
-                            <builtin>
-                                <discovery_config>
-                                    <initial_announcements>
-                                        <count>5</count>
-                                        <period>
-                                            <sec>0</sec>
-                                            <nanosec>200000000</nanosec>
-                                        </period>
-                                    </initial_announcements>
-                                    <leaseDuration>
-                                        <sec>10</sec>
-                                    </leaseDuration>
-                                    <leaseAnnouncementPeriod>
-                                        <sec>2</sec>
-                                    </leaseAnnouncementPeriod>
-                                </discovery_config>
-                            </builtin>
-                        </rtps>
-                    </participant>
-                </profiles>
-            """.trimIndent()
+                <dds xmlns="http://www.eprosima.com">
+                    <profiles>
+                        <transport_descriptors>
+                            <transport_descriptor>
+                                <transport_id>asr_selected_udp</transport_id>
+                                <type>UDPv4</type>
+                                <interfaces>
+                                    <allowlist>
+                $interfaceRows
+                                    </allowlist>
+                                </interfaces>
+                            </transport_descriptor>
+                        </transport_descriptors>
+                        <participant profile_name="asr_participant_profile" is_default_profile="true">
+                            <rtps>
+                                <builtin>
+                                    <discovery_config>
+                                        <initialAnnouncements>
+                                            <count>5</count>
+                                            <period><sec>0</sec><nanosec>200000000</nanosec></period>
+                                        </initialAnnouncements>
+                $discoveryServerRows
+                                            <leaseDuration><sec>10</sec></leaseDuration>
+                                            <leaseAnnouncement><sec>2</sec></leaseAnnouncement>
+                                        </discovery_config>
+                                </builtin>
+                                <userTransports>
+                                    <transport_id>asr_selected_udp</transport_id>
+                                </userTransports>
+                                <useBuiltinTransports>false</useBuiltinTransports>
+                            </rtps>
+                        </participant>
+                    </profiles>
+                </dds>
+            """.trimIndent().trimStart()
             file.writeText(xml)
+            Log.i(TAG, "Fast DDS UDPv4 allowlist for $interfaces: $allowlistEntries")
             return file.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write Fast DDS config", e)
@@ -194,20 +298,126 @@ class Ros2Runtime(private val context: Context) {
         }
     }
 
+    private fun resolveSelectedInterfaces(): List<String> = runCatching {
+        NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+            .filter { it.isUp && !it.isLoopback }
+            .mapNotNull { networkInterface ->
+                val name = networkInterface.name.lowercase()
+                val isWifi = name.startsWith("wlan") || name.startsWith("wifi")
+                val isUsb = listOf("rndis", "usb", "ncm", "ecm", "eth", "enx")
+                    .any { prefix -> name.startsWith(prefix) }
+                if ((wifiPathEnabled && isWifi) || (usbPathEnabled && isUsb)) networkInterface.name else null
+            }
+            .distinct()
+            .sorted()
+    }.onFailure { Log.w(TAG, "Unable to enumerate DDS network interfaces", it) }
+        .getOrDefault(emptyList())
+
+    /**
+     * USB tethering may appear after DDS starts, or retain its interface name
+     * while its address changes. Recreate the participant when a selected
+     * network path changes so Fast DDS refreshes its UDP locators.
+     */
+    private fun startInterfaceMonitor() {
+        stopInterfaceMonitor()
+        if (!enabled || (!wifiPathEnabled && !usbPathEnabled)) return
+
+        lastSelectedInterfaceSnapshot = selectedInterfaceSnapshot()
+        val monitor = object : Runnable {
+            override fun run() {
+                if (!enabled || (!wifiPathEnabled && !usbPathEnabled)) {
+                    stopInterfaceMonitor()
+                    return
+                }
+
+                val current = selectedInterfaceSnapshot()
+                val previous = lastSelectedInterfaceSnapshot
+                if (previous != null && current != previous) {
+                    lastSelectedInterfaceSnapshot = current
+                    Log.i(TAG, "Selected DDS interfaces changed: $previous -> $current")
+                    listener?.onDdsInterfacesChanged()
+                    return
+                }
+
+                mainHandler.postDelayed(this, INTERFACE_POLL_INTERVAL_MS)
+            }
+        }
+        interfaceMonitorRunnable = monitor
+        mainHandler.postDelayed(monitor, INTERFACE_POLL_INTERVAL_MS)
+    }
+
+    private fun stopInterfaceMonitor() {
+        interfaceMonitorRunnable?.let(mainHandler::removeCallbacks)
+        interfaceMonitorRunnable = null
+        lastSelectedInterfaceSnapshot = null
+    }
+
+    private fun selectedInterfaceSnapshot(): List<String> = runCatching {
+        NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+            .filter { it.isUp && !it.isLoopback }
+            .mapNotNull { networkInterface ->
+                val name = networkInterface.name.lowercase()
+                val isWifi = name.startsWith("wlan") || name.startsWith("wifi")
+                val isUsb = listOf("rndis", "usb", "ncm", "ecm", "eth", "enx")
+                    .any { prefix -> name.startsWith(prefix) }
+                if ((wifiPathEnabled && isWifi) || (usbPathEnabled && isUsb)) {
+                    val addresses = networkInterface.interfaceAddresses
+                        .map { it.address.hostAddress.orEmpty().substringBefore('%') }
+                        .sorted()
+                    "${networkInterface.name}:${addresses.joinToString(",")}"
+                } else null
+            }
+            .sorted()
+    }.onFailure { Log.w(TAG, "Unable to refresh selected DDS interfaces", it) }
+        .getOrDefault(emptyList())
+
+    private fun describePaths(wifi: Boolean, usb: Boolean, interfaces: List<String>): String {
+        val selected = buildList {
+            if (wifi) add("Wi-Fi")
+            if (usb) add("USB")
+        }.ifEmpty { listOf("none") }
+        val hasWifi = interfaces.any { it.startsWith("wlan", true) || it.startsWith("wifi", true) }
+        val hasUsb = interfaces.any {
+            listOf("rndis", "usb", "ncm", "ecm", "eth", "enx")
+                .any { prefix -> it.startsWith(prefix, true) }
+        }
+        val missing = buildList {
+            if (wifi && !hasWifi) add("Wi-Fi link not found")
+            if (usb && !hasUsb) add("USB link not found; enable USB tethering")
+        }
+        return buildList {
+            add("Selected: ${selected.joinToString(" + ")}")
+            if (interfaces.isNotEmpty()) add("interfaces: ${interfaces.joinToString()}")
+            addAll(missing)
+        }.joinToString(" · ")
+    }
+
+    private fun xmlEscape(value: String): String = value
+        .replace("&", "&amp;")
+        .replace("\"", "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+
     private fun startDiscoveryPolling() {
         discoveryPollingRunnable?.let { mainHandler.removeCallbacks(it) }
         discoveryPollingRunnable = object : Runnable {
             override fun run() {
                 if (!runtimeReady) return
-                val count = NativeRos2Bridge.getDiscoveredParticipantCount()
-                if (count > 1) {
-                    if (_status.value.state == Ros2State.WAITING_FOR_DISCOVERY) {
-                        Log.i(TAG, "DDS Discovery successful: $count participants found")
-                        _status.value = _status.value.copy(state = Ros2State.ACTIVE)
-                    }
-                    // Stop polling once active
-                    discoveryPollingRunnable = null
-                    return
+                val nodeCount = NativeRos2Bridge.getDiscoveredRosNodeCount()
+                val now = SystemClock.elapsedRealtime()
+                val elapsedMs = (now - discoveryStartedAtMs).coerceAtLeast(0L)
+                if (now - lastDiscoveryLogAtMs >= DISCOVERY_LOG_INTERVAL_MS) {
+                    Log.i(TAG, "DDS graph probe: visibleRosNodes=$nodeCount elapsedMs=$elapsedMs paths=${_status.value.pathSummary}")
+                    lastDiscoveryLogAtMs = now
+                }
+                val shouldBeActive = nodeCount > 0
+                val currentState = _status.value.state
+                if (shouldBeActive && currentState != Ros2State.ACTIVE) {
+                    Log.i(TAG, "Remote ROS peers became visible after ${elapsedMs}ms: $nodeCount peers")
+                    _status.value = _status.value.copy(state = Ros2State.ACTIVE)
+                } else if (!shouldBeActive && currentState == Ros2State.ACTIVE) {
+                    Log.w(TAG, "Remote ROS peers disappeared after ${elapsedMs}ms")
+                    _status.value = _status.value.copy(state = Ros2State.WAITING_FOR_DISCOVERY)
                 }
                 mainHandler.postDelayed(this, 1000)
             }
@@ -220,6 +430,7 @@ class Ros2Runtime(private val context: Context) {
         heartbeatRunnable = null
         discoveryPollingRunnable?.let { mainHandler.removeCallbacks(it) }
         discoveryPollingRunnable = null
+        stopInterfaceMonitor()
         try {
             if (NativeRos2Bridge.isAvailable()) {
                 NativeRos2Bridge.setMessageListener(null)
@@ -318,8 +529,13 @@ class Ros2Runtime(private val context: Context) {
 
     companion object {
         private const val TAG = "Ros2Runtime"
+        private const val DISCOVERY_LOG_INTERVAL_MS = 5_000L
+        private const val INTERFACE_POLL_INTERVAL_MS = 1_000L
         private const val PREFS_NAME = "asr_prefs"
         private const val PREF_ROS2_ENABLED = "ros2_enabled"
         private const val PREF_ROS2_DOMAIN_ID = "ros2_domain_id"
+        private const val PREF_DDS_DISCOVERY_SERVER = "dds_discovery_server"
+        private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
+        private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
     }
 }

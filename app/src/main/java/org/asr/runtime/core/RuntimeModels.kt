@@ -6,8 +6,6 @@ package org.asr.runtime.core
 enum class RuntimeState {
     STOPPED,
     STARTING,
-    CONNECTING,
-    CONNECTED,
     STREAMING,
     STOPPING,
     ERROR

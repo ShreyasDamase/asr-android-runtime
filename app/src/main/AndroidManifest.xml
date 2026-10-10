@@ -26,6 +26,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -38,7 +39,7 @@
             android:name=".core.AsrService"
             android:enabled="true"
             android:exported="true"
-            android:foregroundServiceType="camera|microphone|location" />
+            android:foregroundServiceType="camera|microphone|location|connectedDevice" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
