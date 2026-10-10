@@ -1,6 +1,6 @@
 # ASR Runtime (Cameraros) — Android Sensor Runtime for Robotics
 
-An Android-based robotics sensor runtime that transforms commercial Android smartphones into high-performance, edge-calibrated multi-sensor suites for ROS 2 and robotics platforms.
+An Android-based robotics sensor runtime that turns commercial Android smartphones into multi-sensor ROS 2 devices. Cyclone DDS is the selected DDS backend after USB and Wi-Fi testing; a Fast DDS build remains available for comparison.
 
 ---
 
@@ -38,7 +38,7 @@ adb shell "am force-stop org.asr.runtime && am start -n org.asr.runtime/.MainAct
 
 ## 2. ROS 2 Integration Guide
 
-ASR includes a native ROS 2 transport powered by `Fast DDS`. It allows the Android device to appear as a first-class ROS 2 node on your Wi-Fi network.
+ASR includes a native ROS 2 transport powered by Cyclone DDS. USB tethering and Wi-Fi are independent DDS paths in the app. The Fast DDS variant remains available for comparison; see [the backend comparison](docs/android-dds-backend-comparison.md).
 
 ### 2.1 Enable ROS 2 Runtime
 ROS 2 is disabled by default. Enable it and set your Domain ID via ADB:
@@ -77,7 +77,7 @@ Once active, the node `/asr_android` will publish/subscribe to the following:
 | `/asr_android/test/in` | `std_msgs/msg/String` | Inbound test topic (Subscription) |
 
 ### 2.4 Example Workstation Commands
-On your ROS 2 workstation (with `rmw_fastrtps_cpp` installed):
+On your ROS 2 workstation (the tested host setup uses `rmw_fastrtps_cpp`, which interoperates with the phone's Cyclone DDS participant):
 
 ```bash
 # Export RMW implementation

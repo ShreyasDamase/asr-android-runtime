@@ -4,6 +4,7 @@ project("asr_ros2")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(ASR_DDS_BACKEND "fastdds" CACHE STRING "ROS 2 DDS backend for ASR")
 
 # Define the Android ROS 2 install prefix
 set(ROS2_ANDROID_PREFIX "/Users/shreyasdamase/ros2_android_install")
@@ -28,10 +29,30 @@ import_ros2_library(rosidl_dynamic_typesupport librosidl_dynamic_typesupport.so)
 import_ros2_library(rosidl_typesupport_c librosidl_typesupport_c.so)
 import_ros2_library(rmw librmw.so)
 import_ros2_library(rcl librcl.so)
-import_ros2_library(rmw_fastrtps_cpp librmw_fastrtps_cpp.so)
-import_ros2_library(rmw_fastrtps_shared_cpp librmw_fastrtps_shared_cpp.so)
-import_ros2_library(fastdds libfastdds.so)
-import_ros2_library(fastcdr libfastcdr.so)
+if(ASR_DDS_BACKEND STREQUAL "cyclone")
+    set(CYCLONE_ANDROID_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../cyclone/jniLibs/arm64-v8a")
+    # Cyclone DDS consumes ROSIDL introspection C type support. The generic
+    # rosidl_typesupport_c handles resolve to null for Cyclone unless these
+    # generated message introspection libraries are loaded into the APK.
+    import_ros2_library(std_msgs_typesupport_introspection_c libstd_msgs__rosidl_typesupport_introspection_c.so)
+    import_ros2_library(sensor_msgs_typesupport_introspection_c libsensor_msgs__rosidl_typesupport_introspection_c.so)
+    import_ros2_library(geometry_msgs_typesupport_introspection_c libgeometry_msgs__rosidl_typesupport_introspection_c.so)
+    add_library(rmw_cyclonedds_cpp SHARED IMPORTED)
+    set_target_properties(rmw_cyclonedds_cpp PROPERTIES
+        IMPORTED_LOCATION "${CYCLONE_ANDROID_LIB_DIR}/librmw_cyclonedds_cpp.so"
+        IMPORTED_NO_SONAME TRUE)
+    add_library(ddsc SHARED IMPORTED)
+    set_target_properties(ddsc PROPERTIES
+        IMPORTED_LOCATION "${CYCLONE_ANDROID_LIB_DIR}/libddsc.so"
+        IMPORTED_NO_SONAME TRUE)
+elseif(ASR_DDS_BACKEND STREQUAL "fastdds")
+    import_ros2_library(rmw_fastrtps_cpp librmw_fastrtps_cpp.so)
+    import_ros2_library(rmw_fastrtps_shared_cpp librmw_fastrtps_shared_cpp.so)
+    import_ros2_library(fastdds libfastdds.so)
+    import_ros2_library(fastcdr libfastcdr.so)
+else()
+    message(FATAL_ERROR "Unsupported ASR_DDS_BACKEND='${ASR_DDS_BACKEND}'")
+endif()
 import_ros2_library(std_msgs_generator_c libstd_msgs__rosidl_generator_c.so)
 import_ros2_library(std_msgs_typesupport_c libstd_msgs__rosidl_typesupport_c.so)
 import_ros2_library(rcl_interfaces_generator_c librcl_interfaces__rosidl_generator_c.so)
@@ -61,10 +82,6 @@ endforeach()
 target_link_libraries(asr_ros2
         rcl
         rmw
-        rmw_fastrtps_cpp
-        rmw_fastrtps_shared_cpp
-        fastdds
-        fastcdr
         std_msgs_typesupport_c
         std_msgs_generator_c
         rcl_interfaces_typesupport_c
@@ -83,3 +100,20 @@ target_link_libraries(asr_ros2
         rosidl_buffer
         rcutils
         log)
+
+if(ASR_DDS_BACKEND STREQUAL "cyclone")
+    target_compile_definitions(asr_ros2 PRIVATE
+            ASR_RMW_IMPLEMENTATION="rmw_cyclonedds_cpp"
+            ASR_USE_CYCLONE_DDS=1)
+    target_link_libraries(asr_ros2
+            rmw_cyclonedds_cpp
+            ddsc
+            "-Wl,--no-as-needed"
+            std_msgs_typesupport_introspection_c
+            sensor_msgs_typesupport_introspection_c
+            geometry_msgs_typesupport_introspection_c
+            "-Wl,--as-needed")
+else()
+    target_compile_definitions(asr_ros2 PRIVATE ASR_RMW_IMPLEMENTATION="rmw_fastrtps_cpp")
+    target_link_libraries(asr_ros2 rmw_fastrtps_cpp rmw_fastrtps_shared_cpp fastdds fastcdr)
+endif()

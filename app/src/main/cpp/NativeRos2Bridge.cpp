@@ -27,21 +27,43 @@
 #include <sensor_msgs/msg/relative_humidity.h>
 #include <sensor_msgs/msg/compressed_image.h>
 #include <sensor_msgs/msg/camera_info.h>
-#include <sensor_msgs/msg/detail/imu__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/nav_sat_fix__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/battery_state__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/illuminance__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/fluid_pressure__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/temperature__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/relative_humidity__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/compressed_image__rosidl_typesupport_fastrtps_c.h>
-#include <sensor_msgs/msg/detail/camera_info__rosidl_typesupport_fastrtps_c.h>
+#include <sensor_msgs/msg/detail/imu__type_support.h>
+#include <sensor_msgs/msg/detail/nav_sat_fix__type_support.h>
+#include <sensor_msgs/msg/detail/battery_state__type_support.h>
+#include <sensor_msgs/msg/detail/illuminance__type_support.h>
+#include <sensor_msgs/msg/detail/fluid_pressure__type_support.h>
+#include <sensor_msgs/msg/detail/temperature__type_support.h>
+#include <sensor_msgs/msg/detail/relative_humidity__type_support.h>
+#include <sensor_msgs/msg/detail/compressed_image__type_support.h>
+#include <sensor_msgs/msg/detail/camera_info__type_support.h>
+#include <rosidl_typesupport_c/rosidl_typesupport_c/message_type_support_dispatch.h>
+#ifdef ASR_USE_CYCLONE_DDS
+#include <std_msgs/msg/detail/string__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/imu__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/nav_sat_fix__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/battery_state__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/illuminance__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/fluid_pressure__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/temperature__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/relative_humidity__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/compressed_image__rosidl_typesupport_introspection_c.h>
+#include <sensor_msgs/msg/detail/camera_info__rosidl_typesupport_introspection_c.h>
+#define ASR_MESSAGE_TYPE_SUPPORT(package_name, namespace_name, message_name) \
+    ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_introspection_c, package_name, namespace_name, message_name)()
+#else
+#define ASR_MESSAGE_TYPE_SUPPORT(package_name, namespace_name, message_name) \
+    ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_c, package_name, namespace_name, message_name)()
+#endif
 #include <rosidl_runtime_c/string_functions.h>
 #include <rosidl_runtime_c/primitives_sequence_functions.h>
 
 #define TAG "NativeRos2Bridge"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+
+#ifndef ASR_RMW_IMPLEMENTATION
+#define ASR_RMW_IMPLEMENTATION "rmw_fastrtps_cpp"
+#endif
 
 static rcl_context_t context;
 static rcl_node_t node;
@@ -211,7 +233,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_initialize(JNIEnv *env, jobject thiz,
         return JNI_TRUE;
     }
 
-    setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
+    setenv("RMW_IMPLEMENTATION", ASR_RMW_IMPLEMENTATION, 1);
     setenv("ROS_NOSHM", "1", 1);
     setenv("ROS_LOCALHOST_ONLY", "0", 1);
     char domain_str[16];
@@ -250,7 +272,7 @@ JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, jint domain_id, jstring j_node_name, jstring j_node_namespace) {
     std::lock_guard<std::mutex> lock(node_mutex);
 
-    setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
+    setenv("RMW_IMPLEMENTATION", ASR_RMW_IMPLEMENTATION, 1);
     setenv("ROS_NOSHM", "1", 1);
     setenv("ROS_LOCALHOST_ONLY", "0", 1);
     char domain_str[16];
@@ -345,7 +367,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_subscribeString(JNIEnv *env, jobject 
     rcl_subscription_t sub = rcl_get_zero_initialized_subscription();
     rcl_subscription_options_t sub_options = rcl_subscription_get_default_options();
 
-    const rosidl_message_type_support_t *ts = ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String);
+    const rosidl_message_type_support_t *ts = ASR_MESSAGE_TYPE_SUPPORT(std_msgs, msg, String);
     if (strstr(topic_name, "flashlight") != nullptr) {
         ts = ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool);
     }
@@ -431,7 +453,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
     jdouble *orientation = env->GetDoubleArrayElements(j_orientation, nullptr);
     rcl_publisher_t *publisher = nullptr;
     bool ok = topic && accel && gyro && orientation &&
-              ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Imu)(), &publisher, 0);
+              ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, Imu), &publisher, 0);
     if (ok) {
         sensor_msgs__msg__Imu msg;
         sensor_msgs__msg__Imu__init(&msg);
@@ -469,7 +491,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishNavSatFix(JNIEnv *env, jobject
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, NavSatFix)(), &publisher, 0);
+    bool ok = topic && ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, NavSatFix), &publisher, 0);
     if (ok) {
         sensor_msgs__msg__NavSatFix msg;
         sensor_msgs__msg__NavSatFix__init(&msg);
@@ -501,7 +523,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishBattery(JNIEnv *env, jobject, 
     rcl_publisher_t *publisher = nullptr;
     // BatteryState represents the latest device state. Retain the last sample
     // for late-joining ROS subscribers, like the runtime status publisher.
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, BatteryState)(), &publisher, 2);
+    bool ok = topic && ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, BatteryState), &publisher, 2);
     if (ok) {
         sensor_msgs__msg__BatteryState msg;
         sensor_msgs__msg__BatteryState__init(&msg);
@@ -541,16 +563,16 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishScalar(JNIEnv *env, jobject, j
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     bool ok = false;
     if (topic && kind == 0) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Illuminance)(), &publisher, 0);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, Illuminance), &publisher, 0);
         if (ok) { sensor_msgs__msg__Illuminance msg; sensor_msgs__msg__Illuminance__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.illuminance = value; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Illuminance__fini(&msg); }
     } else if (topic && kind == 1) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, FluidPressure)(), &publisher, 0);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, FluidPressure), &publisher, 0);
         if (ok) { sensor_msgs__msg__FluidPressure msg; sensor_msgs__msg__FluidPressure__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.fluid_pressure = value * 100.0; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__FluidPressure__fini(&msg); }
     } else if (topic && kind == 2) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, Temperature)(), &publisher, 0);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, Temperature), &publisher, 0);
         if (ok) { sensor_msgs__msg__Temperature msg; sensor_msgs__msg__Temperature__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.temperature = value; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Temperature__fini(&msg); }
     } else if (topic && kind == 3) {
-        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, RelativeHumidity)(), &publisher, 0);
+        rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, RelativeHumidity), &publisher, 0);
         if (ok) { sensor_msgs__msg__RelativeHumidity msg; sensor_msgs__msg__RelativeHumidity__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.relative_humidity = value / 100.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__RelativeHumidity__fini(&msg); }
     }
     if (topic) env->ReleaseStringUTFChars(j_topic, topic);
@@ -566,7 +588,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCompressedImage(JNIEnv *env, j
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     const char *format = env->GetStringUTFChars(j_format, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && format && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CompressedImage)(), &publisher, 0);
+    bool ok = topic && format && ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, CompressedImage), &publisher, 0);
     if (ok) {
         jsize size = env->GetArrayLength(j_data);
         sensor_msgs__msg__CompressedImage msg;
@@ -590,7 +612,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, CameraInfo)(), &publisher, 0);
+    bool ok = topic && ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, CameraInfo), &publisher, 0);
     if (ok) {
         sensor_msgs__msg__CameraInfo msg;
         sensor_msgs__msg__CameraInfo__init(&msg);
@@ -783,6 +805,18 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_setFastDdsConfigPath(JNIEnv *env, job
     if (!path) return JNI_FALSE;
     setenv("FASTDDS_DEFAULT_PROFILES_FILE", path, 1);
     LOGI("Fast DDS profile path set to: %s", path);
+    env->ReleaseStringUTFChars(j_path, path);
+    return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_setCycloneDdsConfigPath(JNIEnv *env, jobject thiz, jstring j_path) {
+    const char *path = env->GetStringUTFChars(j_path, nullptr);
+    if (!path) return JNI_FALSE;
+    std::string uri = "file://";
+    uri += path;
+    setenv("CYCLONEDDS_URI", uri.c_str(), 1);
+    LOGI("Cyclone DDS configuration path set to: %s", path);
     env->ReleaseStringUTFChars(j_path, path);
     return JNI_TRUE;
 }

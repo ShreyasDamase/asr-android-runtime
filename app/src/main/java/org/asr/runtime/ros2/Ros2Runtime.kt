@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import org.asr.runtime.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -144,12 +145,21 @@ class Ros2Runtime(private val context: Context) {
                 return
             }
 
-            // ── Fast DDS discovery and network-interface configuration ──
+            // Configure the selected DDS backend before the native RCL context starts.
             _status.value = _status.value.copy(state = Ros2State.DDS_INITIALIZING)
-            val configPath = writeFastDdsConfig(selectedInterfaces)
-                ?: throw IllegalStateException("Unable to write Fast DDS profile")
-            if (!NativeRos2Bridge.setFastDdsConfigPath(configPath)) {
-                throw IllegalStateException("Fast DDS rejected the profile path")
+            val isCyclone = BuildConfig.ASR_DDS_BACKEND == "cyclone"
+            val configPath = if (isCyclone) {
+                writeCycloneDdsConfig(selectedInterfaces)
+            } else {
+                writeFastDdsConfig(selectedInterfaces)
+            } ?: throw IllegalStateException("Unable to write ${BuildConfig.ASR_DDS_BACKEND} DDS profile")
+            val configured = if (isCyclone) {
+                NativeRos2Bridge.setCycloneDdsConfigPath(configPath)
+            } else {
+                NativeRos2Bridge.setFastDdsConfigPath(configPath)
+            }
+            if (!configured) {
+                throw IllegalStateException("${BuildConfig.ASR_DDS_BACKEND} DDS rejected the profile path")
             }
 
             val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
@@ -297,6 +307,35 @@ class Ros2Runtime(private val context: Context) {
             return null
         }
     }
+
+    private fun writeCycloneDdsConfig(interfaces: List<String>): String? = runCatching {
+        val addresses = interfaces.flatMap { name ->
+            NetworkInterface.getByName(name)?.interfaceAddresses.orEmpty()
+                .mapNotNull { (it.address as? java.net.Inet4Address)?.hostAddress }
+                .map { it.substringBefore('%') }
+        }.distinct().sorted()
+        require(addresses.isNotEmpty()) { "Selected DDS interfaces have no IPv4 addresses: $interfaces" }
+        val interfaceRows = addresses.joinToString("\n") { address ->
+            "                <NetworkInterface address=\"${xmlEscape(address)}\"/>"
+        }
+        val file = File(context.cacheDir, "cyclonedds_asr.xml")
+        file.writeText(
+            """<?xml version="1.0" encoding="UTF-8"?>
+                <CycloneDDS xmlns="https://cdds.io/config">
+                  <Domain Id="$domainId">
+                    <General>
+                      <Interfaces>
+            $interfaceRows
+                      </Interfaces>
+                      <AllowMulticast>default</AllowMulticast>
+                    </General>
+                  </Domain>
+                </CycloneDDS>
+            """.trimIndent()
+        )
+        Log.i(TAG, "Cyclone DDS interface addresses for $interfaces: $addresses")
+        file.absolutePath
+    }.onFailure { Log.e(TAG, "Failed to write Cyclone DDS config", it) }.getOrNull()
 
     private fun resolveSelectedInterfaces(): List<String> = runCatching {
         NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()

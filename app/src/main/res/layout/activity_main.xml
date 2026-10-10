@@ -29,9 +29,10 @@
                     android:textSize="26sp"
                     android:textStyle="bold" />
                 <TextView
+                    android:id="@+id/txtAppBackend"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Robot sensor node"
+                    android:text="Robot sensor node · Fast DDS"
                     android:textColor="#718096"
                     android:textSize="13sp" />
             </LinearLayout>

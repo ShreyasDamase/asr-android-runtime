@@ -84,6 +84,11 @@ class  MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.txtAppBackend.text = if (BuildConfig.ASR_DDS_BACKEND == "cyclone") {
+            "Robot sensor node · Cyclone DDS"
+        } else {
+            "Robot sensor node · Fast DDS"
+        }
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
         setupControls()

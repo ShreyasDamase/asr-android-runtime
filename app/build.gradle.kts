@@ -27,6 +27,31 @@ android {
         }
     }
 
+    flavorDimensions += "ddsBackend"
+    productFlavors {
+        create("fastdds") {
+            dimension = "ddsBackend"
+            buildConfigField("String", "ASR_DDS_BACKEND", "\"fastdds\"")
+            externalNativeBuild {
+                cmake {
+                    arguments += "-DASR_DDS_BACKEND=fastdds"
+                }
+            }
+        }
+        create("cyclone") {
+            dimension = "ddsBackend"
+            applicationIdSuffix = ".cyclone"
+            versionNameSuffix = "-cyclone"
+            minSdk = 28
+            buildConfigField("String", "ASR_DDS_BACKEND", "\"cyclone\"")
+            externalNativeBuild {
+                cmake {
+                    arguments += "-DASR_DDS_BACKEND=cyclone"
+                }
+            }
+        }
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")

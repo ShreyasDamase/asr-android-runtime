@@ -51,6 +51,7 @@ object NativeRos2Bridge {
     /** Number of ROS graph nodes currently visible to this node (not DDS participants). */
     external fun getDiscoveredRosNodeCount(): Int
     external fun setFastDdsConfigPath(path: String): Boolean
+    external fun setCycloneDdsConfigPath(path: String): Boolean
 
     external fun shutdown()
     external fun isNodeReady(): Boolean
