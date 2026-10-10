@@ -33,6 +33,7 @@ ninja.build
 *.obj
 
 # ROS2 / Colcon / Cross-compilation
+ros2_android_install/
 install/
 
 # OS X

@@ -34,24 +34,24 @@ If you are contributing code or building the app yourself, follow these steps:
    ```
 
 ### Step 2: Extract the Archive
-Extract the archive anywhere on your workstation. For example, in your home directory:
+From the `asrandroid` repository root, extract the archive into the project directory:
 ```bash
-unzip ros2_android_install-v1.0.0.zip -d ~
+unzip ros2_android_install-v1.0.0.zip -d .
 ```
-This produces `~/ros2_android_install` containing `include/` and `lib/`.
+This produces `./ros2_android_install` containing `include/` and `lib/`. The folder is intentionally ignored by Git because it contains machine-specific native build artifacts.
 
 ### Step 3: Configure Project Path
 The build system automatically checks your `local.properties` file before falling back to environment variables.
 
 Open (or create) `local.properties` in the repository root and add:
 ```properties
-ROS2_ANDROID_PREFIX=/Users/your-username/ros2_android_install
+ROS2_ANDROID_PREFIX=/absolute/path/to/asrandroid/ros2_android_install
 ```
-*(Replace `/Users/your-username/` with the absolute path on your computer).*
+Replace the example with the absolute path to this folder on your workstation.
 
 > **Tip**: You can alternatively export the environment variable in your shell profile:
 > ```bash
-> export ROS2_ANDROID_PREFIX="$HOME/ros2_android_install"
+> export ROS2_ANDROID_PREFIX="$PWD/ros2_android_install"
 > ```
 
 ### Step 4: Build the Android App
@@ -120,7 +120,7 @@ CMake Error at CMakeLists.txt:15 (message):
   ROS 2 install prefix (must contain include/ and lib/).
 ```
 - **Cause**: Neither `local.properties` nor the `ROS2_ANDROID_PREFIX` environment variable points to a valid directory containing both `include/` and `lib/`.
-- **Solution**: Check your `local.properties` line: `ROS2_ANDROID_PREFIX=/absolute/path/to/ros2_android_install` (avoid relative paths).
+- **Solution**: Check your `local.properties` line: `ROS2_ANDROID_PREFIX=/absolute/path/to/asrandroid/ros2_android_install` (avoid relative paths).
 
 ### Gradle Error: `assembleCycloneExperimentDebug` not found
 
@@ -130,7 +130,7 @@ The current project defines the `cyclone` and `fastdds` DDS flavors and the stan
 ./gradlew :app:assembleCycloneDebug
 ```
 
-In Android Studio, run **Sync Project with Gradle Files**, then choose `app` → `cycloneDebug` in the **Build Variants** tool window. If an old `CycloneExperimentDebug` task remains in a saved Gradle run configuration, replace it with `:app:assembleCycloneDebug` or delete that obsolete run configuration.
+In Android Studio, run **Sync Project with Gradle Files**, then choose `app` → `cycloneDebug` in the **Build Variants** tool window. If Android Studio still requests `CycloneExperimentDebug` after syncing, close the project, remove the generated `.idea/modules/` directory, reopen the project, and sync again. These module files are IDE-generated metadata and can retain removed variants. Also replace or delete any saved Gradle run configuration that still invokes `:app:assembleCycloneExperimentDebug`.
 
 ### CMake Cache Inconsistencies
 If you moved the prefix to a new directory and CMake still looks at the old path, clear the CMake build cache:
