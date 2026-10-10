@@ -2,14 +2,15 @@
 set -euo pipefail
 
 # Build the real Android arm64 RMW implementation and only its ROS 2 dependencies.
-export PATH="/Users/shreyasdamase/rqt-venv/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-TOOLCHAIN="/Users/shreyasdamase/Library/Android/sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake"
-PREFIX="/Users/shreyasdamase/ros2_android_install"
-VENV_PY="/Users/shreyasdamase/rqt-venv/bin/python"
-SOURCE_DIR="/Users/shreyasdamase/ros2_lyrical/src"
-BUILD_DIR="/Users/shreyasdamase/ros2_android_build/rmw_direct_build_v2"
+ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-27.1.12297006}"
+TOOLCHAIN="${ANDROID_TOOLCHAIN_FILE:-$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION/build/cmake/android.toolchain.cmake}"
+PREFIX="${ROS2_ANDROID_PREFIX:?Set ROS2_ANDROID_PREFIX to the Android ROS 2 install prefix}"
+VENV_PY="${PYTHON_EXECUTABLE:-python3}"
+SOURCE_DIR="${ROS2_SOURCE_DIR:?Set ROS2_SOURCE_DIR to the ROS 2 source workspace src directory}"
+BUILD_DIR="${ROS2_ANDROID_BUILD_DIR:-$PWD/build/asr_android_native}/rmw_fastrtps"
 
-export PYTHONPATH="$PREFIX/lib/python3.14/site-packages:/Users/shreyasdamase/rqt-venv/lib/python3.14/site-packages${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$PREFIX/lib/python${ROS2_PYTHON_VERSION:-3.14}/site-packages${ROS2_PYTHON_SITE_PACKAGES:+:$ROS2_PYTHON_SITE_PACKAGES}${PYTHONPATH:+:$PYTHONPATH}"
 # Do not activate this partial merged install: its unfinished lint/test packages
 # have no package.sh hooks. CMake still consumes the completed libraries below.
 unset AMENT_PREFIX_PATH

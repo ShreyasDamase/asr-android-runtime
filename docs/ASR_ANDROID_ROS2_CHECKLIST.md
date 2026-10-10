@@ -1,6 +1,6 @@
 # ASR Android ROS 2 Project Roadmap Checklist
 
-This checklist tracks the implementation status of ROS 2 features in the ASR Android app.
+This checklist records the original ROS 2 implementation roadmap. Its historical verification notes predate the Cyclone DDS backend switch; see [`android-dds-backend-comparison.md`](android-dds-backend-comparison.md) and [`ASR_ANDROID_TRANSPORT_MILESTONES.md`](ASR_ANDROID_TRANSPORT_MILESTONES.md) for current backend and transport status.
 
 ## PHASE 1 — ROS 2 COMMUNICATION CORE
 

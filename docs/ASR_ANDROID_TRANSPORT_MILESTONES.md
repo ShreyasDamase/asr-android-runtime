@@ -1,6 +1,6 @@
 # ASR Android Transport and UI Milestones
 
-All milestones are planned for the `feature/asr-android-commissioning-ui` branch, based on `develop`.
+This document began as a branch plan. The current status below reflects the work on `develop` and its release branch `main`; remaining platform checks are called out explicitly.
 
 ## Lifecycle boundaries
 
@@ -37,17 +37,26 @@ All milestones are planned for the `feature/asr-android-commissioning-ui` branch
 
 ## Milestone 3 — USB-only DDS discovery
 
-**Status: Next.**
+**Status: Implemented; Mac validation passed, Ubuntu and Raspberry Pi validation pending.**
 
 - First validate that the target Android device and robot can establish an IP network link over USB.
-- Configure Fast DDS to use the USB network interface without Wi-Fi DDS discovery when USB-only mode is selected.
+- Configure the selected Android DDS backend (currently Cyclone DDS) to use the USB network interface without Wi-Fi DDS discovery when USB-only mode is selected.
 - Expose the selected path and link/discovery status in the UI and measure discovery time.
 - Do not treat ADB forwarding by itself as a USB DDS network link.
 
 ## Milestone 4 — Wi-Fi discovery and end-to-end validation
+
+**Status: Implemented and observed on Mac; Ubuntu and Raspberry Pi validation pending.**
 
 - Investigate and reduce Wi-Fi DDS discovery time based on measurements.
 - Test TCP and ROS 2 alone and together, USB-only and Wi-Fi-only discovery, and app/service shutdown.
 - Validate against the user's existing Pixi-provided ROS 2 environment without installing libraries into or resetting its configuration.
 
 No new library may be added without the user's approval.
+
+## Current release validation
+
+- Cyclone DDS USB and Wi-Fi discovery were observed on Mac in under 10 seconds, with sensor messages received on both paths.
+- The USB helper is optional for normal DDS operation and is only intended for persistent USB host diagnostics; it is not needed for Wi-Fi.
+- Ubuntu live validation and Raspberry Pi validation have not yet been completed.
+- See [`android-dds-backend-comparison.md`](android-dds-backend-comparison.md) for the recorded backend observations and their limits.

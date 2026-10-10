@@ -2,15 +2,16 @@
 set -e
 
 # Setup paths
-export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-TOOLCHAIN="/Users/shreyasdamase/Library/Android/sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake"
-PREFIX="/Users/shreyasdamase/ros2_android_install"
-VENV_PY="/Users/shreyasdamase/rqt-venv/bin/python"
-SOURCE_DIR="/Users/shreyasdamase/ros2_lyrical/src"
-BUILD_DIR="/Users/shreyasdamase/ros2_android_build"
+ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-27.1.12297006}"
+TOOLCHAIN="${ANDROID_TOOLCHAIN_FILE:-$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION/build/cmake/android.toolchain.cmake}"
+PREFIX="${ROS2_ANDROID_PREFIX:?Set ROS2_ANDROID_PREFIX to the Android ROS 2 install prefix}"
+VENV_PY="${PYTHON_EXECUTABLE:-python3}"
+SOURCE_DIR="${ROS2_SOURCE_DIR:?Set ROS2_SOURCE_DIR to the ROS 2 source workspace src directory}"
+BUILD_DIR="${ROS2_ANDROID_BUILD_DIR:-$PWD/build/asr_android_native}/missing_deps"
 
 # Essential PYTHONPATH for rosidl tools
-export PYTHONPATH="$PREFIX/lib/python3.14/site-packages:/Users/shreyasdamase/rqt-venv/lib/python3.14/site-packages:$PYTHONPATH"
+export PYTHONPATH="$PREFIX/lib/python${ROS2_PYTHON_VERSION:-3.14}/site-packages${ROS2_PYTHON_SITE_PACKAGES:+:$ROS2_PYTHON_SITE_PACKAGES}${PYTHONPATH:+:$PYTHONPATH}"
 export AMENT_PREFIX_PATH="$PREFIX"
 
 # Packages to ignore (strictly avoiding C++ complexity for rcl)
@@ -66,7 +67,7 @@ for d in "$PREFIX"/share/*; do
     fi
 done
 
-/Users/shreyasdamase/rqt-venv/bin/colcon \
+colcon \
     --log-base "$BUILD_DIR/log" \
     build \
     --merge-install \

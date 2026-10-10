@@ -6,8 +6,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ASR_DDS_BACKEND "fastdds" CACHE STRING "ROS 2 DDS backend for ASR")
 
-# Define the Android ROS 2 install prefix
-set(ROS2_ANDROID_PREFIX "/Users/shreyasdamase/ros2_android_install")
+# The native ROS 2 headers and common libraries are built separately from the
+# JNI bridge. Supply their install prefix through the environment or CMake.
+set(ROS2_ANDROID_PREFIX "$ENV{ROS2_ANDROID_PREFIX}" CACHE PATH
+    "Android ROS 2 install prefix containing include/ and lib/")
+if(NOT ROS2_ANDROID_PREFIX OR NOT IS_DIRECTORY "${ROS2_ANDROID_PREFIX}/include" OR
+        NOT IS_DIRECTORY "${ROS2_ANDROID_PREFIX}/lib")
+    message(FATAL_ERROR
+        "Android ROS 2 prefix not found. Set ROS2_ANDROID_PREFIX to the cross-built ROS 2 install prefix (must contain include/ and lib/).")
+endif()
 
 file(GLOB ROS2_ANDROID_INCLUDE_DIRS LIST_DIRECTORIES true
     "${ROS2_ANDROID_PREFIX}/include/*")
