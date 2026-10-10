@@ -414,6 +414,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         when (intent.action) {
             ACTION_START          -> {
                 getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
+                restoreConfiguredRos2PathIfNeeded()
                 handleStart()
             }
             ACTION_SET_ALIAS      -> {
@@ -731,6 +732,15 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         ensureForeground(sensorRuntime = true)
         if (isRunning) return
         startSensorRuntimeWhenReady()
+    }
+
+    private fun restoreConfiguredRos2PathIfNeeded() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val wifiEnabled = prefs.getBoolean(PREF_DDS_WIFI_ENABLED, prefs.getBoolean(PREF_ROS2_ENABLED, false))
+        val usbEnabled = prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
+        if ((wifiEnabled || usbEnabled) && !ros2Runtime.isEnabled()) {
+            setRos2TransportPaths(wifiEnabled, usbEnabled)
+        }
     }
 
     private fun startSensorRuntimeWhenReady() {

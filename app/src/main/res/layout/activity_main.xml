@@ -385,6 +385,25 @@
                 android:text="DDS network paths are disabled"
                 android:textSize="11sp"
                 android:textColor="#718096" />
+            <TextView
+                android:id="@+id/txtUsbTetheringWarning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="#FFF4E5"
+                android:padding="10dp"
+                android:text="USB tethering is off. Enable it here before using USB DDS."
+                android:textColor="#9A3412"
+                android:textSize="12sp"
+                android:visibility="gone" />
+            <Button
+                android:id="@+id/btnUsbTetheringSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="OPEN USB TETHERING SETTINGS"
+                android:contentDescription="Open Android USB tethering settings"
+                android:visibility="gone" />
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"

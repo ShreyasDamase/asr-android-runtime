@@ -36,7 +36,7 @@ import java.util.*
 /**
  * Enhanced Activity for ASR Runtime control and diagnostics.
  */
-class MainActivity : ComponentActivity() {
+class  MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         updatePermissionTable()
         updateHardwareTable()
+        updateUsbTetheringSettingsButton()
         handler.post(refreshRunnable)
     }
 
@@ -242,11 +243,13 @@ class MainActivity : ComponentActivity() {
                     .putBoolean("ros2_enabled", wifi || usb)
                     .apply()
                 binding.txtDdsPathStatus.text = buildDdsPathSummary(wifi, usb, "")
+                updateUsbTetheringSettingsButton()
                 startDdsPathIntent(wifi, usb)
             }
         }
         binding.switchDdsWifi.setOnCheckedChangeListener(onDdsPathChanged)
         binding.switchDdsUsb.setOnCheckedChangeListener(onDdsPathChanged)
+        binding.btnUsbTetheringSettings.setOnClickListener { openUsbTetheringSettings() }
 
         binding.switchTcpEnabled.setOnCheckedChangeListener { _, isChecked ->
             getSharedPreferences("asr_prefs", MODE_PRIVATE).edit().putBoolean("tcp_enabled", isChecked).apply()
@@ -407,6 +410,58 @@ class MainActivity : ComponentActivity() {
         return "Selected: $selected"
     }
 
+    private fun updateUsbTetheringSettingsButton() {
+        val usbInterfaceAvailable = runCatching {
+            java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().any { networkInterface ->
+                val name = networkInterface.name.lowercase()
+                networkInterface.isUp && !networkInterface.isLoopback &&
+                    listOf("rndis", "usb", "ncm", "ecm", "eth", "enx").any { prefix ->
+                        name.startsWith(prefix)
+                    }
+            }
+        }.getOrDefault(false)
+
+        val usbPathSelected = binding.switchDdsUsb.isChecked
+        val tetheringMissing = !usbInterfaceAvailable
+        binding.txtUsbTetheringWarning.visibility = if (tetheringMissing) {
+            binding.txtUsbTetheringWarning.text = if (usbPathSelected) {
+                "USB DDS is selected, but USB tethering is off. Enable it to connect."
+            } else {
+                "USB tethering is off. Enable it here before using USB DDS."
+            }
+            android.view.View.VISIBLE
+        } else {
+            android.view.View.GONE
+        }
+        binding.btnUsbTetheringSettings.visibility = if (tetheringMissing) {
+            android.view.View.VISIBLE
+        } else {
+            android.view.View.GONE
+        }
+        val buttonTint = if (usbPathSelected && tetheringMissing) "#F6AD55" else "#E2E8F0"
+        val buttonText = if (usbPathSelected && tetheringMissing) "#7B341E" else "#2D3748"
+        binding.btnUsbTetheringSettings.backgroundTintList =
+            android.content.res.ColorStateList.valueOf(Color.parseColor(buttonTint))
+        binding.btnUsbTetheringSettings.setTextColor(Color.parseColor(buttonText))
+    }
+
+    private fun openUsbTetheringSettings() {
+        val settingsIntents = listOf(
+            Intent("android.settings.TETHER_SETTINGS"),
+            Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS),
+            Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+        for (settingsIntent in settingsIntents) {
+            try {
+                startActivity(settingsIntent)
+                return
+            } catch (_: android.content.ActivityNotFoundException) {
+                // Try the next system settings page supported by this Android build.
+            }
+        }
+        Toast.makeText(this, "USB tethering settings are unavailable on this device", Toast.LENGTH_LONG).show()
+    }
+
     private fun observeState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -526,6 +581,7 @@ class MainActivity : ComponentActivity() {
                             binding.switchDdsUsb.isChecked,
                             routeDescription
                         )
+                        updateUsbTetheringSettingsButton()
                     }
                 }
             }
