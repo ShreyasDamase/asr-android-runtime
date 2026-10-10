@@ -208,8 +208,20 @@ class Ros2Runtime(private val context: Context) {
     private fun writeFastDdsConfig(interfaces: List<String>): String? {
         try {
             val file = File(context.cacheDir, "fastdds_asr.xml")
-            val interfaceRows = interfaces.joinToString("\n") { name ->
-                "                        <interface name=\"${xmlEscape(name)}\" netmask_filter=\"AUTO\"/>"
+            // Fast DDS accepts either interface names or IPv4 addresses in its
+            // UDPv4 allowlist. Use the selected interface's concrete address
+            // so the transport binds the intended tether/Wi-Fi path reliably
+            // on Android devices whose native interface lookup differs from
+            // Java's NetworkInterface naming.
+            val allowlistEntries = interfaces.flatMap { name ->
+                val ipv4Addresses = runCatching {
+                    NetworkInterface.getByName(name)?.interfaceAddresses.orEmpty()
+                        .mapNotNull { (it.address as? java.net.Inet4Address)?.hostAddress }
+                }.getOrDefault(emptyList())
+                ipv4Addresses.ifEmpty { listOf(name) }
+            }.distinct()
+            val interfaceRows = allowlistEntries.joinToString("\n") { address ->
+                "                        <interface name=\"${xmlEscape(address)}\" netmask_filter=\"AUTO\"/>"
             }
             val discoveryServer = prefs.getString(PREF_DDS_DISCOVERY_SERVER, "").orEmpty()
             val discoveryServerRows = if (discoveryServer.isEmpty()) {
@@ -278,6 +290,7 @@ class Ros2Runtime(private val context: Context) {
                 </dds>
             """.trimIndent().trimStart()
             file.writeText(xml)
+            Log.i(TAG, "Fast DDS UDPv4 allowlist for $interfaces: $allowlistEntries")
             return file.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write Fast DDS config", e)
