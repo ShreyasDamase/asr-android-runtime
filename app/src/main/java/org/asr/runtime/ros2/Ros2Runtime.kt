@@ -3,6 +3,7 @@ package org.asr.runtime.ros2
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +48,8 @@ class Ros2Runtime(private val context: Context) {
     private var heartbeatRunnable: Runnable? = null
     private var discoveryPollingRunnable: Runnable? = null
     private var interfaceMonitorRunnable: Runnable? = null
+    @Volatile private var discoveryStartedAtMs: Long = 0L
+    @Volatile private var lastDiscoveryLogAtMs: Long = 0L
     @Volatile private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
     @Volatile private var domainId: Int = prefs.getInt(PREF_ROS2_DOMAIN_ID, 0)
     @Volatile private var runtimeReady = false
@@ -186,6 +189,8 @@ class Ros2Runtime(private val context: Context) {
                 domainId,
                 pathSummary
             )
+            discoveryStartedAtMs = SystemClock.elapsedRealtime()
+            lastDiscoveryLogAtMs = 0L
             
             publishStatus("ASR Android online")
             publishCapabilities()
@@ -205,6 +210,35 @@ class Ros2Runtime(private val context: Context) {
             val file = File(context.cacheDir, "fastdds_asr.xml")
             val interfaceRows = interfaces.joinToString("\n") { name ->
                 "                        <interface name=\"${xmlEscape(name)}\" netmask_filter=\"AUTO\"/>"
+            }
+            val discoveryServer = prefs.getString(PREF_DDS_DISCOVERY_SERVER, "").orEmpty()
+            val discoveryServerRows = if (discoveryServer.isEmpty()) {
+                ""
+            } else {
+                val separator = discoveryServer.lastIndexOf(':')
+                require(separator > 0 && separator < discoveryServer.lastIndex) {
+                    "Discovery Server must use IPv4:port format"
+                }
+                val address = discoveryServer.substring(0, separator)
+                val port = discoveryServer.substring(separator + 1).toIntOrNull()
+                require(address.matches(Regex("""\d{1,3}(\.\d{1,3}){3}""")) &&
+                    address.split('.').all { it.toIntOrNull()?.let { octet -> octet in 0..255 } == true }) {
+                    "Discovery Server address must be an IPv4 address"
+                }
+                require(port != null && port in 1..65535) {
+                    "Discovery Server port must be between 1 and 65535"
+                }
+                """
+                                    <discoveryProtocol>CLIENT</discoveryProtocol>
+                                    <discoveryServersList>
+                                        <locator>
+                                            <udpv4>
+                                                <address>${xmlEscape(address)}</address>
+                                                <port>$port</port>
+                                            </udpv4>
+                                        </locator>
+                                    </discoveryServersList>
+                """.trimIndent()
             }
             val xml = """
                 <?xml version="1.0" encoding="UTF-8" ?>
@@ -229,9 +263,10 @@ class Ros2Runtime(private val context: Context) {
                                             <count>5</count>
                                             <period><sec>0</sec><nanosec>200000000</nanosec></period>
                                         </initialAnnouncements>
-                                        <leaseDuration><sec>10</sec></leaseDuration>
-                                        <leaseAnnouncement><sec>2</sec></leaseAnnouncement>
-                                    </discovery_config>
+                $discoveryServerRows
+                                            <leaseDuration><sec>10</sec></leaseDuration>
+                                            <leaseAnnouncement><sec>2</sec></leaseAnnouncement>
+                                        </discovery_config>
                                 </builtin>
                                 <userTransports>
                                     <transport_id>asr_selected_udp</transport_id>
@@ -241,7 +276,7 @@ class Ros2Runtime(private val context: Context) {
                         </participant>
                     </profiles>
                 </dds>
-            """.trimIndent()
+            """.trimIndent().trimStart()
             file.writeText(xml)
             return file.absolutePath
         } catch (e: Exception) {
@@ -355,15 +390,21 @@ class Ros2Runtime(private val context: Context) {
         discoveryPollingRunnable = object : Runnable {
             override fun run() {
                 if (!runtimeReady) return
-                val count = NativeRos2Bridge.getDiscoveredParticipantCount()
-                if (count > 1) {
-                    if (_status.value.state == Ros2State.WAITING_FOR_DISCOVERY) {
-                        Log.i(TAG, "DDS Discovery successful: $count participants found")
-                        _status.value = _status.value.copy(state = Ros2State.ACTIVE)
-                    }
-                    // Stop polling once active
-                    discoveryPollingRunnable = null
-                    return
+                val nodeCount = NativeRos2Bridge.getDiscoveredRosNodeCount()
+                val now = SystemClock.elapsedRealtime()
+                val elapsedMs = (now - discoveryStartedAtMs).coerceAtLeast(0L)
+                if (now - lastDiscoveryLogAtMs >= DISCOVERY_LOG_INTERVAL_MS) {
+                    Log.i(TAG, "DDS graph probe: visibleRosNodes=$nodeCount elapsedMs=$elapsedMs paths=${_status.value.pathSummary}")
+                    lastDiscoveryLogAtMs = now
+                }
+                val shouldBeActive = nodeCount > 0
+                val currentState = _status.value.state
+                if (shouldBeActive && currentState != Ros2State.ACTIVE) {
+                    Log.i(TAG, "Remote ROS peers became visible after ${elapsedMs}ms: $nodeCount peers")
+                    _status.value = _status.value.copy(state = Ros2State.ACTIVE)
+                } else if (!shouldBeActive && currentState == Ros2State.ACTIVE) {
+                    Log.w(TAG, "Remote ROS peers disappeared after ${elapsedMs}ms")
+                    _status.value = _status.value.copy(state = Ros2State.WAITING_FOR_DISCOVERY)
                 }
                 mainHandler.postDelayed(this, 1000)
             }
@@ -475,10 +516,12 @@ class Ros2Runtime(private val context: Context) {
 
     companion object {
         private const val TAG = "Ros2Runtime"
+        private const val DISCOVERY_LOG_INTERVAL_MS = 5_000L
         private const val INTERFACE_POLL_INTERVAL_MS = 1_000L
         private const val PREFS_NAME = "asr_prefs"
         private const val PREF_ROS2_ENABLED = "ros2_enabled"
         private const val PREF_ROS2_DOMAIN_ID = "ros2_domain_id"
+        private const val PREF_DDS_DISCOVERY_SERVER = "dds_discovery_server"
         private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
         private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
     }

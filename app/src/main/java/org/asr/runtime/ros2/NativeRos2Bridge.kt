@@ -48,7 +48,8 @@ object NativeRos2Bridge {
     
     external fun publishUInt32(topicName: String, value: Int): Boolean
     external fun publishInt16MultiArray(topicName: String, data: ShortArray): Boolean
-    external fun getDiscoveredParticipantCount(): Int
+    /** Number of ROS graph nodes currently visible to this node (not DDS participants). */
+    external fun getDiscoveredRosNodeCount(): Int
     external fun setFastDdsConfigPath(path: String): Boolean
 
     external fun shutdown()

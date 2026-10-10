@@ -85,6 +85,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         private const val PREF_ROS2_ENABLED = "ros2_enabled"
         private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
         private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
+        private const val PREF_DDS_DISCOVERY_SERVER = "dds_discovery_server"
         private const val TCP_TRANSPORT_TYPE = "tcp"
 
         // ADB broadcast actions
@@ -458,10 +459,17 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             ACTION_TCP_DISABLE    -> setTcpEnabled(false)
             ACTION_ROS2_ENABLE    -> setRos2Enabled(true)
             ACTION_ROS2_DISABLE   -> setRos2Enabled(false)
-            ACTION_DDS_PATHS_SET  -> setRos2TransportPaths(
-                intent.getBooleanExtra("wifi_enabled", false),
-                intent.getBooleanExtra("usb_enabled", false)
-            )
+            ACTION_DDS_PATHS_SET  -> {
+                if (intent.hasExtra("discovery_server")) {
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                        .putString(PREF_DDS_DISCOVERY_SERVER, intent.getStringExtra("discovery_server").orEmpty())
+                        .apply()
+                }
+                setRos2TransportPaths(
+                    intent.getBooleanExtra("wifi_enabled", false),
+                    intent.getBooleanExtra("usb_enabled", false)
+                )
+            }
             ACTION_DEV_MODE       -> handleDevMode(intent)
         }
         return START_STICKY
@@ -810,6 +818,9 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         val nodeName = "${baseName}_${unsignedId}"
         val nodeNamespace = "/asr_android_${unsignedId}"
         ros2Runtime.startIfNeeded(nodeName, nodeNamespace)
+        // The battery receiver is event-driven and may have no new broadcast
+        // after a DDS path restart. Republish its cached value on the new node.
+        batteryManager.publishCurrentRosState()
     }
 
     private fun startInternal() {

@@ -38,6 +38,18 @@ class BatteryManager(
     val temperature: Float get() = _temperature
     val voltage: Int get() = _voltage
 
+    /** Re-send the cached value after the ROS participant is restarted. */
+    fun publishCurrentRosState() {
+        if (state != ModuleState.RUNNING || _level < 0f) return
+        onRosBattery?.invoke(
+            _level,
+            _temperature,
+            _voltage.toFloat(),
+            _isCharging,
+            android.os.SystemClock.elapsedRealtimeNanos()
+        )
+    }
+
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <algorithm>
 #include <limits>
+#include <cstring>
 #include <android/log.h>
 #include <unistd.h>
 
@@ -46,6 +47,9 @@ static rcl_context_t context;
 static rcl_node_t node;
 static bool node_ready = false;
 static std::mutex node_mutex;
+static std::string local_node_name;
+static std::string local_node_namespace;
+static std::string last_logged_graph_snapshot;
 
 static std::map<std::string, rcl_publisher_t> publishers;
 static std::map<std::string, rcl_subscription_t> subscriptions;
@@ -289,9 +293,12 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_startNode(JNIEnv *env, jobject thiz, 
     node = rcl_get_zero_initialized_node();
     rcl_node_options_t node_options = rcl_node_get_default_options();
 
-    rcl_ret_t ret = rcl_node_init(&node, node_name_chars, node_namespace_chars, &context, &node_options);
     std::string node_name_str(node_name_chars);
     std::string node_namespace_str(node_namespace_chars);
+    local_node_name = node_name_str;
+    local_node_namespace = node_namespace_str;
+
+    rcl_ret_t ret = rcl_node_init(&node, node_name_chars, node_namespace_chars, &context, &node_options);
     env->ReleaseStringUTFChars(j_node_name, node_name_chars);
     env->ReleaseStringUTFChars(j_node_namespace, node_namespace_chars);
 
@@ -492,7 +499,9 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishBattery(JNIEnv *env, jobject, 
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
     rcl_publisher_t *publisher = nullptr;
-    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, BatteryState)(), &publisher, 0);
+    // BatteryState represents the latest device state. Retain the last sample
+    // for late-joining ROS subscribers, like the runtime status publisher.
+    bool ok = topic && ensure_publisher(topic, ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_fastrtps_c, sensor_msgs, msg, BatteryState)(), &publisher, 2);
     if (ok) {
         sensor_msgs__msg__BatteryState msg;
         sensor_msgs__msg__BatteryState__init(&msg);
@@ -728,7 +737,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishInt16MultiArray(JNIEnv *env, j
 }
 
 JNIEXPORT jint JNICALL
-Java_org_asr_runtime_ros2_NativeRos2Bridge_getDiscoveredParticipantCount(JNIEnv *env, jobject thiz) {
+Java_org_asr_runtime_ros2_NativeRos2Bridge_getDiscoveredRosNodeCount(JNIEnv *env, jobject thiz) {
     std::lock_guard<std::mutex> lock(node_mutex);
     if (!node_ready) return 0;
 
@@ -738,7 +747,28 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_getDiscoveredParticipantCount(JNIEnv 
     rcl_ret_t ret = rcl_get_node_names(&node, rcl_get_default_allocator(), &node_names, &node_namespaces);
     jint count = 0;
     if (ret == RCL_RET_OK) {
-        count = static_cast<jint>(node_names.size);
+        std::vector<std::string> graph_nodes;
+        for (size_t i = 0; i < node_names.size; ++i) {
+            const char *candidate_name = node_names.data[i];
+            const char *candidate_namespace = i < node_namespaces.size ? node_namespaces.data[i] : nullptr;
+            if (candidate_name == nullptr || candidate_namespace == nullptr) continue;
+            graph_nodes.emplace_back(std::string(candidate_namespace) + "/" + candidate_name);
+            if (std::string(candidate_name) == local_node_name &&
+                std::string(candidate_namespace) == local_node_namespace) continue;
+            ++count;
+        }
+        std::sort(graph_nodes.begin(), graph_nodes.end());
+        std::string graph_snapshot;
+        for (const auto &graph_node : graph_nodes) {
+            if (!graph_snapshot.empty()) graph_snapshot += ", ";
+            graph_snapshot += graph_node;
+        }
+        if (graph_snapshot != last_logged_graph_snapshot) {
+            LOGI("ROS graph snapshot: rawNodes=%zu remoteNodes=%d local=/%s%s nodes=[%s]",
+                 node_names.size, count, local_node_namespace.c_str(), local_node_name.c_str(),
+                 graph_snapshot.c_str());
+            last_logged_graph_snapshot = graph_snapshot;
+        }
         rcutils_string_array_fini(&node_names);
         rcutils_string_array_fini(&node_namespaces);
     } else {
