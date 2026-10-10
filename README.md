@@ -11,6 +11,13 @@ The primary DDS backend is Cyclone DDS. A Fast DDS build is retained as a compar
 - TCP telemetry to ASR Studio on port `4242`.
 - Wi-Fi DDS and USB-tether DDS. The optional host monitor is for USB DDS diagnostics only; Wi-Fi DDS uses an ordinary ROS 2 subscriber or robot node.
 
+## Downloads
+
+| Version | Asset | Description |
+| ------- | ----- | ----------- |
+| 1.0.0 | [ASR Android Runtime APK](https://github.com/ShreyasDamase/asr-android-runtime/releases/latest) | Official Android APK Release |
+
+
 ## Requirements
 
 - Android Studio, Android SDK API 36, Android NDK, and CMake 3.22.1.
