@@ -15,29 +15,31 @@ The primary DDS backend is Cyclone DDS. A Fast DDS build is retained as a compar
 
 | Version | Asset | Description |
 | ------- | ----- | ----------- |
-| 1.0.0 | [ASR Android Runtime APK](https://github.com/ShreyasDamase/asr-android-runtime/releases/latest) | Official Android APK Release |
-
+| 1.0.0 | [ASR Android Runtime APK](https://github.com/ShreyasDamase/asr-android-runtime/releases/latest) | Official Android APK — install directly on your phone, no build required |
+| 1.0.0 | [ros2_android_install-v1.0.0.zip](https://github.com/ShreyasDamase/asr-android-runtime/releases/latest) | Pre-built Android ROS 2 prefix — required only if building from source |
 
 ## Requirements
 
-- Android Studio, Android SDK API 36, Android NDK, and CMake 3.22.1.
+- Android Studio, Android SDK API 36, Android NDK 28, and CMake 3.22.1.
 - An `arm64-v8a` Android device. Cyclone DDS requires Android API 28 or later; the Fast DDS variant supports API 26 or later.
-- For a source build, an Android ROS 2 prefix containing `include/` and `lib/`. The original cross-build prefix is not included. Set `ROS2_ANDROID_PREFIX` to a compatible prefix; the scripts under `scripts/` are maintainer-oriented and also need the ROS 2 sources and Android NDK.
+- **For a source build:** the Android ROS 2 prefix (`ros2_android_install-v1.0.0.zip` from Releases). Extract it and add its path to `local.properties`:
+  ```properties
+  ROS2_ANDROID_PREFIX=/path/to/ros2_android_install
+  ```
+  Gradle reads this automatically. See the detailed [Native Build Prefix Guide](docs/BUILD_PREFIX_GUIDE.md) for full setup and troubleshooting.
 - For DDS, a ROS 2 host using `rmw_fastrtps_cpp` and the same `ROS_DOMAIN_ID` as the phone. The tested default is domain `0`.
 
 ## Build
 
-From the repository root, set the Android ROS 2 prefix and build the Cyclone variant:
+From the repository root, build the Cyclone variant:
 
 ```bash
-export ROS2_ANDROID_PREFIX=/path/to/android/ros2/install
 ./gradlew :app:assembleCycloneDebug
 ```
 
 The Fast DDS comparison variant can be built with:
 
 ```bash
-export ROS2_ANDROID_PREFIX=/path/to/android/ros2/install
 ./gradlew :app:assembleFastddsDebug
 ```
 
@@ -136,9 +138,11 @@ Cyclone DDS was exercised on macOS over Wi-Fi and USB tethering, with ROS graph 
 
 - `app/` — Android application, JNI bridge, and packaged native libraries.
 - `asr_ros2/` — ROS 2 USB link and sensor-flow monitor.
-- `docs/` — transport validation, milestones, and release checklist.
-- `scripts/` — maintainer-oriented native Android ROS 2 cross-build tools.
+- `docs/` — transport validation, [Native Build Prefix Guide](docs/BUILD_PREFIX_GUIDE.md), and release checklists.
+- `scripts/` — maintainer tools and prefix packaging (`package_prefix.sh`).
 
 ## Source availability and licensing
 
-The GitHub repository is public. Public visibility does not itself grant an open-source license. The Android ROS 2 bridge includes vendored or packaged third-party sources and native libraries; their license and notice obligations must be resolved before a distributable open-source release. The embedded ROS 2 helper package also still has a `Proprietary` license field and placeholder maintainer contact in its package metadata. Check the repository's license files and release checklist before redistributing builds or packages.
+This project is maintained by [Shreyas Damase](https://github.com/ShreyasDamase).
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Third-party licenses and attribution notices for native ROS 2, Cyclone DDS, Fast DDS, and Android Jetpack libraries are provided in the [NOTICE.txt](NOTICE.txt) file.
