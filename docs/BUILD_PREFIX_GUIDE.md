@@ -122,6 +122,16 @@ CMake Error at CMakeLists.txt:15 (message):
 - **Cause**: Neither `local.properties` nor the `ROS2_ANDROID_PREFIX` environment variable points to a valid directory containing both `include/` and `lib/`.
 - **Solution**: Check your `local.properties` line: `ROS2_ANDROID_PREFIX=/absolute/path/to/ros2_android_install` (avoid relative paths).
 
+### Gradle Error: `assembleCycloneExperimentDebug` not found
+
+The current project defines the `cyclone` and `fastdds` DDS flavors and the standard `debug` and `release` build types. `CycloneExperimentDebug` is an obsolete variant name. Use:
+
+```bash
+./gradlew :app:assembleCycloneDebug
+```
+
+In Android Studio, run **Sync Project with Gradle Files**, then choose `app` → `cycloneDebug` in the **Build Variants** tool window. If an old `CycloneExperimentDebug` task remains in a saved Gradle run configuration, replace it with `:app:assembleCycloneDebug` or delete that obsolete run configuration.
+
 ### CMake Cache Inconsistencies
 If you moved the prefix to a new directory and CMake still looks at the old path, clear the CMake build cache:
 ```bash
