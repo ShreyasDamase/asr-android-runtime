@@ -1,7 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // id("org.jetbrains.kotlin.android") // Managed by top-level
 }
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
+}
+val ros2AndroidPrefix: String = localProps.getProperty("ROS2_ANDROID_PREFIX")
+    ?: System.getenv("ROS2_ANDROID_PREFIX")
+    ?: ""
 
 android {
     namespace = "org.asr.runtime"
@@ -21,8 +31,9 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags("-std=c++17")
-                // Pass ROS 2 install path to CMake if needed
-                // arguments("-DCMAKE_PREFIX_PATH=/path/to/ros2_android/install")
+                if (ros2AndroidPrefix.isNotEmpty()) {
+                    arguments("-DROS2_ANDROID_PREFIX=$ros2AndroidPrefix")
+                }
             }
         }
     }
