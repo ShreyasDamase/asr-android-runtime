@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Build
@@ -31,6 +32,7 @@ import org.asr.runtime.ros2.Ros2State
 import org.asr.runtime.databinding.ActivityMainBinding
 import org.asr.runtime.ui.MainViewModel
 import org.asr.runtime.ui.TactileFeedbackHelper
+import org.asr.runtime.ui.TemporaryThemeController
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -41,6 +43,7 @@ class  MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
+    private lateinit var temporaryThemeController: TemporaryThemeController
     private var tcpConnected = false
     private var initializingControls = true
     private val handler = Handler(Looper.getMainLooper())
@@ -87,6 +90,15 @@ class  MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        temporaryThemeController = TemporaryThemeController(this)
+        binding.btnThemeToggle.setOnClickListener {
+            temporaryThemeController.toggle(binding.root)
+            val dark = temporaryThemeController.isDark
+            updateTransportModeBadge()
+            binding.btnThemeToggle.text = if (dark) "◑" else "◐"
+            binding.btnThemeToggle.contentDescription = if (dark) "Switch to light theme" else "Switch to dark theme"
+            binding.btnThemeToggle.setTextColor(if (dark) Color.WHITE else Color.BLACK)
+        }
         val ddsBackend = if (BuildConfig.ASR_DDS_BACKEND == "cyclone") {
             "ROBOT SENSOR NODE · CYCLONE DDS"
         } else {
@@ -375,9 +387,21 @@ class  MainActivity : ComponentActivity() {
     private fun updateTransportModeBadge() {
         val host = binding.editTransportHost.text?.toString()?.trim() ?: ""
         val isAdb = host.isBlank() || host == "127.0.0.1" || host == "::1"
-        binding.txtTransportMode.text  = if (isAdb) "ADB" else "Wi-Fi"
-        binding.txtTransportMode.setTextColor(if (isAdb) android.graphics.Color.parseColor("#805AD5") else android.graphics.Color.parseColor("#3182CE"))
-        binding.txtTransportMode.setBackgroundColor(if (isAdb) android.graphics.Color.parseColor("#FAF5FF") else android.graphics.Color.parseColor("#EBF8FF"))
+        binding.txtTransportMode.text = if (isAdb) "ADB" else "Wi-Fi"
+        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        val neutral = if (dark) Color.WHITE else Color.parseColor("#4A5568")
+        binding.txtTransportMode.setTextColor(neutral)
+        binding.txtTransportMode.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 2f * resources.displayMetrics.density
+            setColor(Color.TRANSPARENT)
+            setStroke((resources.displayMetrics.density + 0.5f).toInt(), if (dark) Color.GRAY else Color.parseColor("#A0A0A0"))
+        }
+        binding.txtTransportMode.contentDescription = if (isAdb) {
+            "Connection mode indicator: ADB loopback"
+        } else {
+            "Connection mode indicator: Wi-Fi host"
+        }
         binding.txtAdbHint.visibility = if (isAdb) android.view.View.VISIBLE else android.view.View.GONE
     }
 
@@ -529,8 +553,8 @@ class  MainActivity : ComponentActivity() {
                         binding.editTransportHost.isEnabled      = enable
                         binding.editTransportPort.isEnabled      = enable
                         if (!enable) {
-                            // If service died, reset transport badge to default
-                            binding.txtTransportMode.text = "ADB"
+                            // Keep the host-derived mode indicator accurate while the service is unavailable.
+                            updateTransportModeBadge()
                         }
                     }
                 }

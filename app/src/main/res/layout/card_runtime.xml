@@ -110,17 +110,17 @@
                     android:layout_width="0dp"
                     android:layout_height="44dp"
                     android:layout_marginEnd="8dp"
-                    android:layout_weight="1.2"
+                    android:layout_weight="1"
                     android:background="@drawable/btn_primary_nothing"
                     android:clickable="true"
                     android:focusable="true"
                     android:fontFamily="monospace"
                     android:gravity="center"
-                    android:letterSpacing="0.08"
+                    android:letterSpacing="0.04"
                     android:singleLine="true"
                     android:text="START"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/btnStopRuntime"
@@ -133,27 +133,27 @@
                     android:focusable="true"
                     android:fontFamily="monospace"
                     android:gravity="center"
-                    android:letterSpacing="0.08"
+                    android:letterSpacing="0.04"
                     android:singleLine="true"
                     android:text="STOP"
                     android:textColor="@color/btn_outline_text_nothing"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/btnRestartRuntime"
                     android:layout_width="0dp"
                     android:layout_height="44dp"
-                    android:layout_weight="1.2"
+                    android:layout_weight="1"
                     android:background="@drawable/btn_outline_nothing"
                     android:clickable="true"
                     android:focusable="true"
                     android:fontFamily="monospace"
                     android:gravity="center"
-                    android:letterSpacing="0.08"
+                    android:letterSpacing="0.04"
                     android:singleLine="true"
                     android:text="RESTART"
                     android:textColor="@color/btn_outline_text_nothing"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
