@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">ASR Runtime</string>
+    <string name="app_name">ASR Android</string>
     <string name="shortcut_stop_label">Stop ASR Service</string>
 </resources>
