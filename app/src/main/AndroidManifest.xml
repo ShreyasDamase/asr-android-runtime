@@ -59,6 +59,11 @@
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+        <activity
+            android:name=".ui.AboutActivity"
+            android:exported="false"
+            android:label="About ASR Runtime"
+            android:theme="@style/Theme.AsrRuntime" />
     </application>
 
 </manifest>

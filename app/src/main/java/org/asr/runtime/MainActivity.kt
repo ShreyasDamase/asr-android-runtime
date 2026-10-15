@@ -359,6 +359,11 @@ class  MainActivity : ComponentActivity() {
                 updateHardwareTable()
             }
         }
+        binding.btnAbout.setOnClickListener {
+            startActivity(Intent(this, org.asr.runtime.ui.AboutActivity::class.java).apply {
+                putExtra(org.asr.runtime.ui.AboutActivity.EXTRA_DARK_THEME, temporaryThemeController.isDark)
+            })
+        }
 
         binding.btnConnectTransport.setOnClickListener {
             if (binding.switchTcpEnabled.isChecked) {
