@@ -48,6 +48,17 @@ class TemporaryThemeController(private val activity: Activity) {
         if (view.id == org.asr.runtime.R.id.btnThemeToggle) {
             val edge = if (isDark) Color.WHITE else Color.BLACK
             view.background = outline(edge)
+        } else if (
+            view.id == org.asr.runtime.R.id.btnDetailsToggle ||
+            view.id == org.asr.runtime.R.id.btnAbout
+        ) {
+            if (isDark) {
+                view.background = outline(Color.WHITE)
+                (view as? TextView)?.setTextColor(Color.WHITE)
+            } else if (originalBackground != null) {
+                view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
+                (view as? TextView)?.setTextColor(originalTextColors[view] ?: Color.BLACK)
+            }
         } else if (view.id == org.asr.runtime.R.id.btnStopRuntime || view.id == org.asr.runtime.R.id.btnRestartRuntime) {
             if (isDark) view.background = outline(Color.WHITE)
             else if (originalBackground != null) view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
@@ -59,7 +70,13 @@ class TemporaryThemeController(private val activity: Activity) {
                 view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
                 (view as? TextView)?.setTextColor(Color.WHITE)
             }
-        } else if (view.id == org.asr.runtime.R.id.runtimeCard) {
+        } else if (
+            view.id == org.asr.runtime.R.id.runtimeCard ||
+            view.id == org.asr.runtime.R.id.cardConnectedClientDetails ||
+            view.id == org.asr.runtime.R.id.cardPermissionDetails ||
+            view.id == org.asr.runtime.R.id.cardHardwareDetails ||
+            view.id == org.asr.runtime.R.id.cardDiagnosticsDetails
+        ) {
             view.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 8f * activity.resources.displayMetrics.density

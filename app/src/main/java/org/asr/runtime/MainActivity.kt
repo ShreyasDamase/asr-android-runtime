@@ -124,6 +124,11 @@ class  MainActivity : ComponentActivity() {
             updateUsbTetheringSettingsButton()
             updateRuntimeStatus(viewModel.runtimeState.value)
             updateRos2StatusColor(viewModel.ros2Status.value.state)
+            updateClientStatusIndicator(tcpConnected)
+            if (binding.layoutAdvancedDetails.visibility == View.VISIBLE) {
+                updatePermissionTable()
+                updateHardwareTable()
+            }
             binding.btnThemeToggle.text = if (dark) "◑" else "◐"
             binding.btnThemeToggle.contentDescription = if (dark) "Switch to light theme" else "Switch to dark theme"
             binding.btnThemeToggle.setTextColor(if (dark) Color.WHITE else Color.BLACK)
@@ -223,38 +228,46 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun addHardwareRow(table: TableLayout, label: String, present: String, isPresent: Boolean, liveState: String) {
-        val row = TableRow(this).apply {
-            setPadding(0, 4, 0, 4)
-        }
-        
+        val dark = temporaryThemeController.isDark
+        val primary = if (dark) Color.WHITE else Color.BLACK
+        val secondary = if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
+        val good = if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
+        val warning = if (dark) Color.parseColor("#E5B86B") else Color.parseColor("#9A6B17")
+        val error = if (dark) Color.parseColor("#FF7373") else Color.parseColor("#B4232D")
+        val horizontalPadding = (8 * resources.displayMetrics.density + 0.5f).toInt()
+        val verticalPadding = (9 * resources.displayMetrics.density + 0.5f).toInt()
+        val mono = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.space_mono)
+        val row = TableRow(this)
+
         val labelText = TextView(this).apply {
-            text = label
-            setPadding(8, 8, 8, 8)
-            textSize = 14f
+            text = label.uppercase()
+            setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+            typeface = mono
+            textSize = 10f
+            setTextColor(primary)
         }
-        
         val presentText = TextView(this).apply {
             text = present
-            setPadding(8, 8, 8, 8)
+            setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
             gravity = Gravity.CENTER
-            setTextColor(if (isPresent) Color.parseColor("#2E7D32") else Color.RED)
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            textSize = 14f
+            typeface = mono
+            letterSpacing = 0.02f
+            setTextColor(if (isPresent) good else secondary)
+            textSize = 10f
         }
-
         val stateText = TextView(this).apply {
             text = liveState
-            setPadding(8, 8, 8, 8)
+            setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
             gravity = Gravity.CENTER
-            val color = when(liveState) {
-                "RUNNING", "STREAMING" -> Color.parseColor("#2E7D32")
-                "ERROR" -> Color.RED
-                "STARTING", "STOPPING", "CONNECTING" -> Color.BLUE
-                else -> Color.GRAY
-            }
-            setTextColor(color)
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            textSize = 14f
+            typeface = mono
+            letterSpacing = 0.01f
+            setTextColor(when (liveState.uppercase()) {
+                "RUNNING", "STREAMING", "ACTIVE" -> good
+                "ERROR" -> error
+                "STARTING", "STOPPING", "CONNECTING", "INITIALIZING" -> warning
+                else -> secondary
+            })
+            textSize = 9f
         }
 
         row.addView(labelText)
@@ -264,23 +277,32 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun addTableRow(table: TableLayout, label: String, value: String, isPositive: Boolean) {
-        val row = TableRow(this).apply {
-            setPadding(0, 4, 0, 4)
+        val dark = temporaryThemeController.isDark
+        val horizontalPadding = (8 * resources.displayMetrics.density + 0.5f).toInt()
+        val verticalPadding = (9 * resources.displayMetrics.density + 0.5f).toInt()
+        val mono = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.space_mono)
+        val statusColor = when {
+            isPositive && dark -> Color.parseColor("#77C98A")
+            isPositive -> Color.parseColor("#39834B")
+            dark -> Color.parseColor("#FF7373")
+            else -> Color.parseColor("#B4232D")
         }
-        
+        val row = TableRow(this)
         val labelText = TextView(this).apply {
-            text = label
-            setPadding(8, 8, 8, 8)
-            textSize = 14f
+            text = label.replace('_', ' ')
+            setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+            typeface = mono
+            textSize = 10f
+            setTextColor(if (dark) Color.WHITE else Color.BLACK)
         }
-        
         val valueText = TextView(this).apply {
             text = value
-            setPadding(8, 8, 8, 8)
+            setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
             gravity = Gravity.CENTER
-            setTextColor(if (isPositive) Color.parseColor("#2E7D32") else Color.RED)
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            textSize = 14f
+            typeface = mono
+            letterSpacing = 0.02f
+            setTextColor(statusColor)
+            textSize = 10f
         }
 
         row.addView(labelText)
@@ -350,10 +372,19 @@ class  MainActivity : ComponentActivity() {
         binding.runtimeCard.txtRuntimeStatus.setOnClickListener { toggleSensorOutputPanel() }
 
         // btnExitApp removed from header
-        binding.btnDetailsToggle.setOnClickListener {
+        TactileFeedbackHelper.attachTactileFeedback(binding.btnDetailsToggle) {
             val showDetails = binding.layoutAdvancedDetails.visibility != android.view.View.VISIBLE
             binding.layoutAdvancedDetails.visibility = if (showDetails) android.view.View.VISIBLE else android.view.View.GONE
-            binding.btnDetailsToggle.text = if (showDetails) "Hide device details and diagnostics" else "Show device details and diagnostics"
+            binding.btnDetailsToggle.text = if (showDetails) {
+                "⌃  HIDE DEVICE DETAILS & DIAGNOSTICS"
+            } else {
+                "⌄  SHOW DEVICE DETAILS & DIAGNOSTICS"
+            }
+            binding.btnDetailsToggle.contentDescription = if (showDetails) {
+                "Hide device details and diagnostics"
+            } else {
+                "Show device details and diagnostics"
+            }
             if (showDetails) {
                 updatePermissionTable()
                 updateHardwareTable()
@@ -415,6 +446,21 @@ class  MainActivity : ComponentActivity() {
             "CONNECTING" -> Color.parseColor("#3182CE")
             else -> Color.parseColor("#718096")
         })
+    }
+
+    private fun updateClientStatusIndicator(connected: Boolean) {
+        val dark = temporaryThemeController.isDark
+        val color = when {
+            connected && dark -> Color.parseColor("#77C98A")
+            connected -> Color.parseColor("#39834B")
+            dark -> Color.parseColor("#A0A0A0")
+            else -> Color.parseColor("#737373")
+        }
+        binding.rowClientStatus.diagnosticIndicator.visibility = View.VISIBLE
+        binding.rowClientStatus.diagnosticIndicator.setBackgroundColor(color)
+        binding.rowClientStatus.valDiagnostic.text = if (connected) "CONNECTED" else "NOT CONNECTED"
+        binding.rowClientStatus.valDiagnostic.contentDescription = if (connected) "TCP client connected" else "TCP client not connected"
+        binding.rowClientStatus.valDiagnostic.setTextColor(color)
     }
 
     /** Returns the host entered by the user, or "127.0.0.1" as the ADB default. */
@@ -865,7 +911,7 @@ class  MainActivity : ComponentActivity() {
                         updateTcpStatus()
                         val isConnected = (info != null)
                         if (isConnected) {
-                            binding.rowClientStatus.valDiagnostic.text = "🟢 Connected"
+                            updateClientStatusIndicator(connected = true)
                             binding.rowClientApp.valDiagnostic.text = info!!.application
                             binding.rowClientHost.valDiagnostic.text = "${info.host}:${info.port}"
                             binding.rowClientSince.valDiagnostic.text = formatTime(info.connectedSince)
@@ -875,7 +921,7 @@ class  MainActivity : ComponentActivity() {
                             binding.btnDisconnectTransport.isEnabled = true
                             binding.btnReconnectTransport.isEnabled = true
                         } else {
-                            binding.rowClientStatus.valDiagnostic.text = "⚪ Not Connected"
+                            updateClientStatusIndicator(connected = false)
                             binding.rowClientApp.valDiagnostic.text = "-"
                             binding.rowClientHost.valDiagnostic.text = "-"
                             binding.rowClientSince.valDiagnostic.text = "-"

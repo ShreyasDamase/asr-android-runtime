@@ -410,12 +410,20 @@
             </LinearLayout>
         </LinearLayout>
 
-        <Button
+        <TextView
             android:id="@+id/btnDetailsToggle"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="44dp"
             android:layout_marginBottom="12dp"
-            android:text="Show device details and diagnostics" />
+            android:background="@drawable/btn_outline_nothing"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:letterSpacing="0.03"
+            android:text="⌄  SHOW DEVICE DETAILS &amp; DIAGNOSTICS"
+            android:textColor="@color/btn_outline_text_nothing"
+            android:textSize="11sp" />
 
         <!-- Less frequently used information stays available but out of the main view. -->
         <LinearLayout
@@ -427,19 +435,22 @@
 
         <!-- Connected Client Card -->
         <LinearLayout
+            android:id="@+id/cardConnectedClientDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#FFFFFF"
+            android:background="@drawable/runtime_card_background"
             android:padding="16dp"
             android:layout_marginBottom="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Connected Client"
-                android:textStyle="bold"
-                android:textSize="18sp"
+                android:text="CONNECTED CLIENT"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.06"
+                android:textColor="@color/asr_text_secondary"
+                android:textSize="11sp"
                 android:layout_marginBottom="12dp"/>
 
             <LinearLayout
@@ -457,19 +468,22 @@
 
         <!-- Permissions Table (Restored) -->
         <LinearLayout
+            android:id="@+id/cardPermissionDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#FFFFFF"
+            android:background="@drawable/runtime_card_background"
             android:padding="16dp"
             android:layout_marginBottom="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Permissions"
-                android:textStyle="bold"
-                android:textSize="18sp"
+                android:text="PERMISSIONS"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.06"
+                android:textColor="@color/asr_text_secondary"
+                android:textSize="11sp"
                 android:layout_marginBottom="12dp"/>
 
             <TableLayout
@@ -477,29 +491,32 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:stretchColumns="0"
-                android:background="#F7FAFC">
-                <TableRow android:background="#EDF2F7">
-                    <TextView android:text="Permission" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568"/>
-                    <TextView android:text="Status" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
+                android:background="@android:color/transparent">
+                <TableRow android:background="@android:color/transparent">
+                    <TextView android:text="PERMISSION" android:padding="8dp" android:fontFamily="monospace" android:letterSpacing="0.03" android:textSize="10sp" android:textColor="@color/asr_text_secondary"/>
+                    <TextView android:text="ACCESS" android:padding="8dp" android:fontFamily="monospace" android:letterSpacing="0.03" android:textSize="10sp" android:textColor="@color/asr_text_secondary" android:gravity="center"/>
                 </TableRow>
             </TableLayout>
         </LinearLayout>
 
         <!-- Hardware / Sensor Table (Restored) -->
         <LinearLayout
+            android:id="@+id/cardHardwareDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#FFFFFF"
+            android:background="@drawable/runtime_card_background"
             android:padding="16dp"
             android:layout_marginBottom="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Hardware / Sensors"
-                android:textStyle="bold"
-                android:textSize="18sp"
+                android:text="HARDWARE / SENSORS"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.06"
+                android:textColor="@color/asr_text_secondary"
+                android:textSize="11sp"
                 android:layout_marginBottom="12dp"/>
 
             <TableLayout
@@ -507,30 +524,33 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:stretchColumns="0"
-                android:background="#F7FAFC">
-                <TableRow android:background="#EDF2F7">
-                    <TextView android:text="Hardware" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568"/>
-                    <TextView android:text="Present" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
-                    <TextView android:text="Status" android:padding="8dp" android:textStyle="bold" android:textSize="12sp" android:textColor="#4A5568" android:gravity="center"/>
+                android:background="@android:color/transparent">
+                <TableRow android:background="@android:color/transparent">
+                    <TextView android:text="DEVICE" android:padding="8dp" android:fontFamily="monospace" android:letterSpacing="0.03" android:textSize="10sp" android:textColor="@color/asr_text_secondary"/>
+                    <TextView android:text="PRESENT" android:padding="8dp" android:fontFamily="monospace" android:letterSpacing="0.03" android:textSize="10sp" android:textColor="@color/asr_text_secondary" android:gravity="center"/>
+                    <TextView android:text="STATE" android:padding="8dp" android:fontFamily="monospace" android:letterSpacing="0.03" android:textSize="10sp" android:textColor="@color/asr_text_secondary" android:gravity="center"/>
                 </TableRow>
             </TableLayout>
         </LinearLayout>
 
         <!-- Diagnostics Card -->
         <LinearLayout
+            android:id="@+id/cardDiagnosticsDetails"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#FFFFFF"
+            android:background="@drawable/runtime_card_background"
             android:padding="16dp"
             android:layout_marginBottom="16dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Diagnostics"
-                android:textStyle="bold"
-                android:textSize="18sp"
+                android:text="DIAGNOSTICS"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.06"
+                android:textColor="@color/asr_text_secondary"
+                android:textSize="11sp"
                 android:layout_marginBottom="12dp"/>
 
             <include layout="@layout/item_diagnostic_row" android:id="@+id/rowPacketsSent"/>

@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:paddingVertical="8dp">
+    android:paddingVertical="10dp">
 
     <TextView
         android:id="@+id/lblDiagnostic"
@@ -11,15 +11,27 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:text="Label"
-        android:textColor="#4A5568"
-        android:textSize="14sp" />
+        android:fontFamily="monospace"
+        android:letterSpacing="0.02"
+        android:textAllCaps="true"
+        android:textColor="@color/asr_text_secondary"
+        android:textSize="10sp" />
+
+    <View
+        android:id="@+id/diagnosticIndicator"
+        android:layout_width="7dp"
+        android:layout_height="7dp"
+        android:layout_gravity="center_vertical"
+        android:layout_marginEnd="8dp"
+        android:background="#737373"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/valDiagnostic"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Value"
-        android:textColor="#2D3748"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        android:fontFamily="@font/space_mono"
+        android:textColor="@color/asr_text_primary"
+        android:textSize="12sp" />
 </LinearLayout>
