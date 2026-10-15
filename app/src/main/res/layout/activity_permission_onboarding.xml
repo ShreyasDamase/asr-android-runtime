@@ -27,19 +27,18 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="ASR ANDROID"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/space_mono"
                 android:textColor="#999999"
                 android:textSize="10sp"
                 android:letterSpacing="0.12"
                 android:layout_marginBottom="20dp" />
 
             <!-- Hero headline — primary display layer, large monospace -->
-            <!-- Doto/dot-matrix font replaces this in M1 font setup -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="PERMISSIONS"
-                android:fontFamily="monospace"
+                android:text="SENSOR ACCESS"
+                android:fontFamily="@font/doto"
                 android:textColor="#000000"
                 android:textSize="38sp"
                 android:letterSpacing="-0.01"
@@ -49,8 +48,8 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Grant access to the sensors ASR Android publishes to your ROS 2 network. All data stays on your local network — no cloud, no internet."
-                android:fontFamily="sans-serif"
+                android:text="Choose the sensor modules you need in Runtime. Android will ask for each permission only when you enable a module that needs it. Sensor data is sent through the ROS 2 DDS or TCP connection you configure."
+                android:fontFamily="@font/space_grotesk"
                 android:textColor="#666666"
                 android:textSize="14sp"
                 android:lineSpacingMultiplier="1.5"
@@ -80,8 +79,8 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="PERMISSIONS CAN BE CHANGED LATER IN SYSTEM SETTINGS"
-                android:fontFamily="monospace"
+                android:text="SENSOR PERMISSIONS ARE REQUESTED WHEN NEEDED"
+                android:fontFamily="@font/space_mono"
                 android:textColor="#CCCCCC"
                 android:textSize="9sp"
                 android:letterSpacing="0.06"
@@ -115,8 +114,8 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:gravity="center"
-            android:text="GRANT PERMISSIONS"
-            android:fontFamily="monospace"
+            android:text="CONTINUE TO RUNTIME"
+            android:fontFamily="@font/space_mono"
             android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:letterSpacing="0.1"
@@ -124,7 +123,7 @@
             android:clickable="true"
             android:focusable="true"
             android:layout_marginBottom="8dp"
-            android:contentDescription="Grant all required permissions" />
+            android:contentDescription="Continue to runtime without requesting optional sensor permissions" />
 
         <!-- Ghost skip button -->
         <TextView
@@ -132,15 +131,15 @@
             android:layout_width="match_parent"
             android:layout_height="44dp"
             android:gravity="center"
-            android:text="SKIP FOR NOW"
-            android:fontFamily="monospace"
+            android:text="DATA USE DETAILS"
+            android:fontFamily="@font/space_mono"
             android:textColor="#999999"
             android:textSize="11sp"
             android:letterSpacing="0.08"
             android:background="?android:attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true"
-            android:contentDescription="Skip permission setup and go to the app" />
+            android:contentDescription="Open data use details" />
     </LinearLayout>
 
 </LinearLayout>

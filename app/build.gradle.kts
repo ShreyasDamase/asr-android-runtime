@@ -12,6 +12,19 @@ val localProps = Properties().apply {
 val ros2AndroidPrefix: String = localProps.getProperty("ROS2_ANDROID_PREFIX")
     ?: System.getenv("ROS2_ANDROID_PREFIX")
     ?: ""
+val releaseSigningValues = listOf(
+    localProps.getProperty("ASR_RELEASE_STORE_FILE") ?: System.getenv("ASR_RELEASE_STORE_FILE"),
+    localProps.getProperty("ASR_RELEASE_STORE_PASSWORD") ?: System.getenv("ASR_RELEASE_STORE_PASSWORD"),
+    localProps.getProperty("ASR_RELEASE_KEY_ALIAS") ?: System.getenv("ASR_RELEASE_KEY_ALIAS"),
+    localProps.getProperty("ASR_RELEASE_KEY_PASSWORD") ?: System.getenv("ASR_RELEASE_KEY_PASSWORD")
+)
+val releaseSigningConfigured = releaseSigningValues.all { !it.isNullOrBlank() }
+if (releaseSigningValues.any { !it.isNullOrBlank() } && !releaseSigningConfigured) {
+    throw GradleException("Release signing is partially configured. Set all ASR_RELEASE_* signing values or none.")
+}
+if (releaseSigningConfigured && !rootProject.file(releaseSigningValues[0]!!).isFile) {
+    throw GradleException("ASR_RELEASE_STORE_FILE does not point to an existing keystore file.")
+}
 
 android {
     namespace = "org.asr.runtime"
@@ -75,9 +88,26 @@ android {
         viewBinding = true
         dataBinding = true
     }
+    signingConfigs {
+        create("release") {
+            if (releaseSigningConfigured) {
+                storeFile = rootProject.file(releaseSigningValues[0]!!)
+                storePassword = releaseSigningValues[1]
+                keyAlias = releaseSigningValues[2]
+                keyPassword = releaseSigningValues[3]
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import org.asr.runtime.MainActivity
 import org.asr.runtime.databinding.ActivityPermissionOnboardingBinding
@@ -59,14 +58,6 @@ class PermissionOnboardingActivity : ComponentActivity() {
         )
     )
 
-    private val requestMultiplePermissions =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            renderRows()
-            if (allGranted()) {
-                markCompletedAndNavigate()
-            }
-        }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -85,19 +76,11 @@ class PermissionOnboardingActivity : ComponentActivity() {
         renderRows()
 
         binding.btnGrantPermissions.setOnClickListener {
-            val needed = getApplicablePermissions().filter {
-                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-            }.toTypedArray()
-
-            if (needed.isNotEmpty()) {
-                requestMultiplePermissions.launch(needed)
-            } else {
-                markCompletedAndNavigate()
-            }
+            markCompletedAndNavigate()
         }
 
         binding.btnSkipOnboarding.setOnClickListener {
-            markCompletedAndNavigate()
+            startActivity(Intent(this, AboutActivity::class.java))
         }
     }
 
@@ -131,21 +114,17 @@ class PermissionOnboardingActivity : ComponentActivity() {
 
             val isGranted = ContextCompat.checkSelfPermission(this, item.permission) == PackageManager.PERMISSION_GRANTED
             if (isGranted) {
-                rowBinding.txtPermStatus.text = "[ GRANTED ]"
+                rowBinding.txtPermStatus.text = "[ ALLOWED ]"
                 rowBinding.txtPermStatus.setTextColor(Color.parseColor("#4A9E5C")) // Nothing success green
             } else {
-                rowBinding.txtPermStatus.text = "[ REQUIRED ]"
+                rowBinding.txtPermStatus.text = "[ ON DEMAND ]"
                 rowBinding.txtPermStatus.setTextColor(Color.parseColor("#999999")) // Nothing secondary text
             }
 
             binding.layoutPermissionRows.addView(rowBinding.root)
         }
 
-        if (allGranted()) {
-            binding.btnGrantPermissions.text = "CONTINUE TO RUNTIME"
-        } else {
-            binding.btnGrantPermissions.text = "GRANT PERMISSIONS"
-        }
+        binding.btnGrantPermissions.text = "CONTINUE TO RUNTIME"
     }
 
     private fun markCompletedAndNavigate() {

@@ -24,7 +24,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="CAMERA"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/space_mono"
                 android:textColor="#000000"
                 android:textSize="13sp"
                 android:letterSpacing="0.08"
@@ -35,7 +35,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Required for compressed camera image frames topic"
-                android:fontFamily="sans-serif"
+                android:fontFamily="@font/space_grotesk"
                 android:textColor="#666666"
                 android:textSize="12sp"
                 android:lineSpacingMultiplier="1.3" />
@@ -46,7 +46,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="[ PENDING ]"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/space_mono"
             android:textColor="#999999"
             android:textSize="10sp"
             android:letterSpacing="0.06" />
