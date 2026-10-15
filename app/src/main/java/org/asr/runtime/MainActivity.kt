@@ -73,7 +73,9 @@ class  MainActivity : ComponentActivity() {
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as AsrService.LocalBinder
-            viewModel.setService(binder.getService())
+            val asrService = binder.getService()
+            binding.runtimeCard.txtRuntimeNode.text = asrService.getDeviceNodeName()
+            viewModel.setService(asrService)
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -277,7 +279,7 @@ class  MainActivity : ComponentActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
-        TactileFeedbackHelper.attachTactileFeedback(binding.btnStartRuntime) {
+        TactileFeedbackHelper.attachTactileFeedback(binding.runtimeCard.btnStartRuntime) {
             if (allPermissionsGranted()) {
                 startServiceIntent(AsrService.ACTION_START)
             } else {
@@ -285,11 +287,11 @@ class  MainActivity : ComponentActivity() {
             }
         }
 
-        TactileFeedbackHelper.attachTactileFeedback(binding.btnStopRuntime) {
+        TactileFeedbackHelper.attachTactileFeedback(binding.runtimeCard.btnStopRuntime) {
             viewModel.stopRuntime()
         }
 
-        TactileFeedbackHelper.attachTactileFeedback(binding.btnRestartRuntime) {
+        TactileFeedbackHelper.attachTactileFeedback(binding.runtimeCard.btnRestartRuntime) {
             viewModel.restartRuntime()
             Toast.makeText(this, "Restarting ASR Runtime...", Toast.LENGTH_SHORT).show()
         }
@@ -481,14 +483,14 @@ class  MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.runtimeState.collect { state ->
-                        binding.txtRuntimeStatus.text = "● ${when (state) {
+                        binding.runtimeCard.txtRuntimeStatus.text = "● ${when (state) {
                             RuntimeState.STOPPED -> "SENSORS STOPPED"
                             RuntimeState.STARTING -> "SENSORS STARTING"
                             RuntimeState.STREAMING -> "SENSORS RUNNING"
                             RuntimeState.STOPPING -> "SENSORS STOPPING"
                             RuntimeState.ERROR -> "SENSOR ERROR"
                         }}"
-                        binding.txtRuntimeStatus.setTextColor(when(state) {
+                        binding.runtimeCard.txtRuntimeStatus.setTextColor(when(state) {
                             RuntimeState.STREAMING -> Color.parseColor("#4A9E5C") // Nothing muted status green
                             RuntimeState.STARTING, RuntimeState.STOPPING -> Color.parseColor("#D4A843") // Nothing technical amber
                             RuntimeState.ERROR -> Color.parseColor("#D71921") // Nothing accent red
@@ -507,11 +509,11 @@ class  MainActivity : ComponentActivity() {
                         
                         val state = viewModel.runtimeState.value
                         if (state == RuntimeState.STREAMING || state == RuntimeState.STARTING) {
-                            binding.btnStartRuntime.text = "${formatUptime(diag.uptimeMs)}"
-                            binding.btnStartRuntime.isEnabled = false
+                            binding.runtimeCard.txtRuntimeUptime.text = formatUptime(diag.uptimeMs)
+                            binding.runtimeCard.btnStartRuntime.isEnabled = false
                         } else {
-                            binding.btnStartRuntime.text = "START"
-                            binding.btnStartRuntime.isEnabled = true
+                            binding.runtimeCard.txtRuntimeUptime.text = "00:00:00"
+                            binding.runtimeCard.btnStartRuntime.isEnabled = true
                         }
                     }
                 }

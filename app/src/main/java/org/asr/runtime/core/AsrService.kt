@@ -231,6 +231,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     fun getModuleStatus(): Map<String, String> = moduleRegistry.getModuleStatus()
 
+    fun getDeviceNodeName(): String {
+        val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(PREF_NODE_ALIAS, null) ?: "asr_android"
+        return "${alias}_${deviceId.toInt() and 0xFF}"
+    }
+
     fun startModule(id: String) {
         if (id == "transport") setTcpEnabled(true) else moduleRegistry.startModule(id)
     }
