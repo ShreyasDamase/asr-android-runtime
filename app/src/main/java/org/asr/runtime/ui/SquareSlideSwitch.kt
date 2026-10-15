@@ -117,36 +117,48 @@ class SquareSlideSwitch @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 if (abs(event.x - downX) > touchSlop) dragging = true
                 if (dragging) {
-                    val margin = dp(2).toFloat()
-                    val thumbSize = dp(TRACK_HEIGHT_DP).toFloat() - margin * 2f
-                    val travel = (width - margin * 2f - thumbSize).coerceAtLeast(1f)
-                    thumbFraction = ((event.x - margin - thumbSize / 2f) / travel).coerceIn(0f, 1f)
-                    invalidate()
+                    updateThumbFromTouch(event.x)
                 }
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                if (event.x < 0f || event.x > width || event.y < 0f || event.y > height) {
+                if (!dragging && (event.x < 0f || event.x > width || event.y < 0f || event.y > height)) {
                     dragging = false
                     isPressed = false
                     animateThumb(thumbFraction, if (isChecked) 1f else 0f)
                     parent?.requestDisallowInterceptTouchEvent(false)
                     return true
                 }
-                val changedTo = if (dragging) event.x >= width / 2f else !isChecked
+                if (dragging) updateThumbFromTouch(event.x)
+                val changedTo = if (dragging) thumbFraction >= 0.5f else !isChecked
                 val fromFraction = thumbFraction
                 dragging = false
                 isPressed = false
-                if (changedTo != isChecked) isChecked = changedTo
+                val didChange = changedTo != isChecked
+                if (didChange) {
+                    isChecked = changedTo
+                    TactileFeedbackHelper.playSliderSound(this, changedTo)
+                }
                 animateThumb(fromFraction, if (isChecked) 1f else 0f)
                 sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_CLICKED)
                 parent?.requestDisallowInterceptTouchEvent(false)
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                val wasDragging = dragging
+                val changedTo = if (wasDragging) thumbFraction >= 0.5f else isChecked
+                val fromFraction = thumbFraction
+                val didChange = changedTo != isChecked
                 dragging = false
                 isPressed = false
-                animateThumb(thumbFraction, if (isChecked) 1f else 0f)
+                if (didChange) {
+                    isChecked = changedTo
+                    TactileFeedbackHelper.playSliderSound(this, changedTo)
+                }
+                animateThumb(fromFraction, if (isChecked) 1f else 0f)
+                if (didChange) {
+                    sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_CLICKED)
+                }
                 parent?.requestDisallowInterceptTouchEvent(false)
                 return true
             }
@@ -157,6 +169,7 @@ class SquareSlideSwitch @JvmOverloads constructor(
     override fun performClick(): Boolean {
         val fromFraction = if (isChecked) 1f else 0f
         isChecked = !isChecked
+        TactileFeedbackHelper.playSliderSound(this, isChecked)
         animateThumb(fromFraction, if (isChecked) 1f else 0f)
         sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_CLICKED)
         return true
@@ -193,6 +206,14 @@ class SquareSlideSwitch @JvmOverloads constructor(
             }
             start()
         }
+    }
+
+    private fun updateThumbFromTouch(x: Float) {
+        val margin = dp(2).toFloat()
+        val thumbSize = dp(TRACK_HEIGHT_DP).toFloat() - margin * 2f
+        val travel = (width - margin * 2f - thumbSize).coerceAtLeast(1f)
+        thumbFraction = ((x - margin - thumbSize / 2f) / travel).coerceIn(0f, 1f)
+        invalidate()
     }
 
     private fun dp(value: Int): Int = (value * density + 0.5f).toInt()
