@@ -3,6 +3,7 @@ package org.asr.runtime.core
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -13,6 +14,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import org.asr.runtime.MainActivity
 import android.os.PowerManager
 import android.net.wifi.WifiManager
 import android.util.Log
@@ -1149,11 +1151,22 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         }
     }
 
-    private fun createNotification(): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun createNotification(): Notification {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ASR Runtime Active")
             .setContentText("DeviceId: $deviceId")
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
+    }
 }
