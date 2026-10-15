@@ -46,10 +46,10 @@ class PersistentThemeController(private val activity: Activity) {
         apply(root)
     }
 
-    enum class Mode(val preferenceValue: String, val label: String, val accessibleName: String) {
-        SYSTEM("system", "SYSTEM", "System"),
-        LIGHT("light", "LIGHT", "Light"),
-        DARK("dark", "DARK", "Dark")
+    enum class Mode(val preferenceValue: String, val iconResource: Int, val accessibleName: String) {
+        SYSTEM("system", org.asr.runtime.R.drawable.ic_theme_system, "System"),
+        LIGHT("light", org.asr.runtime.R.drawable.ic_theme_light, "Light"),
+        DARK("dark", org.asr.runtime.R.drawable.ic_theme_dark, "Dark")
     }
 
     companion object {

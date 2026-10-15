@@ -140,9 +140,9 @@ class  MainActivity : ComponentActivity() {
             }
         }
         val ddsBackend = if (BuildConfig.ASR_DDS_BACKEND == "cyclone") {
-            "ROBOT SENSOR NODE · CYCLONE DDS"
+            "CYCLONE DDS"
         } else {
-            "ROBOT SENSOR NODE · FAST DDS"
+            "FAST DDS"
         }
         binding.txtAppBackend.text = "$ddsBackend · V${BuildConfig.VERSION_NAME}"
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
@@ -169,10 +169,13 @@ class  MainActivity : ComponentActivity() {
 
     private fun updateThemeButton() {
         val mode = themeController.mode
-        binding.btnThemeToggle.text = mode.label
         binding.btnThemeToggle.contentDescription =
             "Theme mode is ${mode.accessibleName}. Tap to cycle System, Light, and Dark themes."
-        binding.btnThemeToggle.setTextColor(if (themeController.isDark) Color.WHITE else Color.BLACK)
+        binding.btnThemeToggle.setImageResource(mode.iconResource)
+        binding.btnThemeToggle.imageTintList = ContextCompat.getColorStateList(
+            this,
+            if (themeController.isDark) android.R.color.white else android.R.color.black
+        )
     }
 
     private fun ensureConnectivityCardOrder() {
