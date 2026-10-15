@@ -309,10 +309,18 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         // ── 5. Hardware drivers ───────────────────────────────────────────
         cameraManager = CameraManager(
             context         = this,
-            onCameraError   = { benchmarkProcessor.onCameraError() },
+            onCameraError   = {
+                benchmarkProcessor.onCameraError()
+                if (isRunning) _runtimeState.value = RuntimeState.ERROR
+            },
             onThermalStatus = { status ->
                 Log.w(TAG, "[THERMAL] ${status.name}")
                 benchmarkProcessor.updateThermalStatus(status)
+            },
+            onCameraStarted = {
+                if (isRunning && _runtimeState.value == RuntimeState.STARTING) {
+                    _runtimeState.value = RuntimeState.STREAMING
+                }
             }
         ).apply {
             this.lifecycleOwner = this@AsrService
@@ -617,7 +625,6 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         serviceScope.launch {
             _runtimeState.value = RuntimeState.STOPPING
             handleRestart()
-            _runtimeState.value = RuntimeState.STARTING
         }
     }
 
@@ -832,11 +839,10 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         wakeLock?.acquire(10 * 60 * 60 * 1000L)
         wifiLock?.acquire()
 
-        startSensorModules()
         isRunning = true
-        _runtimeState.value = RuntimeState.STREAMING
+        startSensorModules()
         startHeartbeatLoop()
-        Log.i(TAG, "[ASR] Runtime started. DeviceId=$deviceId")
+        Log.i(TAG, "[ASR] Runtime startup requested. DeviceId=$deviceId")
     }
 
     private fun startHeartbeatLoop() {

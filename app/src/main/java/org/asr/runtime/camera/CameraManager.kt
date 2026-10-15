@@ -18,6 +18,7 @@ import org.asr.runtime.diagnostic.BenchmarkProcessor
 import org.asr.runtime.diagnostic.ThermalStatus
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Manages CameraX operations for the robotics service.
@@ -25,7 +26,8 @@ import java.util.concurrent.Executors
 class CameraManager(
     private val context: Context,
     private val onCameraError: () -> Unit = {},
-    private val onThermalStatus: (ThermalStatus) -> Unit = {}
+    private val onThermalStatus: (ThermalStatus) -> Unit = {},
+    private val onCameraStarted: () -> Unit = {}
 ) : SensorModule {
 
     override val id: String = "camera"
@@ -58,6 +60,7 @@ class CameraManager(
 
     private var cameraProvider: ProcessCameraProvider? = null
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val cameraOperationGeneration = AtomicLong(0)
     // Written on the main executor (bind/unbind), read from binder & TCP threads.
     @Volatile private var imageAnalysis: ImageAnalysis? = null
 
@@ -106,6 +109,7 @@ class CameraManager(
         config: CameraConfig
     ) {
         val provider = cameraProvider ?: return
+        val generation = cameraOperationGeneration.incrementAndGet()
         state = ModuleState.STARTING
 
         Log.i(TAG, "Starting Camera...")
@@ -144,6 +148,7 @@ class CameraManager(
 
         val mainExecutor = ContextCompat.getMainExecutor(context)
         mainExecutor.execute {
+            if (generation != cameraOperationGeneration.get()) return@execute
             try {
                 provider.unbindAll()
                 camera = provider.bindToLifecycle(
@@ -153,6 +158,7 @@ class CameraManager(
                 )
                 Log.i(TAG, "Camera Started with lens facing ${config.lensFacing}")
                 state = ModuleState.RUNNING
+                onCameraStarted()
             } catch (exc: Exception) {
                 Log.e(TAG, "Use case binding failed for lens ${config.lensFacing}", exc)
                 state = ModuleState.ERROR
@@ -162,9 +168,11 @@ class CameraManager(
     }
 
     fun stopCamera() {
+        val generation = cameraOperationGeneration.incrementAndGet()
         state = ModuleState.STOPPING
         val mainExecutor = ContextCompat.getMainExecutor(context)
         mainExecutor.execute {
+            if (generation != cameraOperationGeneration.get()) return@execute
             try {
                 cameraProvider?.unbindAll()
             } catch (e: Exception) {

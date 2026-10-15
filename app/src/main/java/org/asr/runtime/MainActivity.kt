@@ -30,6 +30,7 @@ import org.asr.runtime.core.RuntimeState
 import org.asr.runtime.ros2.Ros2State
 import org.asr.runtime.databinding.ActivityMainBinding
 import org.asr.runtime.ui.MainViewModel
+import org.asr.runtime.ui.TactileFeedbackHelper
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -85,11 +86,11 @@ class  MainActivity : ComponentActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         val ddsBackend = if (BuildConfig.ASR_DDS_BACKEND == "cyclone") {
-            "Robot sensor node · Cyclone DDS"
+            "ROBOT SENSOR NODE · CYCLONE DDS"
         } else {
-            "Robot sensor node · Fast DDS"
+            "ROBOT SENSOR NODE · FAST DDS"
         }
-        binding.txtAppBackend.text = "$ddsBackend · v${BuildConfig.VERSION_NAME}"
+        binding.txtAppBackend.text = "$ddsBackend · V${BuildConfig.VERSION_NAME}"
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
         setupControls()
@@ -239,8 +240,9 @@ class  MainActivity : ComponentActivity() {
         binding.editTransportPort.setText("4242")
         updateTransportModeBadge()
 
-        val onDdsPathChanged = { _: android.widget.CompoundButton, _: Boolean ->
+        val onDdsPathChanged = { button: android.widget.CompoundButton, checked: Boolean ->
             if (!initializingControls) {
+                TactileFeedbackHelper.playSliderSound(button, checked)
                 val wifi = binding.switchDdsWifi.isChecked
                 val usb = binding.switchDdsUsb.isChecked
                 getSharedPreferences("asr_prefs", MODE_PRIVATE).edit()
@@ -255,14 +257,19 @@ class  MainActivity : ComponentActivity() {
         }
         binding.switchDdsWifi.setOnCheckedChangeListener(onDdsPathChanged)
         binding.switchDdsUsb.setOnCheckedChangeListener(onDdsPathChanged)
+        TactileFeedbackHelper.prepare(binding.switchDdsWifi)
+        TactileFeedbackHelper.prepare(binding.switchDdsUsb)
         binding.btnUsbTetheringSettings.setOnClickListener { openUsbTetheringSettings() }
 
         binding.switchTcpEnabled.setOnCheckedChangeListener { _, isChecked ->
+            if (initializingControls) return@setOnCheckedChangeListener
+            TactileFeedbackHelper.playSliderSound(binding.switchTcpEnabled, isChecked)
             getSharedPreferences("asr_prefs", MODE_PRIVATE).edit().putBoolean("tcp_enabled", isChecked).apply()
             updateTcpStatus()
             if (isChecked) startTransportServiceIntent(AsrService.ACTION_TCP_ENABLE, resolvedHost(), resolvedPort())
             else startTransportServiceIntent(AsrService.ACTION_TCP_DISABLE)
         }
+        TactileFeedbackHelper.prepare(binding.switchTcpEnabled)
 
         binding.editTransportHost.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) { updateTransportModeBadge() }
@@ -270,22 +277,24 @@ class  MainActivity : ComponentActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
-        binding.btnStartRuntime.setOnClickListener {
+        TactileFeedbackHelper.attachTactileFeedback(binding.btnStartRuntime) {
             if (allPermissionsGranted()) {
                 startServiceIntent(AsrService.ACTION_START)
             } else {
                 requestPermissionsSafely()
             }
         }
-        binding.btnStopRuntime.setOnClickListener { 
+
+        TactileFeedbackHelper.attachTactileFeedback(binding.btnStopRuntime) {
             viewModel.stopRuntime()
         }
-        binding.btnRestartRuntime.setOnClickListener { 
+
+        TactileFeedbackHelper.attachTactileFeedback(binding.btnRestartRuntime) {
             viewModel.restartRuntime()
             Toast.makeText(this, "Restarting ASR Runtime...", Toast.LENGTH_SHORT).show()
         }
 
-        binding.btnExitApp.setOnClickListener { confirmExit() }
+        // btnExitApp removed from header
         binding.btnDetailsToggle.setOnClickListener {
             val showDetails = binding.layoutAdvancedDetails.visibility != android.view.View.VISIBLE
             binding.layoutAdvancedDetails.visibility = if (showDetails) android.view.View.VISIBLE else android.view.View.GONE
@@ -322,7 +331,6 @@ class  MainActivity : ComponentActivity() {
             .setMessage("This stops the sensor runtime and shuts down TCP and ROS 2 before closing the app.")
             .setNegativeButton("No", null)
             .setPositiveButton("Yes, exit") { _, _ ->
-                binding.btnExitApp.isEnabled = false
                 if (viewModel.isServiceBound.value) {
                     viewModel.shutdownForExit {
                         if (!isFinishing) finishAndRemoveTask()
@@ -481,10 +489,10 @@ class  MainActivity : ComponentActivity() {
                             RuntimeState.ERROR -> "SENSOR ERROR"
                         }}"
                         binding.txtRuntimeStatus.setTextColor(when(state) {
-                            RuntimeState.STREAMING -> Color.GREEN
-                            RuntimeState.STARTING, RuntimeState.STOPPING -> Color.BLUE
-                            RuntimeState.ERROR -> Color.RED
-                            else -> Color.GRAY
+                            RuntimeState.STREAMING -> Color.parseColor("#4A9E5C") // Nothing muted status green
+                            RuntimeState.STARTING, RuntimeState.STOPPING -> Color.parseColor("#D4A843") // Nothing technical amber
+                            RuntimeState.ERROR -> Color.parseColor("#D71921") // Nothing accent red
+                            else -> Color.parseColor("#999999") // Nothing tertiary gray
                         })
                     }
                 }
@@ -568,12 +576,12 @@ class  MainActivity : ComponentActivity() {
                             Ros2State.DISABLED -> "DISABLED"
                         }
                         binding.txtRos2Status.setTextColor(when(status.state) {
-                            Ros2State.ACTIVE -> Color.parseColor("#2E7D32")
+                            Ros2State.ACTIVE -> Color.parseColor("#4A9E5C")
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
                             Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
-                            Ros2State.WAITING_FOR_INTERFACE -> Color.BLUE
-                            Ros2State.ERROR -> Color.RED
-                            else -> Color.GRAY
+                            Ros2State.WAITING_FOR_INTERFACE -> Color.parseColor("#D4A843")
+                            Ros2State.ERROR -> Color.parseColor("#D71921")
+                            else -> Color.parseColor("#999999")
                         })
                         binding.progressRos2.visibility = when(status.state) {
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
