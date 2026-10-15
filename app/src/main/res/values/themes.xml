@@ -7,4 +7,12 @@
         <item name="android:windowBackground">#F5F5F5</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <style name="Theme.AsrRuntime.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#F5F4EF</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_asr_splash_icon</item>
+        <item name="windowSplashScreenIconBackgroundColor">#F5F4EF</item>
+        <item name="android:windowSplashScreenBrandingImage">@drawable/asr_splash_branding</item>
+        <item name="postSplashScreenTheme">@style/Theme.AsrRuntime</item>
+    </style>
 </resources>

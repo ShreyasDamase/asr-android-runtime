@@ -11,7 +11,7 @@
 
 Connect an Android phone to a robotics system as a configurable ROS 2 sensor node.
 
-ASR Android Runtime publishes data from the sensor modules you choose. Enable ROS 2 DDS or TCP to ASR Studio, configure the connection, and start the runtime when you are ready.
+ASR Android Runtime publishes data from the sensor modules you choose. Enable ROS 2 DDS over Wi-Fi or USB tethering, or TCP to ASR Studio over Wi-Fi or USB through an ADB reverse tunnel. Configure the connection and start the runtime when you are ready.
 
 **Available modules**
 - Camera image and camera information
@@ -25,14 +25,16 @@ Sensor availability depends on the phone. Android asks for sensitive permissions
 
 ASR Android Runtime is intended for ROS 2 developers, robotics researchers, and makers. It is an open-source companion for robotics workflows and does not require an ASR account.
 
-Sensor data is transmitted through the ROS 2 DDS path or TCP destination that you configure. Choose trusted network destinations and review the privacy policy before enabling sensor streams.
+Sensor data is transmitted to the ROS 2 peers and/or ASR Studio endpoint you configure; enabled transports can operate at the same time. DDS over USB uses USB tethering as an IP connection. TCP over USB uses ADB reverse tunneling; this app does not provide a separate USB serial/UART mode. The current app transports do not encrypt these connections. Choose trusted destinations and review the privacy policy before enabling sensor streams.
+
+The About screen currently links to an optional external Buy Me a Coffee contribution page. The app does not include checkout or receive payment details. Before including this link in a Play-distributed binary, confirm that the exact contribution flow is permitted by the current Google Play payments policy; otherwise remove the in-app link for the Play build. The website support link is separate.
 
 ## Store assets
 
 - **Launcher icon:** present at `app/src/main/ic_launcher-playstore.png`; check Play Console's required dimensions and safe zone before upload.
 - **Phone screenshots:** still need to be captured from the approved release UI. Capture the dashboard in both light and dark themes and include the expanded sensor controls and connection status.
 - **Feature graphic (1024 × 500):** not present in this repository; prepare after screenshot selection so it matches the final listing.
-- **Privacy policy URL:** not yet hosted. Publish the reviewed policy at a stable public URL and use that exact URL in Play Console and the app's About screen.
+- **Privacy policy URL (planned):** `https://shreyasdamase.github.io/asr-android-runtime/privacy.html`. Enable GitHub Pages and publish the reviewed policy before using this URL in Play Console or the app.
 
 ## Play Console items
 

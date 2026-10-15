@@ -45,7 +45,7 @@
             android:name=".ui.PermissionOnboardingActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.AsrRuntime">
+            android:theme="@style/Theme.AsrRuntime.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -55,7 +55,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.AsrRuntime">
+            android:theme="@style/Theme.AsrRuntime.Starting">
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>

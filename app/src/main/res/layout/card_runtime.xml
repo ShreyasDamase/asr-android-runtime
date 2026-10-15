@@ -197,6 +197,18 @@
                     android:textColor="@color/asr_text_secondary"
                     android:textSize="13sp" />
 
+                <CheckBox
+                    android:id="@+id/checkSensorDataDisclosure"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:buttonTint="@color/asr_text_secondary"
+                    android:fontFamily="@font/space_grotesk"
+                    android:paddingStart="4dp"
+                    android:text="I understand: selected sensor data and device details (model, Android version, capabilities, node ID) are sent live to ROS 2 peers or ASR Studio at enabled DDS/TCP destinations (Wi-Fi, USB tethering, or USB/ADB). These connections are not encrypted by this app. The destination operator may process or retain data. No developer cloud relay is used."
+                    android:textColor="@color/asr_text_secondary"
+                    android:textSize="12sp" />
+
                 <LinearLayout
                     android:id="@+id/sensorOptionRows"
                     android:layout_width="match_parent"

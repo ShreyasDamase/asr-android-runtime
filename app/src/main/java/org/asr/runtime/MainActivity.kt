@@ -30,6 +30,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.launch
 import org.asr.runtime.core.AsrService
 import org.asr.runtime.core.RuntimeState
@@ -37,7 +38,7 @@ import org.asr.runtime.ros2.Ros2State
 import org.asr.runtime.databinding.ActivityMainBinding
 import org.asr.runtime.ui.MainViewModel
 import org.asr.runtime.ui.TactileFeedbackHelper
-import org.asr.runtime.ui.TemporaryThemeController
+import org.asr.runtime.ui.PersistentThemeController
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -45,6 +46,10 @@ import java.util.*
  * Enhanced Activity for ASR Runtime control and diagnostics.
  */
 class  MainActivity : ComponentActivity() {
+
+    private companion object {
+        const val KEY_SENSOR_DISCLOSURE_ACCEPTED = "sensor_data_disclosure_v1_accepted"
+    }
 
     private data class SensorConfigOption(val id: String, val label: String, val detail: String)
 
@@ -60,7 +65,7 @@ class  MainActivity : ComponentActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
-    private lateinit var temporaryThemeController: TemporaryThemeController
+    private lateinit var themeController: PersistentThemeController
     private var tcpConnected = false
     private var initializingControls = true
     private var pendingSensorSelection: Set<String>? = null
@@ -112,14 +117,18 @@ class  MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         ensureConnectivityCardOrder()
-        temporaryThemeController = TemporaryThemeController(this)
+        themeController = PersistentThemeController(this)
+        themeController.apply(binding.root)
+        updateThemeButton()
         binding.btnThemeToggle.setOnClickListener {
-            temporaryThemeController.toggle(binding.root)
-            val dark = temporaryThemeController.isDark
+            themeController.cycle(binding.root)
+            updateThemeButton()
+            val dark = themeController.isDark
             updateTransportModeBadge()
             updateUsbTetheringSettingsButton()
             updateRuntimeStatus(viewModel.runtimeState.value)
@@ -129,9 +138,6 @@ class  MainActivity : ComponentActivity() {
                 updatePermissionTable()
                 updateHardwareTable()
             }
-            binding.btnThemeToggle.text = if (dark) "◑" else "◐"
-            binding.btnThemeToggle.contentDescription = if (dark) "Switch to light theme" else "Switch to dark theme"
-            binding.btnThemeToggle.setTextColor(if (dark) Color.WHITE else Color.BLACK)
         }
         val ddsBackend = if (BuildConfig.ASR_DDS_BACKEND == "cyclone") {
             "ROBOT SENSOR NODE · CYCLONE DDS"
@@ -159,6 +165,14 @@ class  MainActivity : ComponentActivity() {
         // Bind to the service if it's already running to get live status
         val intent = Intent(this, AsrService::class.java)
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun updateThemeButton() {
+        val mode = themeController.mode
+        binding.btnThemeToggle.text = mode.label
+        binding.btnThemeToggle.contentDescription =
+            "Theme mode is ${mode.accessibleName}. Tap to cycle System, Light, and Dark themes."
+        binding.btnThemeToggle.setTextColor(if (themeController.isDark) Color.WHITE else Color.BLACK)
     }
 
     private fun ensureConnectivityCardOrder() {
@@ -228,7 +242,7 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun addHardwareRow(table: TableLayout, label: String, present: String, isPresent: Boolean, liveState: String) {
-        val dark = temporaryThemeController.isDark
+        val dark = themeController.isDark
         val primary = if (dark) Color.WHITE else Color.BLACK
         val secondary = if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
         val good = if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
@@ -277,7 +291,7 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun addTableRow(table: TableLayout, label: String, value: String, isPositive: Boolean) {
-        val dark = temporaryThemeController.isDark
+        val dark = themeController.isDark
         val horizontalPadding = (8 * resources.displayMetrics.density + 0.5f).toInt()
         val verticalPadding = (9 * resources.displayMetrics.density + 0.5f).toInt()
         val mono = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.space_mono)
@@ -318,17 +332,19 @@ class  MainActivity : ComponentActivity() {
 
         val onDdsPathChanged = { button: android.widget.CompoundButton, checked: Boolean ->
             if (!initializingControls) {
-                TactileFeedbackHelper.playSliderSound(button, checked)
-                val wifi = binding.switchDdsWifi.isChecked
-                val usb = binding.switchDdsUsb.isChecked
-                getSharedPreferences("asr_prefs", MODE_PRIVATE).edit()
-                    .putBoolean("dds_wifi_enabled", wifi)
-                    .putBoolean("dds_usb_enabled", usb)
-                    .putBoolean("ros2_enabled", wifi || usb)
-                    .apply()
-                binding.txtDdsPathStatus.text = buildDdsPathSummary(wifi, usb, "")
-                updateUsbTetheringSettingsButton()
-                startDdsPathIntent(wifi, usb)
+                if (!checked || !requireSensorDataDisclosure(button)) {
+                    TactileFeedbackHelper.playSliderSound(button, checked)
+                    val wifi = binding.switchDdsWifi.isChecked
+                    val usb = binding.switchDdsUsb.isChecked
+                    getSharedPreferences("asr_prefs", MODE_PRIVATE).edit()
+                        .putBoolean("dds_wifi_enabled", wifi)
+                        .putBoolean("dds_usb_enabled", usb)
+                        .putBoolean("ros2_enabled", wifi || usb)
+                        .apply()
+                    binding.txtDdsPathStatus.text = buildDdsPathSummary(wifi, usb, "")
+                    updateUsbTetheringSettingsButton()
+                    startDdsPathIntent(wifi, usb)
+                }
             }
         }
         binding.switchDdsWifi.setOnCheckedChangeListener(onDdsPathChanged)
@@ -339,6 +355,7 @@ class  MainActivity : ComponentActivity() {
 
         binding.switchTcpEnabled.setOnCheckedChangeListener { _, isChecked ->
             if (initializingControls) return@setOnCheckedChangeListener
+            if (isChecked && requireSensorDataDisclosure(binding.switchTcpEnabled)) return@setOnCheckedChangeListener
             TactileFeedbackHelper.playSliderSound(binding.switchTcpEnabled, isChecked)
             getSharedPreferences("asr_prefs", MODE_PRIVATE).edit().putBoolean("tcp_enabled", isChecked).apply()
             updateTcpStatus()
@@ -354,6 +371,11 @@ class  MainActivity : ComponentActivity() {
         })
 
         TactileFeedbackHelper.attachTactileFeedback(binding.runtimeCard.btnStartRuntime) {
+            if (!hasAcceptedSensorDisclosure()) {
+                if (!sensorPanelExpanded) toggleSensorOutputPanel()
+                Toast.makeText(this, "Review and accept the data disclosure before starting the runtime", Toast.LENGTH_LONG).show()
+                return@attachTactileFeedback
+            }
             if (allPermissionsGranted()) {
                 startServiceIntent(AsrService.ACTION_START)
             } else {
@@ -391,9 +413,7 @@ class  MainActivity : ComponentActivity() {
             }
         }
         binding.btnAbout.setOnClickListener {
-            startActivity(Intent(this, org.asr.runtime.ui.AboutActivity::class.java).apply {
-                putExtra(org.asr.runtime.ui.AboutActivity.EXTRA_DARK_THEME, temporaryThemeController.isDark)
-            })
+            startActivity(Intent(this, org.asr.runtime.ui.AboutActivity::class.java))
         }
 
         binding.btnConnectTransport.setOnClickListener {
@@ -449,7 +469,7 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun updateClientStatusIndicator(connected: Boolean) {
-        val dark = temporaryThemeController.isDark
+        val dark = themeController.isDark
         val color = when {
             connected && dark -> Color.parseColor("#77C98A")
             connected -> Color.parseColor("#39834B")
@@ -480,7 +500,7 @@ class  MainActivity : ComponentActivity() {
         val host = binding.editTransportHost.text?.toString()?.trim() ?: ""
         val isAdb = host.isBlank() || host == "127.0.0.1" || host == "::1"
         binding.txtTransportMode.text = if (isAdb) "ADB" else "Wi-Fi"
-        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        val dark = ::themeController.isInitialized && themeController.isDark
         val neutral = if (dark) Color.WHITE else Color.parseColor("#4A5568")
         binding.txtTransportMode.setTextColor(neutral)
         binding.txtTransportMode.background = GradientDrawable().apply {
@@ -570,7 +590,7 @@ class  MainActivity : ComponentActivity() {
         } else {
             android.view.View.GONE
         }
-        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        val dark = ::themeController.isInitialized && themeController.isDark
         val warningAccent = usbPathSelected && tetheringMissing
         binding.txtUsbTetheringWarning.setTextColor(
             if (dark) Color.parseColor("#D4A843") else Color.parseColor("#8A641A")
@@ -590,7 +610,7 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun updateRos2StatusColor(state: Ros2State) {
-        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        val dark = ::themeController.isInitialized && themeController.isDark
         binding.txtRos2Status.setTextColor(when (state) {
             Ros2State.ACTIVE -> if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
@@ -623,7 +643,7 @@ class  MainActivity : ComponentActivity() {
         binding.runtimeCard.txtRuntimeStatus.contentDescription =
             "Runtime $statusLabel. $selectedCount of $totalCount sensor groups selected. " +
                 if (sensorPanelExpanded) "Tap to collapse sensor outputs." else "Tap to expand sensor outputs."
-        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        val dark = ::themeController.isInitialized && themeController.isDark
         binding.runtimeCard.txtRuntimeStatus.setTextColor(when (state) {
             RuntimeState.STREAMING -> if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
             RuntimeState.STARTING, RuntimeState.STOPPING -> if (dark) Color.parseColor("#E5B86B") else Color.parseColor("#9A6B17")
@@ -633,7 +653,7 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun setupSensorOutputPanel() {
-        val dark = temporaryThemeController.isDark
+        val dark = themeController.isDark
         val primary = if (dark) Color.WHITE else Color.BLACK
         val secondary = if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
         val divider = if (dark) Color.parseColor("#333333") else Color.parseColor("#E3E5E8")
@@ -704,6 +724,7 @@ class  MainActivity : ComponentActivity() {
         }
 
         binding.runtimeCard.btnCancelSensorSelection.setOnClickListener { closeSensorOutputPanel(discardChanges = true) }
+        binding.runtimeCard.checkSensorDataDisclosure.setOnCheckedChangeListener { _, _ -> updateSensorApplyButton() }
         binding.runtimeCard.btnApplySensorSelection.setOnClickListener {
             applySensorSelection(stagedSensorSelection.toSet())
         }
@@ -718,6 +739,7 @@ class  MainActivity : ComponentActivity() {
             initialSensorSelection = configuredSensorModules()
             stagedSensorSelection.clear()
             stagedSensorSelection.addAll(initialSensorSelection)
+            binding.runtimeCard.checkSensorDataDisclosure.isChecked = hasAcceptedSensorDisclosure()
             sensorToggleViews.forEach { (id, toggle) ->
                 toggle.isChecked = id in stagedSensorSelection
                 toggle.contentDescription = "${sensorConfigOptions.first { it.id == id }.label}: ${if (toggle.isChecked) "selected" else "not selected"}"
@@ -750,15 +772,28 @@ class  MainActivity : ComponentActivity() {
     private fun updateSensorApplyButton() {
         val button = binding.runtimeCard.btnApplySensorSelection
         val changed = stagedSensorSelection != initialSensorSelection
-        button.text = "APPLY ${stagedSensorSelection.size} SELECTED"
-        button.isEnabled = changed
-        button.alpha = if (changed) 1f else 0.45f
-        button.contentDescription = "Apply ${stagedSensorSelection.size} selected sensor groups"
+        val consentGiven = binding.runtimeCard.checkSensorDataDisclosure.isChecked
+        val consentRequired = !hasAcceptedSensorDisclosure()
+        button.text = if (consentRequired && consentGiven) {
+            "AGREE & CONTINUE"
+        } else if (stagedSensorSelection.isNotEmpty()) {
+            "AGREE & APPLY ${stagedSensorSelection.size}"
+        } else {
+            "APPLY 0 SELECTED"
+        }
+        button.isEnabled = (changed || (consentRequired && consentGiven)) &&
+            (stagedSensorSelection.isEmpty() || consentGiven)
+        button.alpha = if (button.isEnabled) 1f else 0.45f
+        button.contentDescription = if (consentRequired && consentGiven) {
+            "Accept the data disclosure and save sensor output settings"
+        } else {
+            "Apply ${stagedSensorSelection.size} selected sensor groups"
+        }
     }
 
     private fun updateSensorOptionStatuses(moduleStatus: Map<String, String>) {
         currentModuleStatus = moduleStatus
-        val dark = temporaryThemeController.isDark
+        val dark = themeController.isDark
         sensorConfigOptions.forEach { option ->
             val state = moduleStatus[option.id]?.uppercase() ?: "STOPPED"
             val available = sensorAvailability[option.id] == true
@@ -800,6 +835,15 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun applySensorSelection(selection: Set<String>) {
+        if (selection.isNotEmpty() && !binding.runtimeCard.checkSensorDataDisclosure.isChecked) {
+            Toast.makeText(this, "Review and accept the sensor data disclosure to enable outputs", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (binding.runtimeCard.checkSensorDataDisclosure.isChecked) {
+            getSharedPreferences("asr_prefs", MODE_PRIVATE).edit()
+                .putBoolean(KEY_SENSOR_DISCLOSURE_ACCEPTED, true)
+                .apply()
+        }
         val missingPermissions = permissionsForSensors(selection).filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
@@ -824,6 +868,19 @@ class  MainActivity : ComponentActivity() {
         updateRuntimeStatus(viewModel.runtimeState.value)
         updateSensorApplyButton()
         updateSensorOptionStatuses(currentModuleStatus)
+    }
+
+    private fun hasAcceptedSensorDisclosure(): Boolean = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        .getBoolean(KEY_SENSOR_DISCLOSURE_ACCEPTED, false)
+
+    private fun requireSensorDataDisclosure(button: android.widget.CompoundButton): Boolean {
+        if (hasAcceptedSensorDisclosure()) return false
+        initializingControls = true
+        button.isChecked = false
+        initializingControls = false
+        if (!sensorPanelExpanded) toggleSensorOutputPanel()
+        Toast.makeText(this, "Review and accept the data disclosure before enabling a connection", Toast.LENGTH_LONG).show()
+        return true
     }
 
     private fun permissionsForSensors(moduleIds: Set<String>): List<String> = buildList {

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f5f2">
+  <meta name="description" content="ASR is an open-source toolkit for ROS 2 robotics development, bringing configurable Android sensor data to robots over DDS and TCP.">
+  <title>ASR — Practical tools for ROS 2 robotics</title>
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/asr-app-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header wrap">
+    <a class="brand" href="index.html" aria-label="ASR home"><img class="brand-icon" src="assets/asr-app-icon.png" alt=""><span>ASR <small>ROBOTICS PLATFORM</small></span></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span>MENU</span><i aria-hidden="true"></i></button>
+    <nav id="primary-nav" aria-label="Main navigation">
+      <a href="#platform">Platform</a>
+      <a href="#connect">Connectivity</a>
+      <a href="#resources">Resources</a>
+      <a href="#about">About</a>
+      <a class="nav-support" href="https://buymeacoffee.com/shreyasdamase" target="_blank" rel="noopener noreferrer">Buy me a coffee <span aria-hidden="true">↗</span></a>
+      <a class="nav-cta" href="https://github.com/ShreyasDamase/asr-android-runtime/releases/latest">Get ASR <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="live-dot"></span> OPEN-SOURCE ROBOTICS TOOLS</p>
+        <h1 id="hero-title">Practical tools<br>for <em>robotics.</em></h1>
+        <p class="hero-lede">ASR brings Android sensors into ROS 2 development. Use a phone as a configurable sensor node, then connect it to your robot or inspect its data in ASR Studio.</p>
+        <div class="hero-actions">
+          <a class="button button-dark" href="https://github.com/ShreyasDamase/asr-android-runtime/releases/latest">Explore Android Runtime <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="#platform">Explore the platform <span aria-hidden="true">↓</span></a>
+          <a class="button button-outline" href="#support">Support ASR <span aria-hidden="true">↓</span></a>
+        </div>
+        <div class="hero-meta"><span>ANDROID</span><span>ROS 2</span><span>DDS + TCP</span></div>
+      </div>
+      <div class="hero-visual" aria-label="Illustration of an Android sensor node connected to a robotics platform">
+        <div class="visual-grid"></div>
+        <div class="visual-label label-top">FIELD NODE <span>01 / ASR</span></div>
+        <div class="phone-card">
+          <div class="phone-head"><span>ASR RUNTIME</span><span class="runtime-state"><i></i> READY</span></div>
+          <div class="phone-time">09<span>:</span>41</div>
+          <div class="dot-rule"></div>
+          <p class="phone-sub">SENSOR OUTPUT</p>
+          <div class="sensor-line"><span><b class="sensor-icon">◉</b> CAMERA</span><span class="sensor-on">ON</span></div>
+          <div class="sensor-line"><span><b class="sensor-icon">⌁</b> IMU</span><span class="sensor-on">ON</span></div>
+          <div class="sensor-line"><span><b class="sensor-icon">⌖</b> GPS</span><span class="sensor-off">OFF</span></div>
+          <div class="phone-footer"><span>CYCLONE DDS</span><span>CONNECTED <b class="red-dot"></b></span></div>
+        </div>
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <div class="visual-caption"><span>PHONE → ROBOT</span><span>LIVE SENSOR DATA</span></div>
+      </div>
+    </section>
+
+    <section class="ticker" aria-label="ASR platform components"><div class="ticker-inner"><span>ANDROID RUNTIME</span><b>·</b><span>ROS 2</span><b>·</b><span>ASR STUDIO</span><b>·</b><span>OPEN SOURCE</span><b>·</b><span>ANDROID RUNTIME</span><b>·</b><span>ROS 2</span></div></section>
+
+    <section class="section wrap" id="platform">
+      <div class="section-heading"><div><p class="eyebrow">01 — THE PLATFORM</p><h2>One phone.<br><span>More ways to sense.</span></h2></div><p class="section-intro">Bring supported phone sensors into robotics experiments and field setups. Choose the sensor groups you need and keep runtime, network paths, and outputs visible.</p></div>
+      <div class="feature-grid">
+        <article class="feature-card feature-primary"><span class="card-index">A / 01</span><div class="feature-glyph glyph-camera"><i></i></div><h3>Android Runtime</h3><p>Publish supported camera, IMU, location, battery, motion, audio, and environment data as ROS 2 topics. Availability depends on device hardware and permissions.</p><a href="https://github.com/ShreyasDamase/asr-android-runtime#readme">Runtime guide <span>↗</span></a></article>
+        <article class="feature-card"><span class="card-index">A / 02</span><div class="feature-glyph glyph-studio">▥</div><h3>ASR Studio</h3><p>Connect the desktop companion over TCP to view camera, sensor, audio, and runtime telemetry from the phone.</p><a href="https://github.com/ShreyasDamase/Asrstudio#readme">Studio overview <span>↗</span></a></article>
+        <article class="feature-card"><span class="card-index">A / 03</span><div class="feature-glyph glyph-ros">⌘</div><h3>ROS 2 tools</h3><p>Inspect ROS graph discovery and sensor callbacks with the optional host-side link monitor.</p><a href="https://github.com/ShreyasDamase/asr-ros2-link-monitor">Link monitor <span>↗</span></a></article>
+      </div>
+    </section>
+
+    <section class="connect-section" id="connect">
+      <div class="wrap connect-wrap">
+        <div class="section-heading"><div><p class="eyebrow">02 — CONNECTIVITY</p><h2>Choose your<br><span>path to the robot.</span></h2></div><p class="section-intro">DDS publishes to ROS 2 peers; TCP connects to ASR Studio. Choose the path for your workflow and configure its destination in the app or desktop tool.</p></div>
+        <div class="transport-grid">
+          <article class="transport-card"><div class="transport-top"><span class="transport-tag">ROS 2 MIDDLEWARE</span><span class="transport-number">01</span></div><h3>DDS</h3><p>Publish directly to ROS 2 peers over Wi-Fi or USB tethering. DDS over USB is an IP network path.</p><div class="transport-foot"><span>WI-FI</span><span>USB TETHER</span><span class="transport-mark">↗</span></div></article>
+          <article class="transport-card"><div class="transport-top"><span class="transport-tag">DESKTOP TELEMETRY</span><span class="transport-number">02</span></div><h3>TCP</h3><p>Stream to ASR Studio over Wi-Fi or through an ADB reverse tunnel over USB.</p><div class="transport-foot"><span>WI-FI</span><span>USB / ADB</span><span class="transport-mark">↗</span></div></article>
+        </div>
+        <p class="small-note"><span class="red-dot"></span> USB / ADB and USB tethering are separate connection methods. ASR does not currently provide a USB serial/UART transport.</p>
+      </div>
+    </section>
+
+    <section class="steps-section wrap">
+      <div class="section-heading"><div><p class="eyebrow">03 — GET STARTED</p><h2>From phone<br><span>to sensor node.</span></h2></div><a class="text-link" href="https://github.com/ShreyasDamase/asr-android-runtime#start-the-phone-runtime">Read setup guide <span>↗</span></a></div>
+      <div class="steps-grid"><article><span>01</span><h3>Install</h3><p>Get the Android Runtime release and choose the Cyclone DDS build.</p></article><article><span>02</span><h3>Configure</h3><p>Select the sensors and transport that match your robot setup.</p></article><article><span>03</span><h3>Connect</h3><p>Start the runtime, then enable DDS or connect ASR Studio over TCP.</p></article></div>
+    </section>
+
+    <section class="about-section" id="about"><div class="wrap about-inner"><div><p class="eyebrow">04 — THE PERSON BEHIND ASR</p><h2>Built for<br><span>robotics development.</span></h2></div><div class="about-copy"><p>ASR is an open-source project created and maintained by <strong>Shreyas Damase</strong>. It is dedicated to making Android sensor hardware practical to use in ROS 2 experiments, prototypes, and robotics projects.</p><p>The platform brings together the Android Runtime, ASR Studio, and ROS 2 tools so developers can move from device sensors to useful robot data with equipment they already have.</p><a class="text-link" href="https://github.com/ShreyasDamase">Meet the maintainer <span>↗</span></a></div></div></section>
+
+    <section class="resource-band" id="resources"><div class="wrap resource-inner"><div><p class="eyebrow">BUILD WITH ASR</p><h2>Start with the docs.<br><span>Take it from there.</span></h2></div><div class="resource-actions"><a href="https://github.com/ShreyasDamase/asr-android-runtime#readme">Android setup <span>↗</span></a><a href="https://github.com/ShreyasDamase/Asrstudio#readme">ASR Studio <span>↗</span></a><a href="https://github.com/ShreyasDamase/asr-ros2-link-monitor#readme">ROS 2 monitor <span>↗</span></a><a href="https://github.com/ShreyasDamase/asr-android-runtime/releases/latest">Latest releases <span>↗</span></a></div></div></section>
+    <section class="support-section" id="support"><div class="wrap support-card"><div class="support-copy"><p class="eyebrow"><span class="live-dot"></span> SUPPORT OPEN-SOURCE ROBOTICS</p><h2>Help keep the<br><span>work moving.</span></h2><p>If ASR helps your robotics work, your support helps me spend more time building, testing, and sharing practical open-source tools for Android and ROS 2. Support is optional.</p><a class="button button-dark" href="https://buymeacoffee.com/shreyasdamase" target="_blank" rel="noopener noreferrer">Buy me a coffee <span aria-hidden="true">↗</span></a></div><div class="support-mark" aria-hidden="true"><span>ASR</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></section>
+  </main>
+
+  <footer class="site-footer"><div class="wrap footer-main"><a class="brand" href="index.html"><img class="brand-icon" src="assets/asr-app-icon.png" alt=""><span>ASR <small>ROBOTICS PLATFORM</small></span></a><p>Open-source tools for ROS 2 robotics development.</p><div class="footer-links"><a href="privacy.html">Privacy</a><a href="license.html">License</a><a href="notices.html">Notices</a><a href="https://github.com/ShreyasDamase/asr-android-runtime">Source</a><a href="https://buymeacoffee.com/shreyasdamase" target="_blank" rel="noopener noreferrer">Support ASR ↗</a></div></div><div class="wrap footer-bottom"><span>© 2026 ASR · CREATED BY SHREYAS DAMASE</span><span>BUILT FOR ROBOTICS <i class="red-dot"></i></span></div></footer>
+  <script src="menu.js" defer></script>
+</body>
+</html>

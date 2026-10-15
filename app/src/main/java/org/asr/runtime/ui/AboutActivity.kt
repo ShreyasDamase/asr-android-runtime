@@ -2,6 +2,7 @@ package org.asr.runtime.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -15,12 +16,13 @@ import org.asr.runtime.R
 
 /** App information and data-use disclosure in the dashboard's visual style. */
 class AboutActivity : ComponentActivity() {
+    private var isCoffeeAnimationRunning = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_about)
 
-        val dark = intent.getBooleanExtra(EXTRA_DARK_THEME, false)
+        val dark = PersistentThemeController.isDark(this)
         applyTheme(dark)
         val backend = BuildConfig.ASR_DDS_BACKEND.uppercase()
         findViewById<TextView>(R.id.txtAboutVersion).text = "VERSION  ${BuildConfig.VERSION_NAME}"
@@ -28,7 +30,17 @@ class AboutActivity : ComponentActivity() {
         findViewById<TextView>(R.id.txtAboutSubtitle).text = "ROBOT SENSOR NODE · $backend DDS"
 
         findViewById<View>(R.id.btnAboutBack).setOnClickListener { finish() }
+        findViewById<View>(R.id.btnAboutWebsite).setOnClickListener { openWebsite() }
         findViewById<View>(R.id.btnAboutSource).setOnClickListener { openSourceRepository() }
+        findViewById<View>(R.id.btnAboutPrivacy).setOnClickListener { openPrivacyPolicy() }
+        findViewById<View>(R.id.btnAboutDeveloper).setOnClickListener { openDeveloperProfile() }
+        findViewById<View>(R.id.btnAboutCoffee).setOnClickListener { animateCoffeeAndOpenProfile() }
+    }
+
+    override fun onDestroy() {
+        findViewById<View>(R.id.imgAboutCoffee).animate().cancel()
+        isCoffeeAnimationRunning = false
+        super.onDestroy()
     }
 
     private fun applyTheme(dark: Boolean) {
@@ -40,7 +52,7 @@ class AboutActivity : ComponentActivity() {
         val edge = if (dark) Color.rgb(56, 56, 56) else Color.rgb(227, 229, 232)
 
         findViewById<View>(R.id.aboutRoot).setBackgroundColor(background)
-        listOf(R.id.cardAboutBuild, R.id.cardAboutData, R.id.cardAboutOpenSource).forEach { id ->
+        listOf(R.id.cardAboutBuild, R.id.cardAboutData, R.id.cardAboutOpenSource, R.id.cardAboutDeveloper, R.id.cardAboutSupport).forEach { id ->
             findViewById<View>(id).background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 8f * resources.displayMetrics.density
@@ -54,7 +66,14 @@ class AboutActivity : ComponentActivity() {
         findViewById<TextView>(R.id.txtAboutBackend).setTextColor(body)
         findViewById<TextView>(R.id.txtAboutSubtitle).setTextColor(secondary)
         findViewById<TextView>(R.id.btnAboutBack).setTextColor(secondary)
+        findViewById<TextView>(R.id.btnAboutWebsite).setTextColor(primary)
         findViewById<TextView>(R.id.btnAboutSource).setTextColor(primary)
+        findViewById<TextView>(R.id.btnAboutPrivacy).setTextColor(primary)
+        findViewById<TextView>(R.id.btnAboutDeveloper).setTextColor(primary)
+        findViewById<TextView>(R.id.btnAboutCoffee).setTextColor(primary)
+        findViewById<TextView>(R.id.txtAboutCoffeeTitle).setTextColor(primary)
+        findViewById<TextView>(R.id.txtAboutDeveloper).setTextColor(body)
+        findViewById<android.widget.ImageView>(R.id.imgAboutCoffee).imageTintList = ColorStateList.valueOf(primary)
 
         @Suppress("DEPRECATION")
         window.statusBarColor = background
@@ -79,9 +98,71 @@ class AboutActivity : ComponentActivity() {
         }
     }
 
+    private fun openWebsite() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WEBSITE_URL)))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No browser is available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openDeveloperProfile() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DEVELOPER_URL)))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No browser is available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun animateCoffeeAndOpenProfile() {
+        if (isCoffeeAnimationRunning) return
+        isCoffeeAnimationRunning = true
+        val cup = findViewById<View>(R.id.imgAboutCoffee)
+        cup.animate().cancel()
+        cup.rotation = 0f
+        cup.animate()
+            .rotationBy(-6f)
+            .setDuration(COFFEE_TILT_DURATION_MS)
+            .withEndAction {
+                if (!isFinishing && !isDestroyed) {
+                    cup.animate()
+                        .rotation(0f)
+                        .setDuration(COFFEE_TILT_DURATION_MS)
+                        .withEndAction {
+                            isCoffeeAnimationRunning = false
+                            if (!isFinishing && !isDestroyed) openBuyMeACoffee()
+                        }
+                        .start()
+                } else {
+                    isCoffeeAnimationRunning = false
+                }
+            }
+            .start()
+    }
+
+    private fun openBuyMeACoffee() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BUY_ME_A_COFFEE_URL)))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No browser is available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openPrivacyPolicy() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL)))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No browser is available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     companion object {
-        const val EXTRA_DARK_THEME = "org.asr.runtime.extra.DARK_THEME"
+        private const val COFFEE_TILT_DURATION_MS = 90L
         private const val SOURCE_URL = "https://github.com/ShreyasDamase/asr-android-runtime"
-        private val SECTION_TITLES = setOf("BUILD", "SENSOR DATA", "OPEN SOURCE")
+        private const val WEBSITE_URL = "https://shreyasdamase.github.io/asr-android-runtime/"
+        private const val DEVELOPER_URL = "https://github.com/ShreyasDamase"
+        private const val BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/shreyasdamase"
+        private const val PRIVACY_POLICY_URL = "https://shreyasdamase.github.io/asr-android-runtime/privacy.html"
+        private val SECTION_TITLES = setOf("BUILD", "SENSOR DATA", "OPEN SOURCE", "ABOUT THE DEVELOPER", "SUPPORT OPEN-SOURCE ROBOTICS")
     }
 }

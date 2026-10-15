@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import org.asr.runtime.MainActivity
 import org.asr.runtime.databinding.ActivityPermissionOnboardingBinding
 import org.asr.runtime.databinding.ItemPermissionOnboardingRowBinding
@@ -59,6 +60,7 @@ class PermissionOnboardingActivity : ComponentActivity() {
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Check if already completed or if all already granted

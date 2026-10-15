@@ -2,6 +2,8 @@ package org.asr.runtime.ui
 
 import android.app.Activity
 import android.content.res.ColorStateList
+import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -9,12 +11,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.TextView
-import android.widget.Button
 import java.util.IdentityHashMap
 
-/** Applies an in-memory theme preview and restores the original screen palette exactly. */
-class TemporaryThemeController(private val activity: Activity) {
-    var isDark: Boolean = false
+/** Persists the user's System/Light/Dark choice and applies the matching palette to a screen. */
+class PersistentThemeController(private val activity: Activity) {
+    var mode: Mode = readMode(activity)
+        private set
+    var isDark: Boolean = resolveDark(activity, mode)
         private set
 
     private val originalTextColors = IdentityHashMap<TextView, Int>()
@@ -22,23 +25,62 @@ class TemporaryThemeController(private val activity: Activity) {
     private val originalBackgrounds = IdentityHashMap<View, android.graphics.drawable.Drawable?>()
     private val originalBackgroundTints = IdentityHashMap<View, ColorStateList?>()
 
-    fun toggle(root: View) {
-        isDark = !isDark
+    fun apply(root: View) {
         applyToTree(root)
-        activity.window.statusBarColor = if (isDark) Color.BLACK else Color.rgb(245, 247, 250)
+        activity.window.statusBarColor = if (isDark) Color.rgb(11, 11, 11) else Color.rgb(245, 247, 250)
         @Suppress("DEPRECATION")
         run {
             activity.window.decorView.systemUiVisibility = if (isDark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         }
     }
 
+    fun cycle(root: View) {
+        mode = when (mode) {
+            Mode.SYSTEM -> Mode.LIGHT
+            Mode.LIGHT -> Mode.DARK
+            Mode.DARK -> Mode.SYSTEM
+        }
+        activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_THEME_MODE, mode.preferenceValue).apply()
+        isDark = resolveDark(activity, mode)
+        apply(root)
+    }
+
+    enum class Mode(val preferenceValue: String, val label: String, val accessibleName: String) {
+        SYSTEM("system", "SYSTEM", "System"),
+        LIGHT("light", "LIGHT", "Light"),
+        DARK("dark", "DARK", "Dark")
+    }
+
+    companion object {
+        private const val PREFS_NAME = "asr_prefs"
+        private const val KEY_THEME_MODE = "theme_mode"
+
+        fun currentMode(context: Context): Mode = readMode(context)
+
+        fun isDark(context: Context): Boolean = resolveDark(context, readMode(context))
+
+        private fun readMode(context: Context): Mode {
+            val saved = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_THEME_MODE, Mode.SYSTEM.preferenceValue)
+            return Mode.entries.firstOrNull { it.preferenceValue == saved } ?: Mode.SYSTEM
+        }
+
+        private fun resolveDark(context: Context, mode: Mode): Boolean = when (mode) {
+            Mode.SYSTEM -> (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+            Mode.LIGHT -> false
+            Mode.DARK -> true
+        }
+    }
+
     private fun applyToTree(view: View) {
         if (view is TextView) {
             val original = originalTextColors.getOrPut(view) { view.currentTextColor }
-            view.setTextColor(if (isDark) darkTextColors[original] ?: original else original)
+            view.setTextColor(if (isDark) Palette.darkTextColors[original] ?: original else original)
             if (view is EditText) {
                 val originalHint = originalHintColors.getOrPut(view) { view.currentHintTextColor }
-                view.setHintTextColor(if (isDark) darkTextColors[originalHint] ?: originalHint else originalHint)
+                view.setHintTextColor(if (isDark) Palette.darkTextColors[originalHint] ?: originalHint else originalHint)
             }
         }
 
@@ -116,7 +158,7 @@ class TemporaryThemeController(private val activity: Activity) {
             else if (originalBackground != null) view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
         } else if (originalBackground is ColorDrawable) {
             val originalColor = originalBackground.color
-            view.setBackgroundColor(if (isDark) darkBackgroundColors[originalColor] ?: originalColor else originalColor)
+            view.setBackgroundColor(if (isDark) Palette.darkBackgroundColors[originalColor] ?: originalColor else originalColor)
         } else if (!isDark && originalBackground != null) {
             view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
             view.backgroundTintList = originalBackgroundTints[view]
@@ -139,7 +181,7 @@ class TemporaryThemeController(private val activity: Activity) {
         setStroke((activity.resources.displayMetrics.density + 0.5f).toInt(), color)
     }
 
-    private companion object {
+    private object Palette {
         val darkTextColors = mapOf(
             0xFF000000.toInt() to 0xFFFFFFFF.toInt(),
             0xFF1A1A1A.toInt() to 0xFFFFFFFF.toInt(),

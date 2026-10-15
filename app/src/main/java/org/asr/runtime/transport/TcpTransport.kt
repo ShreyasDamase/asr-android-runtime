@@ -15,7 +15,7 @@ import kotlin.concurrent.thread
  * TCP transport for Wi-Fi streaming and USB-over-adb-forward.
  *
  * USB-over-TCP usage (no USB Accessory driver needed):
- *   adb forward tcp:4242 tcp:4242
+ *   adb reverse tcp:4242 tcp:4242
  *   Then set host="127.0.0.1", port=4242
  *
  * Back-pressure policy: DROP_OLDEST

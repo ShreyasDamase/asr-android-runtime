@@ -150,3 +150,7 @@ Cyclone DDS was exercised on macOS over Wi-Fi and USB tethering, with ROS graph 
 This project is maintained by [Shreyas Damase](https://github.com/ShreyasDamase).
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Third-party licenses and attribution notices for native ROS 2, Cyclone DDS, Fast DDS, and Android Jetpack libraries are provided in the [NOTICE.txt](NOTICE.txt) file.
+
+## ASR platform website
+
+The public-facing website is maintained in [`website/`](website/). It includes platform information, download and documentation links, and readable privacy, license, and third-party notice pages. GitHub Pages deployment is configured in [`.github/workflows/pages.yml`](.github/workflows/pages.yml); enable **Settings → Pages → Build and deployment → GitHub Actions** to publish it from `main`. The default project site URL is `https://shreyasdamase.github.io/asr-android-runtime/`; no custom domain is needed.

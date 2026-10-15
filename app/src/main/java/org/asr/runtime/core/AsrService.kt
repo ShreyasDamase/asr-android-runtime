@@ -15,7 +15,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.net.wifi.WifiManager
-import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -1086,24 +1085,14 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private fun getOrCreateDeviceId(): Byte {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-        
-        // To handle copied/cloned pref files, we check if the device ID matches the current ANDROID_ID
-        val storedAndroidId = prefs.getString("generated_android_id", null)
-        var uuidStr = prefs.getString(PREF_DEVICE_ID, null)
-
-        if (uuidStr == null || storedAndroidId != androidId) {
-            uuidStr = UUID.randomUUID().toString()
+        val uuidStr = prefs.getString(PREF_DEVICE_ID, null) ?: UUID.randomUUID().toString().also { generatedId ->
             prefs.edit()
-                .putString(PREF_DEVICE_ID, uuidStr)
-                .putString("generated_android_id", androidId)
+                .putString(PREF_DEVICE_ID, generatedId)
                 .apply()
-            Log.i(TAG, "Regenerated unique device identity for ANDROID_ID: $androidId")
         }
-
-        // Salt the persistent UUID with the hardware ANDROID_ID to ensure uniqueness across devices
-        val combinedHash = uuidStr.hashCode() xor androidId.hashCode()
-        var id = combinedHash and 0xFF
+        // Keep node identity app-scoped; do not read or derive identifiers from Android ID.
+        prefs.edit().remove("generated_android_id").apply()
+        var id = uuidStr.hashCode() and 0xFF
         if (id == 0) id = 1 // Avoid 0 as it often denotes 'unknown' or 'broadcast'
         return id.toByte()
     }
