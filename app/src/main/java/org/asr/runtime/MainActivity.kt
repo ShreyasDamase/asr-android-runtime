@@ -13,11 +13,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.transition.AutoTransition
+import android.transition.TransitionManager
 import android.view.Gravity
 import android.view.View
-import android.widget.Button
+import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TableLayout
 import android.widget.TableRow
 import android.widget.TextView
@@ -29,8 +30,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.asr.runtime.core.AsrService
 import org.asr.runtime.core.RuntimeState
@@ -65,8 +64,13 @@ class  MainActivity : ComponentActivity() {
     private var tcpConnected = false
     private var initializingControls = true
     private var pendingSensorSelection: Set<String>? = null
-    private var sensorSettingsDialog: BottomSheetDialog? = null
-    private var sensorSheetStatusJob: Job? = null
+    private var sensorPanelExpanded = false
+    private var initialSensorSelection = emptySet<String>()
+    private val stagedSensorSelection = mutableSetOf<String>()
+    private val sensorStatusViews = mutableMapOf<String, TextView>()
+    private val sensorToggleViews = mutableMapOf<String, org.asr.runtime.ui.SquareSlideSwitch>()
+    private var sensorAvailability = emptyMap<String, Boolean>()
+    private var currentModuleStatus = emptyMap<String, String>()
     private val handler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
@@ -133,6 +137,7 @@ class  MainActivity : ComponentActivity() {
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
         setupControls()
+        setupSensorOutputPanel()
         val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
         val legacyRos2Enabled = prefs.getBoolean("ros2_enabled", false)
         val wifiDdsEnabled = prefs.getBoolean("dds_wifi_enabled", legacyRos2Enabled)
@@ -342,7 +347,7 @@ class  MainActivity : ComponentActivity() {
             viewModel.restartRuntime()
             Toast.makeText(this, "Restarting ASR Runtime...", Toast.LENGTH_SHORT).show()
         }
-        binding.runtimeCard.txtRuntimeStatus.setOnClickListener { showSensorConfigSheet() }
+        binding.runtimeCard.txtRuntimeStatus.setOnClickListener { toggleSensorOutputPanel() }
 
         // btnExitApp removed from header
         binding.btnDetailsToggle.setOnClickListener {
@@ -562,9 +567,11 @@ class  MainActivity : ComponentActivity() {
         }
         val selectedCount = configuredSensorModules().size
         val totalCount = sensorConfigOptions.size
-        binding.runtimeCard.txtRuntimeStatus.text = "● $statusLabel · $selectedCount/$totalCount ›"
+        val chevron = if (sensorPanelExpanded) "⌃" else "⌄"
+        binding.runtimeCard.txtRuntimeStatus.text = "● $statusLabel · $selectedCount/$totalCount $chevron"
         binding.runtimeCard.txtRuntimeStatus.contentDescription =
-            "Runtime $statusLabel. $selectedCount of $totalCount sensor groups selected. Tap to configure sensors."
+            "Runtime $statusLabel. $selectedCount of $totalCount sensor groups selected. " +
+                if (sensorPanelExpanded) "Tap to collapse sensor outputs." else "Tap to expand sensor outputs."
         val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
         binding.runtimeCard.txtRuntimeStatus.setTextColor(when (state) {
             RuntimeState.STREAMING -> if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
@@ -574,70 +581,20 @@ class  MainActivity : ComponentActivity() {
         })
     }
 
-    private fun showSensorConfigSheet() {
-        sensorSettingsDialog?.let { if (it.isShowing) return }
-
-        val initialSelection = configuredSensorModules()
-        val stagedSelection = initialSelection.toMutableSet()
-        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+    private fun setupSensorOutputPanel() {
+        val dark = temporaryThemeController.isDark
         val primary = if (dark) Color.WHITE else Color.BLACK
         val secondary = if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
-        val surface = if (dark) Color.parseColor("#111111") else Color.WHITE
         val divider = if (dark) Color.parseColor("#333333") else Color.parseColor("#E3E5E8")
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density + 0.5f).toInt()
         val mono = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.space_mono)
         val grotesk = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.space_grotesk)
-
-        val dialog = BottomSheetDialog(this)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(12))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadii = floatArrayOf(dp(12).toFloat(), dp(12).toFloat(), dp(12).toFloat(), dp(12).toFloat(), 0f, 0f, 0f, 0f)
-                setColor(surface)
-            }
-        }
-
-        val title = TextView(this).apply {
-            text = "SENSOR OUTPUTS"
-            typeface = mono
-            textSize = 12f
-            letterSpacing = 0.08f
-            setTextColor(primary)
-        }
-        root.addView(title, LinearLayout.LayoutParams(-1, dp(24)))
-        val description = TextView(this).apply {
-            text = "Choose what the runtime should publish. Changes apply now if running, or next time you start."
-            typeface = grotesk
-            textSize = 14f
-            setTextColor(secondary)
-        }
-        root.addView(description, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
-
-        val scroll = ScrollView(this).apply { isFillViewport = false }
-        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        scroll.addView(rows, android.view.ViewGroup.LayoutParams(-1, -2))
-        val statusLabels = mutableMapOf<String, TextView>()
-        val apply = TextView(this).apply {
-            text = "APPLY ${stagedSelection.size} SELECTED"
-            typeface = mono
-            textSize = 12f
-            letterSpacing = 0.04f
-            gravity = Gravity.CENTER
-            minHeight = dp(44)
-            setPadding(dp(16), 0, dp(16), 0)
-            setTextColor(if (dark) Color.BLACK else Color.WHITE)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(4).toFloat()
-                setColor(if (dark) Color.WHITE else Color.BLACK)
-            }
-            isEnabled = false
-            alpha = 0.45f
-            contentDescription = "Apply selected sensor configuration"
-        }
+        val rows = binding.runtimeCard.sensorOptionRows
+        rows.removeAllViews()
+        sensorStatusViews.clear()
+        sensorToggleViews.clear()
+        sensorAvailability = sensorConfigOptions.associate { it.id to isSensorGroupAvailable(it.id) }
 
         sensorConfigOptions.forEachIndexed { index, option ->
             val row = LinearLayout(this).apply {
@@ -665,7 +622,7 @@ class  MainActivity : ComponentActivity() {
                 letterSpacing = 0.03f
                 setTextColor(secondary)
             }
-            statusLabels[option.id] = status
+            sensorStatusViews[option.id] = status
             textColumn.addView(name)
             textColumn.addView(detail)
             textColumn.addView(status)
@@ -674,20 +631,20 @@ class  MainActivity : ComponentActivity() {
             val toggle = org.asr.runtime.ui.SquareSlideSwitch(this).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(76), dp(44)).apply { marginStart = dp(8) }
                 setDarkTheme(dark)
-                isChecked = option.id in stagedSelection
-                contentDescription = "${option.label}: ${if (isChecked) "selected" else "not selected"}"
-                val available = isSensorGroupAvailable(option.id)
+                isChecked = option.id in configuredSensorModules()
+                val available = sensorAvailability[option.id] == true
                 isEnabled = available || isChecked
                 alpha = if (available) 1f else 0.6f
                 setOnCheckedChangeListener { _, checked ->
-                    if (checked) stagedSelection.add(option.id) else stagedSelection.remove(option.id)
+                    if (checked) stagedSensorSelection.add(option.id) else stagedSensorSelection.remove(option.id)
                     contentDescription = "${option.label}: ${if (checked) "selected" else "not selected"}"
-                    isEnabled = available || checked
-                    apply.text = "APPLY ${stagedSelection.size} SELECTED"
-                    apply.isEnabled = stagedSelection != initialSelection
-                    apply.alpha = if (apply.isEnabled) 1f else 0.45f
+                    alpha = if (available) 1f else 0.6f
+                    updateSensorApplyButton()
+                    updateSensorOptionStatuses(currentModuleStatus)
                 }
             }
+            toggle.contentDescription = "${option.label}: ${if (toggle.isChecked) "selected" else "not selected"}"
+            sensorToggleViews[option.id] = toggle
             row.addView(toggle)
             rows.addView(row, LinearLayout.LayoutParams(-1, -2))
             if (index < sensorConfigOptions.lastIndex) {
@@ -695,67 +652,81 @@ class  MainActivity : ComponentActivity() {
             }
         }
 
-        val footer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(12), 0, 0)
+        binding.runtimeCard.btnCancelSensorSelection.setOnClickListener { closeSensorOutputPanel(discardChanges = true) }
+        binding.runtimeCard.btnApplySensorSelection.setOnClickListener {
+            applySensorSelection(stagedSensorSelection.toSet())
         }
-        val cancel = TextView(this).apply {
-            text = "CANCEL"
-            typeface = mono
-            textSize = 11f
-            letterSpacing = 0.04f
-            gravity = Gravity.CENTER
-            minHeight = dp(44)
-            setPadding(dp(12), 0, dp(12), 0)
-            setTextColor(secondary)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { dialog.dismiss() }
-        }
-        footer.addView(cancel, LinearLayout.LayoutParams(-2, dp(48)))
-        footer.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        footer.addView(apply, LinearLayout.LayoutParams(-2, dp(48)))
-        apply.setOnClickListener { applySensorSelection(stagedSelection.toSet()) }
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(footer, LinearLayout.LayoutParams(-1, -2))
+        updateSensorApplyButton()
+        updateSensorOptionStatuses(currentModuleStatus)
+    }
 
-        val maxHeight = minOf(dp(640), (resources.displayMetrics.heightPixels * 0.82f).toInt())
-        dialog.setContentView(root)
-        dialog.setOnDismissListener {
-            sensorSheetStatusJob?.cancel()
-            sensorSheetStatusJob = null
-            sensorSettingsDialog = null
+    private fun toggleSensorOutputPanel() {
+        if (sensorPanelExpanded) {
+            closeSensorOutputPanel(discardChanges = true)
+        } else {
+            initialSensorSelection = configuredSensorModules()
+            stagedSensorSelection.clear()
+            stagedSensorSelection.addAll(initialSensorSelection)
+            sensorToggleViews.forEach { (id, toggle) ->
+                toggle.isChecked = id in stagedSensorSelection
+                toggle.contentDescription = "${sensorConfigOptions.first { it.id == id }.label}: ${if (toggle.isChecked) "selected" else "not selected"}"
+            }
+            sensorPanelExpanded = true
+            TransitionManager.beginDelayedTransition(binding.runtimeCard.root as ViewGroup, AutoTransition().apply { duration = 180 })
+            binding.runtimeCard.layoutSensorOutputs.visibility = View.VISIBLE
+            updateRuntimeStatus(viewModel.runtimeState.value)
+            updateSensorApplyButton()
+            updateSensorOptionStatuses(currentModuleStatus)
         }
-        sensorSettingsDialog = dialog
-        dialog.show()
-        dialog.window?.setLayout(-1, maxHeight)
+    }
 
-        sensorSheetStatusJob = lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.moduleStatus.collect { moduleStatus ->
-                    sensorConfigOptions.forEach { option ->
-                        val state = moduleStatus[option.id]?.uppercase() ?: "STOPPED"
-                        val available = isSensorGroupAvailable(option.id)
-                        val label = when {
-                            !available -> "NOT PRESENT"
-                            state == "RUNNING" -> "RUNNING"
-                            state == "ERROR" -> "ERROR"
-                            state == "STARTING" -> "STARTING"
-                            state == "STOPPING" -> "STOPPING"
-                            option.id in stagedSelection -> "SELECTED"
-                            else -> "OFF"
-                        }
-                        statusLabels[option.id]?.apply {
-                            text = label
-                            setTextColor(if (label == "RUNNING") {
-                                if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
-                            } else if (label == "ERROR") {
-                                if (dark) Color.parseColor("#FF7373") else Color.parseColor("#B4232D")
-                            } else secondary)
-                        }
-                    }
-                }
+    private fun closeSensorOutputPanel(discardChanges: Boolean) {
+        if (!sensorPanelExpanded) return
+        if (discardChanges) {
+            stagedSensorSelection.clear()
+            stagedSensorSelection.addAll(initialSensorSelection)
+            sensorToggleViews.forEach { (id, toggle) ->
+                toggle.isChecked = id in stagedSensorSelection
+                toggle.contentDescription = "${sensorConfigOptions.first { it.id == id }.label}: ${if (toggle.isChecked) "selected" else "not selected"}"
+            }
+        }
+        sensorPanelExpanded = false
+        TransitionManager.beginDelayedTransition(binding.runtimeCard.root as ViewGroup, AutoTransition().apply { duration = 180 })
+        binding.runtimeCard.layoutSensorOutputs.visibility = View.GONE
+        updateRuntimeStatus(viewModel.runtimeState.value)
+    }
+
+    private fun updateSensorApplyButton() {
+        val button = binding.runtimeCard.btnApplySensorSelection
+        val changed = stagedSensorSelection != initialSensorSelection
+        button.text = "APPLY ${stagedSensorSelection.size} SELECTED"
+        button.isEnabled = changed
+        button.alpha = if (changed) 1f else 0.45f
+        button.contentDescription = "Apply ${stagedSensorSelection.size} selected sensor groups"
+    }
+
+    private fun updateSensorOptionStatuses(moduleStatus: Map<String, String>) {
+        currentModuleStatus = moduleStatus
+        val dark = temporaryThemeController.isDark
+        sensorConfigOptions.forEach { option ->
+            val state = moduleStatus[option.id]?.uppercase() ?: "STOPPED"
+            val available = sensorAvailability[option.id] == true
+            val label = when {
+                !available -> "NOT PRESENT"
+                state == "RUNNING" -> "RUNNING"
+                state == "ERROR" -> "ERROR"
+                state == "STARTING" -> "STARTING"
+                state == "STOPPING" -> "STOPPING"
+                option.id in stagedSensorSelection -> "SELECTED"
+                else -> "OFF"
+            }
+            sensorStatusViews[option.id]?.apply {
+                text = label
+                setTextColor(if (label == "RUNNING") {
+                    if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
+                } else if (label == "ERROR") {
+                    if (dark) Color.parseColor("#FF7373") else Color.parseColor("#B4232D")
+                } else if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373"))
             }
         }
     }
@@ -783,12 +754,11 @@ class  MainActivity : ComponentActivity() {
         }
         if (missingPermissions.isNotEmpty()) {
             pendingSensorSelection = selection
-            sensorSettingsDialog?.dismiss()
             ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), PERMISSION_REQUEST_CODE)
             return
         }
         commitSensorSelection(selection)
-        sensorSettingsDialog?.dismiss()
+        closeSensorOutputPanel(discardChanges = false)
     }
 
     private fun commitSensorSelection(selection: Set<String>) {
@@ -797,7 +767,12 @@ class  MainActivity : ComponentActivity() {
             .putStringSet("enabled_sensor_modules", selected)
             .apply()
         viewModel.setEnabledSensorModuleIds(selected)
+        initialSensorSelection = selected
+        stagedSensorSelection.clear()
+        stagedSensorSelection.addAll(selected)
         updateRuntimeStatus(viewModel.runtimeState.value)
+        updateSensorApplyButton()
+        updateSensorOptionStatuses(currentModuleStatus)
     }
 
     private fun permissionsForSensors(moduleIds: Set<String>): List<String> = buildList {
@@ -833,6 +808,13 @@ class  MainActivity : ComponentActivity() {
                 launch {
                     viewModel.runtimeState.collect { state ->
                         updateRuntimeStatus(state)
+                    }
+                }
+
+                launch {
+                    viewModel.moduleStatus.collect { status ->
+                        currentModuleStatus = status
+                        if (sensorPanelExpanded) updateSensorOptionStatuses(status)
                     }
                 }
 
@@ -986,8 +968,10 @@ class  MainActivity : ComponentActivity() {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                 val selection = pendingSensorSelection
                 pendingSensorSelection = null
-                if (selection != null) commitSensorSelection(selection)
-                else startServiceIntent(AsrService.ACTION_START)
+                if (selection != null) {
+                    commitSensorSelection(selection)
+                    closeSensorOutputPanel(discardChanges = false)
+                } else startServiceIntent(AsrService.ACTION_START)
             } else {
                 pendingSensorSelection = null
                 Toast.makeText(this, "Permissions required for ASR", Toast.LENGTH_LONG).show()
@@ -996,9 +980,6 @@ class  MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        sensorSheetStatusJob?.cancel()
-        sensorSettingsDialog?.dismiss()
-        sensorSettingsDialog = null
         super.onDestroy()
         unbindService(connection)
     }

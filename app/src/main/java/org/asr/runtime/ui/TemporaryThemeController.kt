@@ -51,6 +51,14 @@ class TemporaryThemeController(private val activity: Activity) {
         } else if (view.id == org.asr.runtime.R.id.btnStopRuntime || view.id == org.asr.runtime.R.id.btnRestartRuntime) {
             if (isDark) view.background = outline(Color.WHITE)
             else if (originalBackground != null) view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
+        } else if (view.id == org.asr.runtime.R.id.btnApplySensorSelection) {
+            if (isDark) {
+                view.background = ColorDrawable(Color.WHITE)
+                (view as? TextView)?.setTextColor(Color.BLACK)
+            } else if (originalBackground != null) {
+                view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
+                (view as? TextView)?.setTextColor(Color.WHITE)
+            }
         } else if (view.id == org.asr.runtime.R.id.runtimeCard) {
             view.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
