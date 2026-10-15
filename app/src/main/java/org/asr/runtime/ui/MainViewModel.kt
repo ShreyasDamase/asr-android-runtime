@@ -119,4 +119,8 @@ class MainViewModel : ViewModel() {
     fun setRos2Enabled(enabled: Boolean) {
         asrService?.setRos2Enabled(enabled)
     }
+
+    fun setEnabledSensorModuleIds(moduleIds: Set<String>) {
+        asrService?.setEnabledSensorModuleIds(moduleIds)
+    }
 }

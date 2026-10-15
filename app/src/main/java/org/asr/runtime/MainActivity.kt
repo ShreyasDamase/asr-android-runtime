@@ -14,6 +14,10 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TableLayout
 import android.widget.TableRow
 import android.widget.TextView
@@ -25,6 +29,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.asr.runtime.core.AsrService
 import org.asr.runtime.core.RuntimeState
@@ -41,11 +47,26 @@ import java.util.*
  */
 class  MainActivity : ComponentActivity() {
 
+    private data class SensorConfigOption(val id: String, val label: String, val detail: String)
+
+    private val sensorConfigOptions = listOf(
+        SensorConfigOption("camera", "CAMERA", "Camera frames"),
+        SensorConfigOption("imu", "IMU", "Accelerometer + gyroscope"),
+        SensorConfigOption("environment", "ENVIRONMENT", "Light, pressure, temperature, humidity"),
+        SensorConfigOption("motion", "MOTION", "Steps and motion detection"),
+        SensorConfigOption("audio", "MICROPHONE", "Audio input"),
+        SensorConfigOption("gps", "GPS", "Location data"),
+        SensorConfigOption("battery", "BATTERY", "Level and charging state")
+    )
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
     private lateinit var temporaryThemeController: TemporaryThemeController
     private var tcpConnected = false
     private var initializingControls = true
+    private var pendingSensorSelection: Set<String>? = null
+    private var sensorSettingsDialog: BottomSheetDialog? = null
+    private var sensorSheetStatusJob: Job? = null
     private val handler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
@@ -90,12 +111,14 @@ class  MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ensureConnectivityCardOrder()
         temporaryThemeController = TemporaryThemeController(this)
         binding.btnThemeToggle.setOnClickListener {
             temporaryThemeController.toggle(binding.root)
             val dark = temporaryThemeController.isDark
             updateTransportModeBadge()
             updateUsbTetheringSettingsButton()
+            updateRuntimeStatus(viewModel.runtimeState.value)
             updateRos2StatusColor(viewModel.ros2Status.value.state)
             binding.btnThemeToggle.text = if (dark) "◑" else "◐"
             binding.btnThemeToggle.contentDescription = if (dark) "Switch to light theme" else "Switch to dark theme"
@@ -126,6 +149,16 @@ class  MainActivity : ComponentActivity() {
         // Bind to the service if it's already running to get live status
         val intent = Intent(this, AsrService::class.java)
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun ensureConnectivityCardOrder() {
+        val container = binding.cardRos2Dds.parent as? LinearLayout ?: return
+        val runtimeIndex = container.indexOfChild(binding.runtimeCard.root)
+        if (runtimeIndex < 0) return
+        container.removeView(binding.cardRos2Dds)
+        container.removeView(binding.cardTcpTransport)
+        container.addView(binding.cardRos2Dds, runtimeIndex + 1)
+        container.addView(binding.cardTcpTransport, runtimeIndex + 2)
     }
 
     override fun onResume() {
@@ -309,6 +342,7 @@ class  MainActivity : ComponentActivity() {
             viewModel.restartRuntime()
             Toast.makeText(this, "Restarting ASR Runtime...", Toast.LENGTH_SHORT).show()
         }
+        binding.runtimeCard.txtRuntimeStatus.setOnClickListener { showSensorConfigSheet() }
 
         // btnExitApp removed from header
         binding.btnDetailsToggle.setOnClickListener {
@@ -511,6 +545,271 @@ class  MainActivity : ComponentActivity() {
         })
     }
 
+    private fun configuredSensorModules(): Set<String> {
+        val allowed = AsrService.CONFIGURABLE_SENSOR_MODULE_IDS.toSet()
+        val saved = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+            .getStringSet("enabled_sensor_modules", null)
+        return saved?.toSet()?.intersect(allowed) ?: allowed
+    }
+
+    private fun updateRuntimeStatus(state: RuntimeState) {
+        val statusLabel = when (state) {
+            RuntimeState.STOPPED -> "STOPPED"
+            RuntimeState.STARTING -> "STARTING"
+            RuntimeState.STREAMING -> "RUNNING"
+            RuntimeState.STOPPING -> "STOPPING"
+            RuntimeState.ERROR -> "ERROR"
+        }
+        val selectedCount = configuredSensorModules().size
+        val totalCount = sensorConfigOptions.size
+        binding.runtimeCard.txtRuntimeStatus.text = "● $statusLabel · $selectedCount/$totalCount ›"
+        binding.runtimeCard.txtRuntimeStatus.contentDescription =
+            "Runtime $statusLabel. $selectedCount of $totalCount sensor groups selected. Tap to configure sensors."
+        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        binding.runtimeCard.txtRuntimeStatus.setTextColor(when (state) {
+            RuntimeState.STREAMING -> if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
+            RuntimeState.STARTING, RuntimeState.STOPPING -> if (dark) Color.parseColor("#E5B86B") else Color.parseColor("#9A6B17")
+            RuntimeState.ERROR -> if (dark) Color.parseColor("#FF7373") else Color.parseColor("#B4232D")
+            else -> if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
+        })
+    }
+
+    private fun showSensorConfigSheet() {
+        sensorSettingsDialog?.let { if (it.isShowing) return }
+
+        val initialSelection = configuredSensorModules()
+        val stagedSelection = initialSelection.toMutableSet()
+        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        val primary = if (dark) Color.WHITE else Color.BLACK
+        val secondary = if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
+        val surface = if (dark) Color.parseColor("#111111") else Color.WHITE
+        val divider = if (dark) Color.parseColor("#333333") else Color.parseColor("#E3E5E8")
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density + 0.5f).toInt()
+        val mono = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.space_mono)
+        val grotesk = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.space_grotesk)
+
+        val dialog = BottomSheetDialog(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(20), dp(20), dp(12))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadii = floatArrayOf(dp(12).toFloat(), dp(12).toFloat(), dp(12).toFloat(), dp(12).toFloat(), 0f, 0f, 0f, 0f)
+                setColor(surface)
+            }
+        }
+
+        val title = TextView(this).apply {
+            text = "SENSOR OUTPUTS"
+            typeface = mono
+            textSize = 12f
+            letterSpacing = 0.08f
+            setTextColor(primary)
+        }
+        root.addView(title, LinearLayout.LayoutParams(-1, dp(24)))
+        val description = TextView(this).apply {
+            text = "Choose what the runtime should publish. Changes apply now if running, or next time you start."
+            typeface = grotesk
+            textSize = 14f
+            setTextColor(secondary)
+        }
+        root.addView(description, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+
+        val scroll = ScrollView(this).apply { isFillViewport = false }
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(rows, android.view.ViewGroup.LayoutParams(-1, -2))
+        val statusLabels = mutableMapOf<String, TextView>()
+        val apply = TextView(this).apply {
+            text = "APPLY ${stagedSelection.size} SELECTED"
+            typeface = mono
+            textSize = 12f
+            letterSpacing = 0.04f
+            gravity = Gravity.CENTER
+            minHeight = dp(44)
+            setPadding(dp(16), 0, dp(16), 0)
+            setTextColor(if (dark) Color.BLACK else Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(4).toFloat()
+                setColor(if (dark) Color.WHITE else Color.BLACK)
+            }
+            isEnabled = false
+            alpha = 0.45f
+            contentDescription = "Apply selected sensor configuration"
+        }
+
+        sensorConfigOptions.forEachIndexed { index, option ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(7), 0, dp(7))
+            }
+            val textColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            val name = TextView(this).apply {
+                text = option.label
+                typeface = mono
+                textSize = 12f
+                letterSpacing = 0.04f
+                setTextColor(primary)
+            }
+            val detail = TextView(this).apply {
+                text = option.detail
+                typeface = grotesk
+                textSize = 12f
+                setTextColor(secondary)
+            }
+            val status = TextView(this).apply {
+                typeface = mono
+                textSize = 10f
+                letterSpacing = 0.03f
+                setTextColor(secondary)
+            }
+            statusLabels[option.id] = status
+            textColumn.addView(name)
+            textColumn.addView(detail)
+            textColumn.addView(status)
+            row.addView(textColumn, LinearLayout.LayoutParams(0, -2, 1f))
+
+            val toggle = org.asr.runtime.ui.SquareSlideSwitch(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(76), dp(44)).apply { marginStart = dp(8) }
+                setDarkTheme(dark)
+                isChecked = option.id in stagedSelection
+                contentDescription = "${option.label}: ${if (isChecked) "selected" else "not selected"}"
+                val available = isSensorGroupAvailable(option.id)
+                isEnabled = available || isChecked
+                alpha = if (available) 1f else 0.6f
+                setOnCheckedChangeListener { _, checked ->
+                    if (checked) stagedSelection.add(option.id) else stagedSelection.remove(option.id)
+                    contentDescription = "${option.label}: ${if (checked) "selected" else "not selected"}"
+                    isEnabled = available || checked
+                    apply.text = "APPLY ${stagedSelection.size} SELECTED"
+                    apply.isEnabled = stagedSelection != initialSelection
+                    apply.alpha = if (apply.isEnabled) 1f else 0.45f
+                }
+            }
+            row.addView(toggle)
+            rows.addView(row, LinearLayout.LayoutParams(-1, -2))
+            if (index < sensorConfigOptions.lastIndex) {
+                rows.addView(View(this).apply { setBackgroundColor(divider) }, LinearLayout.LayoutParams(-1, dp(1)))
+            }
+        }
+
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(12), 0, 0)
+        }
+        val cancel = TextView(this).apply {
+            text = "CANCEL"
+            typeface = mono
+            textSize = 11f
+            letterSpacing = 0.04f
+            gravity = Gravity.CENTER
+            minHeight = dp(44)
+            setPadding(dp(12), 0, dp(12), 0)
+            setTextColor(secondary)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        }
+        footer.addView(cancel, LinearLayout.LayoutParams(-2, dp(48)))
+        footer.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        footer.addView(apply, LinearLayout.LayoutParams(-2, dp(48)))
+        apply.setOnClickListener { applySensorSelection(stagedSelection.toSet()) }
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(footer, LinearLayout.LayoutParams(-1, -2))
+
+        val maxHeight = minOf(dp(640), (resources.displayMetrics.heightPixels * 0.82f).toInt())
+        dialog.setContentView(root)
+        dialog.setOnDismissListener {
+            sensorSheetStatusJob?.cancel()
+            sensorSheetStatusJob = null
+            sensorSettingsDialog = null
+        }
+        sensorSettingsDialog = dialog
+        dialog.show()
+        dialog.window?.setLayout(-1, maxHeight)
+
+        sensorSheetStatusJob = lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.moduleStatus.collect { moduleStatus ->
+                    sensorConfigOptions.forEach { option ->
+                        val state = moduleStatus[option.id]?.uppercase() ?: "STOPPED"
+                        val available = isSensorGroupAvailable(option.id)
+                        val label = when {
+                            !available -> "NOT PRESENT"
+                            state == "RUNNING" -> "RUNNING"
+                            state == "ERROR" -> "ERROR"
+                            state == "STARTING" -> "STARTING"
+                            state == "STOPPING" -> "STOPPING"
+                            option.id in stagedSelection -> "SELECTED"
+                            else -> "OFF"
+                        }
+                        statusLabels[option.id]?.apply {
+                            text = label
+                            setTextColor(if (label == "RUNNING") {
+                                if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
+                            } else if (label == "ERROR") {
+                                if (dark) Color.parseColor("#FF7373") else Color.parseColor("#B4232D")
+                            } else secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isSensorGroupAvailable(moduleId: String): Boolean {
+        val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        return when (moduleId) {
+            "camera" -> packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+            "audio" -> packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+            "gps" -> packageManager.hasSystemFeature(PackageManager.FEATURE_LOCATION)
+            "imu" -> sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null ||
+                sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE) != null
+            "environment" -> listOf(Sensor.TYPE_LIGHT, Sensor.TYPE_PRESSURE, Sensor.TYPE_AMBIENT_TEMPERATURE, Sensor.TYPE_RELATIVE_HUMIDITY)
+                .any { sensorManager.getDefaultSensor(it) != null }
+            "motion" -> listOf(Sensor.TYPE_STEP_COUNTER, Sensor.TYPE_STEP_DETECTOR, Sensor.TYPE_SIGNIFICANT_MOTION)
+                .any { sensorManager.getDefaultSensor(it) != null }
+            "battery" -> true
+            else -> false
+        }
+    }
+
+    private fun applySensorSelection(selection: Set<String>) {
+        val missingPermissions = permissionsForSensors(selection).filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missingPermissions.isNotEmpty()) {
+            pendingSensorSelection = selection
+            sensorSettingsDialog?.dismiss()
+            ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), PERMISSION_REQUEST_CODE)
+            return
+        }
+        commitSensorSelection(selection)
+        sensorSettingsDialog?.dismiss()
+    }
+
+    private fun commitSensorSelection(selection: Set<String>) {
+        val selected = selection.intersect(AsrService.CONFIGURABLE_SENSOR_MODULE_IDS.toSet())
+        getSharedPreferences("asr_prefs", MODE_PRIVATE).edit()
+            .putStringSet("enabled_sensor_modules", selected)
+            .apply()
+        viewModel.setEnabledSensorModuleIds(selected)
+        updateRuntimeStatus(viewModel.runtimeState.value)
+    }
+
+    private fun permissionsForSensors(moduleIds: Set<String>): List<String> = buildList {
+        if ("camera" in moduleIds) add(Manifest.permission.CAMERA)
+        if ("audio" in moduleIds) add(Manifest.permission.RECORD_AUDIO)
+        if ("gps" in moduleIds) add(Manifest.permission.ACCESS_FINE_LOCATION)
+        if ("motion" in moduleIds && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            add(Manifest.permission.ACTIVITY_RECOGNITION)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     private fun openUsbTetheringSettings() {
         val settingsIntents = listOf(
             Intent("android.settings.TETHER_SETTINGS"),
@@ -533,19 +832,7 @@ class  MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.runtimeState.collect { state ->
-                        binding.runtimeCard.txtRuntimeStatus.text = "● ${when (state) {
-                            RuntimeState.STOPPED -> "SENSORS STOPPED"
-                            RuntimeState.STARTING -> "SENSORS STARTING"
-                            RuntimeState.STREAMING -> "SENSORS RUNNING"
-                            RuntimeState.STOPPING -> "SENSORS STOPPING"
-                            RuntimeState.ERROR -> "SENSOR ERROR"
-                        }}"
-                        binding.runtimeCard.txtRuntimeStatus.setTextColor(when(state) {
-                            RuntimeState.STREAMING -> Color.parseColor("#4A9E5C") // Nothing muted status green
-                            RuntimeState.STARTING, RuntimeState.STOPPING -> Color.parseColor("#D4A843") // Nothing technical amber
-                            RuntimeState.ERROR -> Color.parseColor("#D71921") // Nothing accent red
-                            else -> Color.parseColor("#999999") // Nothing tertiary gray
-                        })
+                        updateRuntimeStatus(state)
                     }
                 }
 
@@ -681,26 +968,37 @@ class  MainActivity : ComponentActivity() {
         return sdf.format(Date(ms))
     }
 
-    private fun allPermissionsGranted() = requiredPermissions.all {
+    private fun allPermissionsGranted() = permissionsForSensors(configuredSensorModules()).all {
         ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestPermissionsSafely() {
-        ActivityCompat.requestPermissions(this, requiredPermissions, PERMISSION_REQUEST_CODE)
+        ActivityCompat.requestPermissions(
+            this,
+            permissionsForSensors(configuredSensorModules()).toTypedArray(),
+            PERMISSION_REQUEST_CODE
+        )
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                startServiceIntent(AsrService.ACTION_START)
+                val selection = pendingSensorSelection
+                pendingSensorSelection = null
+                if (selection != null) commitSensorSelection(selection)
+                else startServiceIntent(AsrService.ACTION_START)
             } else {
+                pendingSensorSelection = null
                 Toast.makeText(this, "Permissions required for ASR", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     override fun onDestroy() {
+        sensorSheetStatusJob?.cancel()
+        sensorSettingsDialog?.dismiss()
+        sensorSettingsDialog = null
         super.onDestroy()
         unbindService(connection)
     }

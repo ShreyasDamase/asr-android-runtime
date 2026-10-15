@@ -82,6 +82,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         private const val PREF_TCP_HOST = "tcp_host"
         private const val PREF_TCP_PORT = "tcp_port"
         private const val PREF_RUNTIME_ENABLED = "runtime_enabled"
+        private const val PREF_ENABLED_SENSOR_MODULES = "enabled_sensor_modules"
         private const val PREF_ROS2_ENABLED = "ros2_enabled"
         private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
         private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
@@ -110,6 +111,11 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
         private val SENSOR_RUNTIME_MODULE_IDS = listOf(
             "camera", "imu", "environment", "motion", "audio", "battery", "speaker", "gps", "diagnostics"
+        )
+
+        /** User-selectable acquisition modules; speaker and diagnostics remain service support modules. */
+        val CONFIGURABLE_SENSOR_MODULE_IDS = listOf(
+            "camera", "imu", "environment", "motion", "audio", "battery", "gps"
         )
 
         val PROFILES = mapOf(
@@ -230,6 +236,58 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     fun getModuleStatus(): Map<String, String> = moduleRegistry.getModuleStatus()
+
+    fun getEnabledSensorModuleIds(): Set<String> = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getStringSet(PREF_ENABLED_SENSOR_MODULES, null)
+        ?.intersect(CONFIGURABLE_SENSOR_MODULE_IDS.toSet())
+        ?: CONFIGURABLE_SENSOR_MODULE_IDS.toSet()
+
+    fun setEnabledSensorModuleIds(moduleIds: Set<String>) {
+        val selected = moduleIds.intersect(CONFIGURABLE_SENSOR_MODULE_IDS.toSet())
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putStringSet(PREF_ENABLED_SENSOR_MODULES, selected)
+            .apply()
+
+        // Runtime start/stop/restart owns module transitions while it is pending.
+        // The saved selection is read by startSensorModules() after that transition.
+        if (!isRunning || pendingStart || _runtimeState.value == RuntimeState.STOPPING) return
+        val alwaysOn = setOf("speaker", "diagnostics")
+        val desired = selected + alwaysOn
+        val managed = CONFIGURABLE_SENSOR_MODULE_IDS.filterNot { it == "camera" } + alwaysOn
+        val running = moduleRegistry.getRunningModules().toSet()
+        managed.filter { it in desired && it !in running }.forEach(moduleRegistry::startModule)
+        managed.filter { it !in desired && it in running }.forEach(moduleRegistry::stopModule)
+        if ("camera" in selected && "camera" !in running) {
+            startCameraModuleWhenReady()
+        } else if ("camera" !in selected && "camera" in running) {
+            moduleRegistry.stopModule("camera")
+        }
+        ensureForeground(sensorRuntime = true)
+    }
+
+    private fun startCameraModuleWhenReady() {
+        if (!isRunning || "camera" !in getEnabledSensorModuleIds()) return
+        if (cameraManager.isCameraProviderReady()) {
+            moduleRegistry.startModule("camera")
+            return
+        }
+        if (cameraInitializationInProgress) return
+        cameraInitializationInProgress = true
+        cameraManager.initialize(
+            onReady = {
+                cameraInitializationInProgress = false
+                if (isRunning && _runtimeState.value != RuntimeState.STOPPING &&
+                    "camera" in getEnabledSensorModuleIds()) {
+                    moduleRegistry.startModule("camera")
+                }
+            },
+            onError = { error ->
+                cameraInitializationInProgress = false
+                cameraManager.state = ModuleState.ERROR
+                Log.e(TAG, "Camera initialization failed while applying sensor selection", error)
+            }
+        )
+    }
 
     fun getDeviceNodeName(): String {
         val alias = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -766,6 +824,11 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private fun startSensorRuntimeWhenReady() {
         if (exitRequested) return
+        if ("camera" !in getEnabledSensorModuleIds()) {
+            pendingStart = false
+            startInternal()
+            return
+        }
         if (cameraManager.isCameraProviderReady()) {
             pendingStart = false
             startInternal()
@@ -803,9 +866,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         val notification = createNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val serviceType = if (sensorRuntime) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                val selected = getEnabledSensorModuleIds()
+                var selectedTypes = 0
+                if ("camera" in selected) selectedTypes = selectedTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                if ("audio" in selected) selectedTypes = selectedTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                if ("gps" in selected) selectedTypes = selectedTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                if (selectedTypes == 0) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else selectedTypes
             } else {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             }
@@ -882,7 +948,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     private fun startSensorModules() {
-        SENSOR_RUNTIME_MODULE_IDS.forEach { moduleRegistry.startModule(it) }
+        val selected = getEnabledSensorModuleIds() + setOf("speaker", "diagnostics")
+        SENSOR_RUNTIME_MODULE_IDS.filter { it in selected }.forEach(moduleRegistry::startModule)
     }
 
     private fun stopSensorModules() {

@@ -51,7 +51,7 @@
                 android:textColor="@color/asr_ros_publishing"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="?attr/selectableItemBackground"
+                android:background="?android:attr/selectableItemBackground"
                 android:padding="4dp" />
 
         </LinearLayout>
