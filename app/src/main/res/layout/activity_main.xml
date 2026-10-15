@@ -260,22 +260,26 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#FFFFFF"
+            android:id="@+id/cardRos2Dds"
+            android:background="@drawable/runtime_card_background"
             android:padding="16dp"
             android:layout_marginBottom="16dp">
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="ROS 2 · DDS"
+                android:fontFamily="@font/space_grotesk"
+                android:fontVariationSettings="'wght' 600"
                 android:textStyle="bold"
-                android:textSize="18sp"
-                android:textColor="#1A202C" />
+                android:textSize="16sp"
+                android:textColor="@color/asr_text_primary" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Choose network paths independently; sensor data flows while runtime is on"
+                android:fontFamily="@font/space_grotesk"
                 android:textSize="12sp"
-                android:textColor="#718096" />
+                android:textColor="@color/asr_text_secondary" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -287,7 +291,9 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Wi-Fi DDS"
+                    android:text="WI-FI DDS"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.04"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:textColor="#2D3748" />
@@ -308,6 +314,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="USB DDS"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.04"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:textColor="#2D3748" />
@@ -323,25 +331,34 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="DDS network paths are disabled"
+                android:fontFamily="@font/space_grotesk"
                 android:textSize="11sp"
-                android:textColor="#718096" />
+                android:textColor="@color/asr_text_secondary" />
             <TextView
                 android:id="@+id/txtUsbTetheringWarning"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:background="#FFF4E5"
-                android:padding="10dp"
+                android:background="@android:color/transparent"
+                android:paddingTop="8dp"
+                android:paddingBottom="4dp"
                 android:text="USB tethering is off. Enable it here before using USB DDS."
-                android:textColor="#9A3412"
+                android:textColor="#8A641A"
+                android:fontFamily="@font/space_grotesk"
                 android:textSize="12sp"
                 android:visibility="gone" />
             <Button
                 android:id="@+id/btnUsbTetheringSettings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
                 android:layout_marginTop="8dp"
+                android:minHeight="44dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textSize="12sp"
                 android:text="OPEN USB TETHERING SETTINGS"
+                android:fontFamily="@font/space_mono"
+                android:letterSpacing="0.04"
                 android:contentDescription="Open Android USB tethering settings"
                 android:visibility="gone" />
             <View
@@ -359,7 +376,9 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Discovery status"
+                    android:text="DISCOVERY STATUS"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.06"
                     android:textSize="13sp"
                     android:textColor="#2D3748"
                     android:textStyle="bold" />
@@ -368,25 +387,27 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="DISABLED"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.03"
                     android:textSize="12sp"
                     android:textColor="#718096"
                     android:textStyle="bold" />
-                <ProgressBar
-                    android:id="@+id/progressRos2"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:layout_marginStart="8dp"
-                    android:visibility="gone"
-                    android:indeterminate="true"
-                    style="?android:attr/progressBarStyleSmall" />
             </LinearLayout>
+            <org.asr.runtime.ui.SegmentedBarView
+                    android:id="@+id/progressRos2"
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:layout_marginTop="10dp"
+                    android:visibility="gone"
+                    android:contentDescription="ROS 2 discovery in progress" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="ROS 2 discovery status is shown separately from TCP."
+                android:fontFamily="@font/space_grotesk"
                 android:textSize="12sp"
-                android:textColor="#718096" />
+                android:textColor="@color/asr_text_secondary" />
         </LinearLayout>
 
         <Button

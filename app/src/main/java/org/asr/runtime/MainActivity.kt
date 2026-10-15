@@ -95,6 +95,8 @@ class  MainActivity : ComponentActivity() {
             temporaryThemeController.toggle(binding.root)
             val dark = temporaryThemeController.isDark
             updateTransportModeBadge()
+            updateUsbTetheringSettingsButton()
+            updateRos2StatusColor(viewModel.ros2Status.value.state)
             binding.btnThemeToggle.text = if (dark) "◑" else "◐"
             binding.btnThemeToggle.contentDescription = if (dark) "Switch to light theme" else "Switch to dark theme"
             binding.btnThemeToggle.setTextColor(if (dark) Color.WHITE else Color.BLACK)
@@ -478,11 +480,35 @@ class  MainActivity : ComponentActivity() {
         } else {
             android.view.View.GONE
         }
-        val buttonTint = if (usbPathSelected && tetheringMissing) "#F6AD55" else "#E2E8F0"
-        val buttonText = if (usbPathSelected && tetheringMissing) "#7B341E" else "#2D3748"
-        binding.btnUsbTetheringSettings.backgroundTintList =
-            android.content.res.ColorStateList.valueOf(Color.parseColor(buttonTint))
-        binding.btnUsbTetheringSettings.setTextColor(Color.parseColor(buttonText))
+        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        val warningAccent = usbPathSelected && tetheringMissing
+        binding.txtUsbTetheringWarning.setTextColor(
+            if (dark) Color.parseColor("#D4A843") else Color.parseColor("#8A641A")
+        )
+        val stroke = if (warningAccent) {
+            if (dark) Color.parseColor("#D4A843") else Color.parseColor("#8A641A")
+        } else if (dark) Color.LTGRAY else Color.DKGRAY
+        val text = if (warningAccent) stroke else if (dark) Color.WHITE else Color.DKGRAY
+        binding.btnUsbTetheringSettings.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 4f * resources.displayMetrics.density
+            setColor(Color.TRANSPARENT)
+            setStroke((resources.displayMetrics.density + 0.5f).toInt(), stroke)
+        }
+        binding.btnUsbTetheringSettings.backgroundTintList = null
+        binding.btnUsbTetheringSettings.setTextColor(text)
+    }
+
+    private fun updateRos2StatusColor(state: Ros2State) {
+        val dark = ::temporaryThemeController.isInitialized && temporaryThemeController.isDark
+        binding.txtRos2Status.setTextColor(when (state) {
+            Ros2State.ACTIVE -> if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
+            Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
+            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
+            Ros2State.WAITING_FOR_INTERFACE -> if (dark) Color.parseColor("#E5B86B") else Color.parseColor("#9A6B17")
+            Ros2State.ERROR -> if (dark) Color.parseColor("#FF7373") else Color.parseColor("#B4232D")
+            else -> if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
+        })
     }
 
     private fun openUsbTetheringSettings() {
@@ -601,19 +627,22 @@ class  MainActivity : ComponentActivity() {
                             Ros2State.DISCONNECTED -> "DISCONNECTED"
                             Ros2State.DISABLED -> "DISABLED"
                         }
-                        binding.txtRos2Status.setTextColor(when(status.state) {
-                            Ros2State.ACTIVE -> Color.parseColor("#4A9E5C")
+                        val waitingForDiscovery = when(status.state) {
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
                             Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
-                            Ros2State.WAITING_FOR_INTERFACE -> Color.parseColor("#D4A843")
-                            Ros2State.ERROR -> Color.parseColor("#D71921")
-                            else -> Color.parseColor("#999999")
-                        })
-                        binding.progressRos2.visibility = when(status.state) {
-                            Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
-                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
-                            Ros2State.WAITING_FOR_INTERFACE -> android.view.View.VISIBLE
-                            else -> android.view.View.GONE
+                            Ros2State.WAITING_FOR_INTERFACE -> true
+                            else -> false
+                        }
+                        updateRos2StatusColor(status.state)
+                        binding.progressRos2.visibility = if (waitingForDiscovery) {
+                            android.view.View.VISIBLE
+                        } else {
+                            android.view.View.GONE
+                        }
+                        if (waitingForDiscovery) {
+                            binding.progressRos2.startIndeterminate()
+                        } else {
+                            binding.progressRos2.stopIndeterminate()
                         }
                         val routeDescription = status.pathSummary
                         binding.txtDdsPathStatus.text = buildDdsPathSummary(

@@ -60,9 +60,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/doto"
+                android:fontVariationSettings="'ROND' 100, 'wght' 700"
                 android:includeFontPadding="false"
                 android:text="00:00:00"
-                android:textColor="@color/asr_text_primary"
+                android:textColor="@color/asr_text_secondary"
                 android:textSize="32sp"
                 tools:text="02:14:38" />
 

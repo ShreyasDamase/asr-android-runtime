@@ -67,6 +67,14 @@ class TemporaryThemeController(private val activity: Activity) {
                 val edge = if (isDark) 0xFF383838.toInt() else 0xFFE3E5E8.toInt()
                 setStroke((activity.resources.displayMetrics.density + 0.5f).toInt(), edge)
             }
+        } else if (view.id == org.asr.runtime.R.id.cardRos2Dds) {
+            view.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 8f * activity.resources.displayMetrics.density
+                setColor(if (isDark) 0xFF171717.toInt() else Color.WHITE)
+                val edge = if (isDark) 0xFF383838.toInt() else 0xFFE3E5E8.toInt()
+                setStroke((activity.resources.displayMetrics.density + 0.5f).toInt(), edge)
+            }
         } else if (view is EditText) {
             if (isDark) {
                 view.setBackgroundResource(org.asr.runtime.R.drawable.input_underline_dark)
@@ -90,6 +98,10 @@ class TemporaryThemeController(private val activity: Activity) {
         }
 
         if (view is SquareSlideSwitch) view.setDarkTheme(isDark)
+        if (view is SegmentedBarView) {
+            view.filledColor = if (isDark) 0xFFB8B8B8.toInt() else 0xFF555555.toInt()
+            view.emptyColor = if (isDark) 0xFF383838.toInt() else 0xFFE3E5E8.toInt()
+        }
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) applyToTree(view.getChildAt(index))
         }
@@ -122,7 +134,8 @@ class TemporaryThemeController(private val activity: Activity) {
             0xFFEDF2F7.toInt() to 0xFF282828.toInt(),
             0xFFE2E8F0.toInt() to 0xFF383838.toInt(),
             0xFFEBF8FF.toInt() to 0xFF202020.toInt(),
-            0xFFE3E5E8.toInt() to 0xFF383838.toInt()
+            0xFFE3E5E8.toInt() to 0xFF383838.toInt(),
+            0xFFFFF4E5.toInt() to 0xFF332719.toInt()
         )
     }
 }
