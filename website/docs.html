@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f5f2">
+  <meta name="description" content="ASR connection guide: understand ROS 2, DDS, TCP to ASR Studio, and USB / ADB forwarding.">
+  <title>Documentation — ASR</title>
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/asr-app-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header wrap">
+    <a class="brand" href="index.html" aria-label="ASR home"><img class="brand-icon" src="assets/asr-app-icon.png" alt=""><span>ASR <small>ROBOTICS PLATFORM</small></span></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav"><span>MENU</span><i aria-hidden="true"></i></button>
+    <nav id="primary-nav" aria-label="Main navigation">
+      <a href="index.html#platform">Platform</a>
+      <a href="index.html#connect">Connectivity</a>
+      <a href="docs.html" aria-current="page">Documentation</a>
+      <a href="index.html#resources">Resources</a>
+      <a href="index.html#about">About</a>
+      <a class="nav-cta" href="index.html">Home <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main class="legal-main wrap">
+    <div class="legal-title">
+      <p class="eyebrow">ASR PLATFORM · CONNECTION GUIDE</p>
+      <h1>One phone.<br><em>Two paths.</em></h1>
+      <p>Understand how ASR Android Runtime connects to ROS 2 over DDS or sends live telemetry to ASR Studio over TCP—including what USB and ADB do in each setup.</p>
+    </div>
+
+    <div class="legal-layout">
+      <nav class="legal-nav" aria-label="Documentation contents">
+        <a href="#architecture">Connection overview</a>
+        <a href="#ros2-dds">ROS 2 and DDS</a>
+        <a href="#wifi-dds">Wi-Fi DDS</a>
+        <a href="#usb-dds">USB-tether DDS</a>
+        <a href="#studio-tcp">TCP to Studio</a>
+        <a href="#adb-tcp">USB / ADB TCP</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+      </nav>
+
+      <article class="legal-content docs-content">
+        <section id="architecture">
+          <h2>Connection overview</h2>
+          <p>ASR Android Runtime manages phone sensors and lets you enable two independent data paths. Pick the one that matches the tool you want to receive the data.</p>
+          <div class="docs-flow" role="group" aria-label="ASR connection flow">
+            <article><span>01 / SOURCE</span><h3>Android Runtime</h3><p>Reads enabled sensors and publishes their available data.</p></article>
+            <article><span>02 / TRANSPORT</span><h3>DDS or TCP</h3><p>DDS carries ROS 2 topics; TCP carries ASR telemetry to Studio.</p></article>
+            <article><span>03 / DESTINATION</span><h3>Robot or Studio</h3><p>A ROS 2 subscriber receives topics, or Studio visualizes telemetry.</p></article>
+          </div>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <caption>Choose the connection path for the receiving application.</caption>
+              <thead><tr><th scope="col">Path</th><th scope="col">Destination</th><th scope="col">Network setup</th></tr></thead>
+              <tbody>
+                <tr><td>ROS 2 DDS</td><td>ROS 2 node, robot, or host subscriber</td><td>Wi-Fi network or Android USB tethering</td></tr>
+                <tr><td>Studio TCP</td><td>ASR Studio desktop application</td><td>Wi-Fi, or USB with ADB reverse</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="docs-callout"><p><strong>These paths are separate.</strong> ASR Studio is a TCP diagnostics client, not a DDS bridge. ADB reverse forwards Studio's TCP connection; it does not turn on USB-tether DDS.</p></div>
+        </section>
+
+        <section id="ros2-dds">
+          <h2>ROS 2 and DDS</h2>
+          <p>ROS 2 uses DDS-based middleware for its publish/subscribe communication. In ASR, the Android Runtime participates in the ROS 2 graph and publishes enabled sensor data as topics. A ROS 2 subscriber or robot node can discover and receive those topics without routing them through ASR Studio.</p>
+          <p>Topics use a device-specific namespace such as <code>/asr_android_168</code>. The device ID varies. These are examples from the runtime; topic availability depends on the phone hardware, permissions, and enabled modules.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <caption>Examples of Android Runtime ROS 2 topics.</caption>
+              <thead><tr><th scope="col">Topic suffix</th><th scope="col">ROS 2 message type</th><th scope="col">Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>imu</code></td><td><code>sensor_msgs/msg/Imu</code></td><td>Inertial and orientation data, when available.</td></tr>
+                <tr><td><code>gps</code></td><td><code>sensor_msgs/msg/NavSatFix</code></td><td>Location requires permission and a usable location source.</td></tr>
+                <tr><td><code>battery</code></td><td><code>sensor_msgs/msg/BatteryState</code></td><td>Battery state updates.</td></tr>
+                <tr><td><code>camera/image/compressed</code></td><td><code>sensor_msgs/msg/CompressedImage</code></td><td>Compressed camera frames, when supported and enabled.</td></tr>
+                <tr><td><code>status</code></td><td><code>std_msgs/msg/String</code></td><td>Runtime status heartbeat.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The primary Android flavor uses Cyclone DDS; a Fast DDS comparison flavor is also available. The documented and tested host setup uses ROS 2 Lyrical with <code>rmw_fastrtps_cpp</code>. Both sides must use the same <code>ROS_DOMAIN_ID</code> (default <code>0</code>) and be able to discover each other on the selected network. This describes the tested setup, not guaranteed interoperability for every middleware, network, or ROS 2 distribution.</p>
+          <p>Start the Android Runtime, enable the matching DDS transport, and enable the sensors you need. A publisher may show that it is waiting for discovery until another ROS 2 participant is present on the network.</p>
+        </section>
+
+        <section id="wifi-dds">
+          <h2>Wi-Fi DDS</h2>
+          <ol class="docs-steps">
+            <li>Connect the phone and ROS 2 host or robot to the same reachable Wi-Fi network. The network must permit peer DDS discovery.</li>
+            <li>Configure the same <code>ROS_DOMAIN_ID</code> on the phone and host; the default is <code>0</code>. Use <code>rmw_fastrtps_cpp</code> for the documented host configuration.</li>
+            <li>Start the phone runtime, enable <strong>Wi-Fi DDS</strong>, and enable the desired sensor modules.</li>
+            <li>Use <code>ros2 topic list</code> to inspect discovered topics. To confirm messages, echo a topic such as <code>/asr_android_168/imu</code>, replacing <code>168</code> with the device ID shown by the runtime.</li>
+          </ol>
+          <p>The ASR USB Link Monitor is not needed for Wi-Fi DDS. It is a USB-only diagnostic; Wi-Fi can be checked with an ordinary ROS 2 subscriber or the robot's existing node.</p>
+        </section>
+
+        <section id="usb-dds">
+          <h2>USB-tether DDS</h2>
+          <p>USB DDS uses Android's <strong>USB tethering</strong> to create an IP network path between the phone and host. DDS discovery and topic traffic then travel over that network interface. It is not a USB serial or UART transport.</p>
+          <ol class="docs-steps">
+            <li>Connect the phone to the ROS 2 host and enable <strong>USB tethering</strong> in Android system settings.</li>
+            <li>Start the phone runtime and enable <strong>USB DDS</strong>. For an isolated check, leave Wi-Fi DDS disabled.</li>
+            <li>On the host, use the same ROS domain and the documented <code>rmw_fastrtps_cpp</code> setup. A subscriber or robot node can receive the topics.</li>
+            <li>Optionally run the ASR ROS 2 USB Link Monitor for persistent USB discovery and sensor-flow diagnostics:
+              <pre class="docs-code"><code>ros2 launch asr_ros2 connect.launch.py transport:=usb</code></pre>
+            </li>
+          </ol>
+          <p>The monitor is optional and USB-only; it reports graph visibility separately from received sensor callbacks. If automatic interface selection is ambiguous, the monitor supports an explicit interface argument. See the <a href="https://github.com/ShreyasDamase/asr-ros2-link-monitor#readme" target="_blank" rel="noopener noreferrer">USB Link Monitor guide</a> for setup and diagnostics.</p>
+        </section>
+
+        <section id="studio-tcp">
+          <h2>TCP to ASR Studio</h2>
+          <p>ASR Studio connects directly to the phone over TCP and displays camera, sensor, audio, and runtime telemetry. The default port is <code>4242</code>. This connection is independent of ROS 2 DDS; enabling TCP does not enable ROS 2 publishing.</p>
+
+          <h3>Wi-Fi TCP</h3>
+          <ol class="docs-steps">
+            <li>Connect the phone and computer to the same reachable network.</li>
+            <li>In ASR Studio, open <strong>Devices</strong>, choose <strong>Wi-Fi</strong>, enter the computer's local IP address, then choose <strong>Listen (Server)</strong>.</li>
+            <li>In the Android app's TCP section, enable the connection and enter the computer IP address with port <code>4242</code>.</li>
+          </ol>
+
+          <h3>What Studio does—and does not do</h3>
+          <p>Studio decodes ASR's TCP telemetry for live diagnostics and visualization. It does not join the ROS 2 graph as a DDS subscriber and does not forward or bridge DDS topics. For ROS 2 data, connect a ROS 2 subscriber or robot node directly to the phone's DDS participant.</p>
+          <p>For installers and complete Studio setup details, visit the <a href="https://github.com/ShreyasDamase/Asrstudio#readme" target="_blank" rel="noopener noreferrer">ASR Studio overview</a>.</p>
+        </section>
+
+        <section id="adb-tcp">
+          <h2>USB / ADB TCP</h2>
+          <p>For Studio over USB, Android Debug Bridge (ADB) can reverse-forward the Studio TCP port. The phone's TCP client then connects to its own loopback address, and ADB carries that connection to Studio on the computer.</p>
+          <ol class="docs-steps">
+            <li>Connect the phone over USB, enable USB debugging, and authorize the computer.</li>
+            <li>In Studio, open <strong>Devices</strong>, select <strong>USB / ADB</strong>, and choose <strong>Auto-Configure USB / ADB (1-Click Setup)</strong>. Studio runs:
+              <pre class="docs-code"><code>adb reverse tcp:4242 tcp:4242</code></pre>
+            </li>
+            <li>Choose <strong>Listen (Server)</strong> in Studio.</li>
+            <li>Enable TCP in the Android app and use host <code>127.0.0.1</code> and port <code>4242</code>.</li>
+          </ol>
+          <div class="docs-callout"><p><strong>ADB reverse is not USB tethering.</strong> It forwards a TCP port for Studio. To use ROS 2 DDS over USB, enable Android USB tethering and the app's USB DDS transport separately.</p></div>
+        </section>
+
+        <section id="troubleshooting">
+          <h2>Troubleshooting</h2>
+          <h3>No ROS 2 peer or topics appear</h3>
+          <ul>
+            <li>Confirm the Android Runtime is running, the intended DDS toggle is on, and the needed sensor modules are enabled.</li>
+            <li>Check that phone and host use the same <code>ROS_DOMAIN_ID</code> and that the host uses the documented <code>rmw_fastrtps_cpp</code> configuration.</li>
+            <li>Check the selected Wi-Fi or USB-tether interface and whether the network or firewall allows peer discovery.</li>
+            <li>For USB diagnostics, check the Link Monitor's interface selection and distinguish a visible topic from actual message callbacks.</li>
+          </ul>
+          <h3>Studio does not connect</h3>
+          <ul>
+            <li>Make sure Studio is listening on port <code>4242</code> before enabling the phone's TCP connection.</li>
+            <li>For Wi-Fi, verify the phone can reach the computer's local IP and that the entered address and port are correct.</li>
+            <li>For USB / ADB, confirm the device is authorized and the reverse rule is configured; the phone should connect to <code>127.0.0.1:4242</code>.</li>
+            <li>Remember that Studio TCP and ROS 2 DDS are independent; enabling one does not start the other.</li>
+          </ul>
+          <p>For Android installation, complete topic definitions, and build details, consult the <a href="https://github.com/ShreyasDamase/asr-android-runtime#readme" target="_blank" rel="noopener noreferrer">Android Runtime README</a>. Recorded backend tests and known limits are in the <a href="https://github.com/ShreyasDamase/asr-android-runtime/blob/main/docs/android-dds-backend-comparison.md" target="_blank" rel="noopener noreferrer">DDS backend comparison</a>.</p>
+          <div class="docs-callout"><p><strong>Network note:</strong> The current TCP telemetry path does not use TLS, and the inspected DDS configurations do not enable DDS Security. Use trusted networks and destinations. See the <a href="privacy.html">Privacy Policy</a> for more information.</p></div>
+        </section>
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-main">
+      <a class="brand" href="index.html"><img class="brand-icon" src="assets/asr-app-icon.png" alt=""><span>ASR <small>ROBOTICS PLATFORM</small></span></a>
+      <p>Practical sensor tools for ROS 2 robotics.</p>
+      <div class="footer-links"><a href="docs.html">Documentation</a><a href="privacy.html">Privacy</a><a href="license.html">License</a><a href="notices.html">Notices</a></div>
+    </div>
+    <div class="wrap footer-bottom"><span>© 2026 ASR · MAINTAINED BY SHREYAS DAMASE</span><span>BUILT FOR THE REAL WORLD <i class="red-dot"></i></span></div>
+  </footer>
+  <script src="menu.js" defer></script>
+</body>
+</html>

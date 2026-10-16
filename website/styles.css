@@ -23,6 +23,7 @@ a:focus-visible { outline: 2px solid var(--red); outline-offset: 4px; }
 .brand-icon { width: 38px; height: 38px; display: block; object-fit: contain; }
 .site-header nav { display: flex; align-items: center; gap: 32px; font-size: 12px; font-weight: 600; }
 .site-header nav a:not(.nav-cta) { color: #454641; }
+.site-header nav a[aria-current="page"] { color: var(--red); }
 .site-header nav .nav-support span { color: var(--red); }
 .menu-toggle { display: none; }
 .site-header nav a:hover, .footer-links a:hover, .text-link:hover { color: var(--red); }
@@ -85,7 +86,7 @@ h2 span { color: #85867f; }
 .glyph-studio { color: var(--ink); }.glyph-ros { color: var(--red); }
 .feature-card h3 { margin-bottom: 9px; font-size: 17px; letter-spacing: -.04em; }
 .feature-card p { max-width: 285px; margin-bottom: 20px; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.feature-card a { margin-top: auto; font-size: 10px; font-weight: 700; }.feature-card a span { margin-left: 6px; color: var(--red); }
+.feature-card a { margin-top: auto; font-size: 10px; font-weight: 700; }.feature-card a + a { margin-top: 9px; }.feature-card a span { margin-left: 6px; color: var(--red); }
 .connect-section { padding-block: 92px 85px; background: #e9e9e4; }
 .connect-wrap .section-heading { margin-bottom: 37px; }
 .transport-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
@@ -148,6 +149,26 @@ h2 span { color: #85867f; }
 .legal-content ul { padding-left: 19px; }.legal-content a { text-decoration: underline; text-decoration-color: #b7b8b1; text-underline-offset: 3px; }.effective { color: var(--muted); font: 10px var(--mono); }
 .license-block { overflow-wrap: anywhere; padding: 20px; border: 1px solid var(--line); background: var(--white); color: #40413c; font: 12px/1.8 var(--mono); white-space: pre-wrap; }
 .notice-item { padding: 17px 0; border-top: 1px solid var(--line); }.notice-item strong { font-size: 13px; }.notice-item p { margin: 7px 0 0; }
+.docs-flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0 26px; }
+.docs-flow article { min-height: 135px; padding: 17px; border: 1px solid var(--line); background: var(--white); }
+.docs-flow article > span { color: var(--red); font: 9px var(--mono); letter-spacing: .1em; }
+.docs-flow h3 { margin: 17px 0 7px; font-size: 14px; }
+.docs-flow p { margin: 0; font-size: 11px; line-height: 1.6; }
+.docs-code { overflow-x: auto; margin: 14px 0 19px; padding: 16px 18px; border: 1px solid #343530; color: #f5f5f2; background: #20211e; font: 11px/1.7 var(--mono); }
+.docs-code code { font: inherit; }
+.docs-content :not(pre) > code { padding: 2px 5px; color: #343530; background: #e9e9e4; font: .92em var(--mono); }
+.docs-table-wrap { overflow-x: auto; margin: 16px 0 20px; }
+.docs-table { width: 100%; min-width: 520px; border-collapse: collapse; background: var(--white); text-align: left; }
+.docs-table caption { padding: 0 0 9px; color: var(--muted); font-size: 11px; text-align: left; }
+.docs-table th, .docs-table td { padding: 11px 12px; border: 1px solid var(--line); font-size: 11px; line-height: 1.55; vertical-align: top; }
+.docs-table th { color: #555650; background: #ededE9; font: 9px var(--mono); letter-spacing: .08em; }
+.docs-callout { padding: 15px 17px; border-left: 3px solid var(--red); background: #ededE9; }
+.docs-callout p:last-child { margin-bottom: 0; }
+.docs-content .docs-steps { padding-left: 20px; }
+.docs-content .docs-steps li { padding-left: 3px; margin-bottom: 8px; }
+.docs-content .docs-steps li::marker { color: var(--red); font-family: var(--mono); }
+.docs-content .docs-link-list { display: grid; gap: 9px; padding-left: 0; list-style: none; }
+.docs-content .docs-link-list a { font-weight: 650; }
 
 @media (max-width: 800px) {
   .wrap { width: min(100% - 36px, 620px); }
@@ -171,6 +192,7 @@ h2 span { color: #85867f; }
   .resource-inner { align-items: flex-start; flex-direction: column; gap: 26px; }.resource-actions { width: 100%; }
   .footer-main { align-items: flex-start; flex-wrap: wrap; }.footer-main > p { order: 3; width: 100%; }.footer-links { gap: 14px; }
   .legal-layout { grid-template-columns: 1fr; gap: 25px; }.legal-nav { position: static; grid-template-columns: repeat(2, 1fr); }
+  .docs-flow { grid-template-columns: 1fr; }.docs-flow article { min-height: 0; }.docs-flow h3 { margin-top: 10px; }
 }
 @media (max-width: 430px) {
   .wrap { width: calc(100% - 30px); }.brand { font-size: 16px; }.nav-cta { padding: 10px 11px; font-size: 10px; }
