@@ -11,6 +11,9 @@ import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import org.asr.runtime.BuildConfig
 import org.asr.runtime.R
 
@@ -19,8 +22,15 @@ class AboutActivity : ComponentActivity() {
     private var isCoffeeAnimationRunning = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_about)
+        val root = findViewById<View>(R.id.aboutRoot)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
 
         val dark = PersistentThemeController.isDark(this)
         applyTheme(dark)

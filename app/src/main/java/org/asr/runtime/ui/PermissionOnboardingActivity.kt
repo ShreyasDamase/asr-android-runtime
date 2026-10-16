@@ -9,7 +9,10 @@ import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import org.asr.runtime.MainActivity
 import org.asr.runtime.databinding.ActivityPermissionOnboardingBinding
@@ -61,6 +64,7 @@ class PermissionOnboardingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         // Check if already completed or if all already granted
@@ -74,6 +78,11 @@ class PermissionOnboardingActivity : ComponentActivity() {
 
         binding = ActivityPermissionOnboardingBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
 
         renderRows()
 
