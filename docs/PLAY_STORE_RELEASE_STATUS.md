@@ -22,6 +22,42 @@ The first distribution target is the Google Play internal testing track so the m
 - Listing copy and a privacy policy draft are in `PLAY_STORE_LISTING.md` and `PRIVACY_POLICY_DRAFT.md`.
 - A static public-facing site is prepared under `website/` with privacy, license, and notices pages. GitHub Pages must be enabled for GitHub Actions, then the site must deploy from `main` before using its URL in Play Console.
 
+## Build commands
+
+Run these from the repository root (`asrandroid/`). The DDS flavors share the application ID `org.asr.runtime`, so install or upload one flavor at a time. Cyclone is the Play candidate.
+
+### Build every flavor
+
+macOS / Linux:
+
+```sh
+./gradlew assembleDebug assembleRelease bundleRelease
+```
+
+Windows PowerShell:
+
+```powershell
+.\gradlew.bat assembleDebug assembleRelease bundleRelease
+```
+
+### Build only Cyclone for Play
+
+macOS / Linux:
+
+```sh
+./gradlew :app:assembleCycloneDebug :app:assembleCycloneRelease :app:bundleCycloneRelease
+```
+
+Windows PowerShell:
+
+```powershell
+.\gradlew.bat :app:assembleCycloneDebug :app:assembleCycloneRelease :app:bundleCycloneRelease
+```
+
+The Cyclone Play bundle is written to `app/build/outputs/bundle/cycloneRelease/app-cyclone-release.aab`. The release APK is under `app/build/outputs/apk/cyclone/release/`; use the AAB for a Play testing-track release. Without the local release signing values below, Gradle produces an unsigned bundle that cannot be uploaded as a normal testing-track release.
+
+The all-flavor build was last run successfully after setting the shared package ID. The Cyclone and Fast DDS debug/release APK manifests reported `org.asr.runtime`; the Cyclone and Fast DDS release bundles were also generated.
+
 ## Reported complete
 
 - Maintainer reports build/platform validation on macOS, Ubuntu, and Windows is complete.
