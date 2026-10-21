@@ -457,6 +457,20 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         }
 
         Log.i(TAG, "[ASR] onCreate complete. DeviceId=$deviceId")
+
+        // A saved DDS path is an independent connectivity choice; restore its
+        // participant when the app binds to a newly created service without
+        // starting the sensor runtime.
+        val ddsPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val wifiDdsEnabled = ddsPrefs.getBoolean(
+            PREF_DDS_WIFI_ENABLED,
+            ddsPrefs.getBoolean(PREF_ROS2_ENABLED, false)
+        )
+        val usbDdsEnabled = ddsPrefs.getBoolean(PREF_DDS_USB_ENABLED, false)
+        if (wifiDdsEnabled || usbDdsEnabled) {
+            Log.i(TAG, "Restoring saved DDS paths on service creation: wifi=$wifiDdsEnabled usb=$usbDdsEnabled")
+            setRos2TransportPaths(wifiDdsEnabled, usbDdsEnabled)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -818,7 +832,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val wifiEnabled = prefs.getBoolean(PREF_DDS_WIFI_ENABLED, prefs.getBoolean(PREF_ROS2_ENABLED, false))
         val usbEnabled = prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
-        if ((wifiEnabled || usbEnabled) && !ros2Runtime.isEnabled()) {
+        if ((wifiEnabled || usbEnabled) && !ros2Runtime.isRuntimeReady()) {
             setRos2TransportPaths(wifiEnabled, usbEnabled)
         }
     }
@@ -1118,6 +1132,17 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                     prefs.getBoolean(PREF_DDS_WIFI_ENABLED, prefs.getBoolean(PREF_ROS2_ENABLED, false)),
                     prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
                 )
+                startRos2()
+            }
+            updateDiagnosticsSnapshot()
+        }
+    }
+
+    override fun onDdsRetryRequested() {
+        serviceScope.launch(Dispatchers.IO) {
+            ros2LifecycleMutex.withLock {
+                if (exitRequested || !ros2Runtime.isEnabled()) return@withLock
+                Log.i(TAG, "Retrying ROS 2 participant startup after transient initialization failure")
                 startRos2()
             }
             updateDiagnosticsSnapshot()

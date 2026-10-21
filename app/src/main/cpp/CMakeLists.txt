@@ -44,6 +44,13 @@ if(ASR_DDS_BACKEND STREQUAL "cyclone")
     import_ros2_library(std_msgs_typesupport_introspection_c libstd_msgs__rosidl_typesupport_introspection_c.so)
     import_ros2_library(sensor_msgs_typesupport_introspection_c libsensor_msgs__rosidl_typesupport_introspection_c.so)
     import_ros2_library(geometry_msgs_typesupport_introspection_c libgeometry_msgs__rosidl_typesupport_introspection_c.so)
+    # Cyclone creates rmw_dds_common's ParticipantEntitiesInfo discovery
+    # publisher during node initialization. Its generated introspection
+    # support must be present and loaded for the RMW to resolve that type.
+    add_library(rmw_dds_common_typesupport_introspection_cpp SHARED IMPORTED)
+    set_target_properties(rmw_dds_common_typesupport_introspection_cpp PROPERTIES
+        IMPORTED_LOCATION "${CYCLONE_ANDROID_LIB_DIR}/librmw_dds_common__rosidl_typesupport_introspection_cpp.so"
+        IMPORTED_NO_SONAME TRUE)
     add_library(rmw_cyclonedds_cpp SHARED IMPORTED)
     set_target_properties(rmw_cyclonedds_cpp PROPERTIES
         IMPORTED_LOCATION "${CYCLONE_ANDROID_LIB_DIR}/librmw_cyclonedds_cpp.so"
@@ -57,6 +64,8 @@ elseif(ASR_DDS_BACKEND STREQUAL "fastdds")
     import_ros2_library(rmw_fastrtps_shared_cpp librmw_fastrtps_shared_cpp.so)
     import_ros2_library(fastdds libfastdds.so)
     import_ros2_library(fastcdr libfastcdr.so)
+    import_ros2_library(sensor_msgs_fastrtps_c libsensor_msgs__rosidl_typesupport_fastrtps_c.so)
+    import_ros2_library(geometry_msgs_fastrtps_c libgeometry_msgs__rosidl_typesupport_fastrtps_c.so)
 else()
     message(FATAL_ERROR "Unsupported ASR_DDS_BACKEND='${ASR_DDS_BACKEND}'")
 endif()
@@ -70,8 +79,6 @@ import_ros2_library(geometry_msgs_generator_c libgeometry_msgs__rosidl_generator
 import_ros2_library(geometry_msgs_typesupport_c libgeometry_msgs__rosidl_typesupport_c.so)
 import_ros2_library(sensor_msgs_generator_c libsensor_msgs__rosidl_generator_c.so)
 import_ros2_library(sensor_msgs_typesupport_c libsensor_msgs__rosidl_typesupport_c.so)
-import_ros2_library(sensor_msgs_fastrtps_c libsensor_msgs__rosidl_typesupport_fastrtps_c.so)
-import_ros2_library(geometry_msgs_fastrtps_c libgeometry_msgs__rosidl_typesupport_fastrtps_c.so)
 
 add_library(asr_ros2 SHARED
         NativeRos2Bridge.cpp)
@@ -99,8 +106,6 @@ target_link_libraries(asr_ros2
         sensor_msgs_generator_c
         geometry_msgs_typesupport_c
         geometry_msgs_generator_c
-        sensor_msgs_fastrtps_c
-        geometry_msgs_fastrtps_c
         rosidl_typesupport_c
         rosidl_runtime_c
         rosidl_dynamic_typesupport
@@ -119,8 +124,15 @@ if(ASR_DDS_BACKEND STREQUAL "cyclone")
             std_msgs_typesupport_introspection_c
             sensor_msgs_typesupport_introspection_c
             geometry_msgs_typesupport_introspection_c
+            rmw_dds_common_typesupport_introspection_cpp
             "-Wl,--as-needed")
 else()
     target_compile_definitions(asr_ros2 PRIVATE ASR_RMW_IMPLEMENTATION="rmw_fastrtps_cpp")
-    target_link_libraries(asr_ros2 rmw_fastrtps_cpp rmw_fastrtps_shared_cpp fastdds fastcdr)
+    target_link_libraries(asr_ros2
+            rmw_fastrtps_cpp
+            rmw_fastrtps_shared_cpp
+            fastdds
+            fastcdr
+            sensor_msgs_fastrtps_c
+            geometry_msgs_fastrtps_c)
 endif()

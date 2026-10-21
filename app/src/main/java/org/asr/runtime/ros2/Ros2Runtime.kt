@@ -20,6 +20,7 @@ enum class Ros2State {
     NODE_READY,
     WAITING_FOR_DISCOVERY,
     WAITING_FOR_INTERFACE,
+    RETRYING,
     ACTIVE,
     DISCONNECTED,
     ERROR
@@ -39,6 +40,7 @@ class Ros2Runtime(private val context: Context) {
         fun onFlashlightCommand(on: Boolean)
         fun onSpeakerCommand(text: String)
         fun onDdsInterfacesChanged()
+        fun onDdsRetryRequested()
     }
 
     var listener: Listener? = null
@@ -49,6 +51,8 @@ class Ros2Runtime(private val context: Context) {
     private var heartbeatRunnable: Runnable? = null
     private var discoveryPollingRunnable: Runnable? = null
     private var interfaceMonitorRunnable: Runnable? = null
+    private var startRetryRunnable: Runnable? = null
+    private var startRetryAttempt = 0
     @Volatile private var discoveryStartedAtMs: Long = 0L
     @Volatile private var lastDiscoveryLogAtMs: Long = 0L
     @Volatile private var enabled: Boolean = prefs.getBoolean(PREF_ROS2_ENABLED, false)
@@ -65,6 +69,8 @@ class Ros2Runtime(private val context: Context) {
     val status: StateFlow<Ros2Status> = _status.asStateFlow()
 
     fun isEnabled(): Boolean = enabled
+
+    fun isRuntimeReady(): Boolean = runtimeReady
 
     fun setEnabled(value: Boolean) {
         Log.i(TAG, "setEnabled current=$enabled new=$value")
@@ -93,6 +99,8 @@ class Ros2Runtime(private val context: Context) {
 
     fun startIfNeeded(nodeName: String, nodeNamespace: String) {
         Log.i(TAG, "startIfNeeded enabled=$enabled domainId=$domainId nodeName=$nodeName ns=$nodeNamespace")
+        startRetryRunnable?.let(mainHandler::removeCallbacks)
+        startRetryRunnable = null
 
         val nameChanged = lastNodeName != null && lastNodeName != nodeName
         val nsChanged = lastNodeNamespace != null && lastNodeNamespace != nodeNamespace
@@ -165,10 +173,12 @@ class Ros2Runtime(private val context: Context) {
             val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
             if (!started) {
                 Log.e(TAG, "Failed to start native ROS 2 node $nodeNamespace/$nodeName on domain $domainId")
-                _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId)
+                cleanupFailedNativeStart()
+                scheduleStartRetry(nodeName, nodeNamespace, "native node initialization returned false")
                 return
             }
 
+            startRetryAttempt = 0
             _status.value = _status.value.copy(state = Ros2State.NODE_READY)
 
             NativeRos2Bridge.setMessageListener(object : NativeRos2Bridge.MessageListener {
@@ -211,8 +221,43 @@ class Ros2Runtime(private val context: Context) {
         } catch (t: Throwable) {
             Log.e(TAG, "Failed to initialize native ROS 2 runtime", t)
             runtimeReady = false
-            _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId)
+            cleanupFailedNativeStart()
+            scheduleStartRetry(nodeName, nodeNamespace, t.message ?: t.javaClass.simpleName)
         }
+    }
+
+    private fun cleanupFailedNativeStart() {
+        runCatching {
+            if (NativeRos2Bridge.isAvailable()) NativeRos2Bridge.shutdown()
+        }.onFailure { Log.w(TAG, "Cleanup after failed ROS 2 startup failed", it) }
+    }
+
+    private fun scheduleStartRetry(nodeName: String, nodeNamespace: String, reason: String) {
+        if (!enabled || (!wifiPathEnabled && !usbPathEnabled)) {
+            _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId)
+            return
+        }
+
+        val delayMs = (START_RETRY_BASE_MS shl startRetryAttempt.coerceAtMost(5))
+            .coerceAtMost(START_RETRY_MAX_MS)
+        startRetryAttempt = (startRetryAttempt + 1).coerceAtMost(6)
+        _status.value = Ros2Status(
+            Ros2State.RETRYING,
+            nodeName,
+            nodeNamespace,
+            domainId,
+            "Retrying DDS startup in ${delayMs / 1000}s"
+        )
+        Log.w(TAG, "ROS 2 startup failed ($reason); retrying in ${delayMs}ms (attempt $startRetryAttempt)")
+
+        val retry = Runnable {
+            startRetryRunnable = null
+            if (enabled && (wifiPathEnabled || usbPathEnabled)) {
+                listener?.onDdsRetryRequested()
+            }
+        }
+        startRetryRunnable = retry
+        mainHandler.postDelayed(retry, delayMs)
     }
 
     private fun writeFastDdsConfig(interfaces: List<String>): String? {
@@ -465,6 +510,9 @@ class Ros2Runtime(private val context: Context) {
     }
 
     fun shutdown(disabled: Boolean = !enabled) {
+        startRetryRunnable?.let(mainHandler::removeCallbacks)
+        startRetryRunnable = null
+        if (disabled) startRetryAttempt = 0
         heartbeatRunnable?.let { mainHandler.removeCallbacks(it) }
         heartbeatRunnable = null
         discoveryPollingRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -568,6 +616,8 @@ class Ros2Runtime(private val context: Context) {
 
     companion object {
         private const val TAG = "Ros2Runtime"
+        private const val START_RETRY_BASE_MS = 1_000L
+        private const val START_RETRY_MAX_MS = 30_000L
         private const val DISCOVERY_LOG_INTERVAL_MS = 5_000L
         private const val INTERFACE_POLL_INTERVAL_MS = 1_000L
         private const val PREFS_NAME = "asr_prefs"

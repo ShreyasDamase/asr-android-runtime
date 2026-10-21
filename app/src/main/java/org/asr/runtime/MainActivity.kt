@@ -405,7 +405,7 @@ class  MainActivity : ComponentActivity() {
         }
         binding.runtimeCard.txtRuntimeStatus.setOnClickListener { toggleSensorOutputPanel() }
 
-        // btnExitApp removed from header
+        // Exit control is placed below the About ASR Runtime button.
         TactileFeedbackHelper.attachTactileFeedback(binding.btnDetailsToggle) {
             val showDetails = binding.layoutAdvancedDetails.visibility != android.view.View.VISIBLE
             binding.layoutAdvancedDetails.visibility = if (showDetails) android.view.View.VISIBLE else android.view.View.GONE
@@ -426,6 +426,9 @@ class  MainActivity : ComponentActivity() {
         }
         binding.btnAbout.setOnClickListener {
             startActivity(Intent(this, org.asr.runtime.ui.AboutActivity::class.java))
+        }
+        TactileFeedbackHelper.attachTactileFeedback(binding.btnExitApp) {
+            confirmExit()
         }
 
         binding.btnConnectTransport.setOnClickListener {
@@ -449,9 +452,9 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun confirmExit() {
-        AlertDialog.Builder(this)
-            .setTitle("Exit ASR Android?")
-            .setMessage("This stops the sensor runtime and shuts down TCP and ROS 2 before closing the app.")
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("EXIT ASR ANDROID?")
+            .setMessage("This stops the runtime, releases active sensors, and disconnects TCP and ROS 2 before closing.")
             .setNegativeButton("No", null)
             .setPositiveButton("Yes, exit") { _, _ ->
                 if (viewModel.isServiceBound.value) {
@@ -463,7 +466,40 @@ class  MainActivity : ComponentActivity() {
                     finishAndRemoveTask()
                 }
             }
-            .show()
+            .create()
+
+        dialog.setOnShowListener {
+            val dark = themeController.isDark
+            val density = resources.displayMetrics.density
+            val surface = if (dark) 0xFF171717.toInt() else Color.WHITE
+            val edge = if (dark) 0xFF383838.toInt() else 0xFFE3E5E8.toInt()
+            dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 8f * density
+                setColor(surface)
+                setStroke((density + 0.5f).toInt(), edge)
+            })
+            dialog.window?.apply {
+                setGravity(Gravity.CENTER)
+                setLayout(
+                    (resources.displayMetrics.widthPixels * 0.88f).toInt(),
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                setDimAmount(0.72f)
+            }
+            val alertTitleId = resources.getIdentifier("alertTitle", "id", "android")
+            if (alertTitleId != 0) {
+                dialog.findViewById<TextView>(alertTitleId)
+                    ?.setTextColor(if (dark) Color.WHITE else Color.BLACK)
+            }
+            dialog.findViewById<TextView>(android.R.id.message)
+                ?.setTextColor(if (dark) 0xFFAAAAAA.toInt() else 0xFF555555.toInt())
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                ?.setTextColor(if (dark) Color.WHITE else Color.BLACK)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+                ?.setTextColor(if (dark) 0xFFAAAAAA.toInt() else 0xFF555555.toInt())
+        }
+        dialog.show()
     }
 
     private fun updateTcpStatus() {
@@ -627,7 +663,7 @@ class  MainActivity : ComponentActivity() {
             Ros2State.ACTIVE -> if (dark) Color.parseColor("#77C98A") else Color.parseColor("#39834B")
             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
             Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
-            Ros2State.WAITING_FOR_INTERFACE -> if (dark) Color.parseColor("#E5B86B") else Color.parseColor("#9A6B17")
+            Ros2State.WAITING_FOR_INTERFACE, Ros2State.RETRYING -> if (dark) Color.parseColor("#E5B86B") else Color.parseColor("#9A6B17")
             Ros2State.ERROR -> if (dark) Color.parseColor("#FF7373") else Color.parseColor("#B4232D")
             else -> if (dark) Color.parseColor("#A0A0A0") else Color.parseColor("#737373")
         })
@@ -1013,6 +1049,7 @@ class  MainActivity : ComponentActivity() {
                             Ros2State.NODE_READY -> "NODE READY"
                             Ros2State.WAITING_FOR_DISCOVERY -> "WAITING DISCOVERY"
                             Ros2State.WAITING_FOR_INTERFACE -> "WAITING FOR LINK"
+                            Ros2State.RETRYING -> "RETRYING DDS"
                             Ros2State.ACTIVE -> "ACTIVE (DISCOVERED)"
                             Ros2State.ERROR -> "ERROR"
                             Ros2State.DISCONNECTED -> "DISCONNECTED"
@@ -1021,7 +1058,7 @@ class  MainActivity : ComponentActivity() {
                         val waitingForDiscovery = when(status.state) {
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
                             Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
-                            Ros2State.WAITING_FOR_INTERFACE -> true
+                            Ros2State.WAITING_FOR_INTERFACE, Ros2State.RETRYING -> true
                             else -> false
                         }
                         updateRos2StatusColor(status.state)

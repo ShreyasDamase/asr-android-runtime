@@ -107,14 +107,21 @@ class PersistentThemeController(private val activity: Activity) {
             }
         } else if (
             view.id == org.asr.runtime.R.id.btnDetailsToggle ||
-            view.id == org.asr.runtime.R.id.btnAbout
+            view.id == org.asr.runtime.R.id.btnAbout ||
+            view.id == org.asr.runtime.R.id.btnExitApp
         ) {
             if (isDark) {
-                view.background = outline(Color.WHITE)
-                (view as? TextView)?.setTextColor(Color.WHITE)
+                view.background = outlineButtonBackground(Color.WHITE)
+                (view as? TextView)?.setTextColor(outlineButtonTextColors())
             } else if (originalBackground != null) {
                 view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
-                (view as? TextView)?.setTextColor(originalTextColors[view] ?: Color.BLACK)
+                (view as? TextView)?.setTextColor(
+                    if (view.id == org.asr.runtime.R.id.btnAbout || view.id == org.asr.runtime.R.id.btnExitApp) {
+                        activity.getColorStateList(org.asr.runtime.R.color.btn_outline_text_nothing)
+                    } else {
+                        ColorStateList.valueOf(originalTextColors[view] ?: Color.BLACK)
+                    }
+                )
             }
         } else if (view.id == org.asr.runtime.R.id.btnApplySensorSelection) {
             if (isDark) {
@@ -185,6 +192,29 @@ class PersistentThemeController(private val activity: Activity) {
         setColor(Color.TRANSPARENT)
         setStroke((activity.resources.displayMetrics.density + 0.5f).toInt(), color)
     }
+
+    private fun outlineButtonBackground(edge: Int) = StateListDrawable().apply {
+        val density = activity.resources.displayMetrics.density
+        val strokeWidth = (density + 0.5f).toInt()
+        addState(
+            intArrayOf(-android.R.attr.state_enabled),
+            actionButtonShape(Color.TRANSPARENT, 0xFF555555.toInt(), strokeWidth)
+        )
+        addState(
+            intArrayOf(android.R.attr.state_pressed),
+            actionButtonShape(Color.BLACK, edge, strokeWidth)
+        )
+        addState(intArrayOf(), actionButtonShape(Color.TRANSPARENT, edge, strokeWidth))
+    }
+
+    private fun outlineButtonTextColors() = ColorStateList(
+        arrayOf(
+            intArrayOf(-android.R.attr.state_enabled),
+            intArrayOf(android.R.attr.state_pressed),
+            intArrayOf()
+        ),
+        intArrayOf(0xFF777777.toInt(), Color.WHITE, Color.WHITE)
+    )
 
     private fun isActionButton(viewId: Int): Boolean = viewId == org.asr.runtime.R.id.btnStartRuntime ||
         viewId == org.asr.runtime.R.id.btnStopRuntime ||

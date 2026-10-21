@@ -5,6 +5,8 @@ import android.hardware.camera2.CaptureRequest
 import android.util.Log
 import android.util.Range
 import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.resolutionselector.ResolutionSelector
@@ -102,6 +104,7 @@ class CameraManager(
         }
     }
 
+    @OptIn(markerClass = [ExperimentalCamera2Interop::class])
     fun startCamera(
         lifecycleOwner: LifecycleOwner,
         cameraPipeline: CameraPipeline,

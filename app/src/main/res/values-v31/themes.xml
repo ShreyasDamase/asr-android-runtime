@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AsrRuntime.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_asr_splash_icon</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+        <item name="android:windowSplashScreenBrandingImage">@drawable/asr_splash_branding</item>
+        <item name="postSplashScreenTheme">@style/Theme.AsrRuntime</item>
+    </style>
+</resources>
