@@ -34,6 +34,7 @@
       <nav class="legal-nav" aria-label="Documentation contents">
         <a href="#architecture">Connection overview</a>
         <a href="#ros2-dds">ROS 2 and DDS</a>
+        <a href="#foxglove">Foxglove</a>
         <a href="#wifi-dds">Wi-Fi DDS</a>
         <a href="#usb-dds">USB-tether DDS</a>
         <a href="#studio-tcp">TCP to Studio</a>
@@ -82,6 +83,20 @@
           </div>
           <p>The primary Android flavor uses Cyclone DDS; a Fast DDS comparison flavor is also available. The documented and tested host setup uses ROS 2 Lyrical with <code>rmw_fastrtps_cpp</code>. Both sides must use the same <code>ROS_DOMAIN_ID</code> (default <code>0</code>) and be able to discover each other on the selected network. This describes the tested setup, not guaranteed interoperability for every middleware, network, or ROS 2 distribution.</p>
           <p>Start the Android Runtime, enable the matching DDS transport, and enable the sensors you need. A publisher may show that it is waiting for discovery until another ROS 2 participant is present on the network.</p>
+        </section>
+
+        <section id="foxglove">
+          <h2>View ROS 2 data in Foxglove</h2>
+          <p>Foxglove connects to a <strong>Foxglove Bridge</strong> WebSocket. The ASR USB Link Monitor is a separate ROS 2 participant: it can activate discovery and report sensor flow, but it does not start the WebSocket server Foxglove needs.</p>
+          <ol class="docs-steps">
+            <li>Start the ASR Android Runtime, enable USB tethering and USB DDS, and keep the USB Link Monitor running.</li>
+            <li>In a second terminal, use the same sourced ROS 2 environment, <code>ROS_DOMAIN_ID</code>, and host RMW as the monitor. Launch the bridge:
+              <pre class="docs-code"><code>ros2 launch foxglove_bridge foxglove_bridge_launch.xml</code></pre>
+            </li>
+            <li>In Foxglove, choose <strong>Open a new connection → Foxglove WebSocket</strong> and enter <code>ws://localhost:8765</code> when Foxglove runs on that same computer.</li>
+            <li>Check the Data source topic list. To confirm data flow, select a live topic such as <code>/asr_android_&lt;device-id&gt;/imu</code> or <code>/asr_android_&lt;device-id&gt;/camera/image/compressed</code>.</li>
+          </ol>
+          <div class="docs-callout"><p><strong>Two processes are needed:</strong> the USB Link Monitor observes DDS over the selected tether interface; Foxglove Bridge exposes the ROS 2 graph over WebSocket. If the bridge launch reports that <code>foxglove_bridge</code> is unavailable, build or install that ROS package in the sourced host environment first. See the <a href="https://docs.foxglove.dev/docs/getting-started/frameworks/ros2" target="_blank" rel="noopener noreferrer">Foxglove ROS 2 guide</a>.</p></div>
         </section>
 
         <section id="wifi-dds">

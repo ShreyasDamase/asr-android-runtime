@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -90,6 +91,20 @@ class PersistentThemeController(private val activity: Activity) {
         if (view.id == org.asr.runtime.R.id.btnThemeToggle) {
             val edge = if (isDark) Color.WHITE else Color.BLACK
             view.background = outline(edge)
+        } else if (isActionButton(view.id)) {
+            val isPrimary = view.id == org.asr.runtime.R.id.btnStartRuntime
+            if (isDark) {
+                view.background = actionButtonBackground(isPrimary = isPrimary)
+                view.backgroundTintList = null
+                (view as? TextView)?.setTextColor(actionButtonTextColors(isPrimary = isPrimary))
+            } else if (originalBackground != null) {
+                view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
+                view.backgroundTintList = originalBackgroundTints[view]
+                (view as? TextView)?.let { textView ->
+                    if (isPrimary) textView.setTextColor(Color.WHITE)
+                    else textView.setTextColor(activity.getColorStateList(org.asr.runtime.R.color.btn_outline_text_nothing))
+                }
+            }
         } else if (
             view.id == org.asr.runtime.R.id.btnDetailsToggle ||
             view.id == org.asr.runtime.R.id.btnAbout
@@ -101,9 +116,6 @@ class PersistentThemeController(private val activity: Activity) {
                 view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
                 (view as? TextView)?.setTextColor(originalTextColors[view] ?: Color.BLACK)
             }
-        } else if (view.id == org.asr.runtime.R.id.btnStopRuntime || view.id == org.asr.runtime.R.id.btnRestartRuntime) {
-            if (isDark) view.background = outline(Color.WHITE)
-            else if (originalBackground != null) view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
         } else if (view.id == org.asr.runtime.R.id.btnApplySensorSelection) {
             if (isDark) {
                 view.background = ColorDrawable(Color.WHITE)
@@ -149,13 +161,6 @@ class PersistentThemeController(private val activity: Activity) {
                 view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
                 view.backgroundTintList = originalBackgroundTints[view]
             }
-        } else if (
-            view.id == org.asr.runtime.R.id.btnConnectTransport ||
-            view.id == org.asr.runtime.R.id.btnDisconnectTransport ||
-            view.id == org.asr.runtime.R.id.btnReconnectTransport
-        ) {
-            if (isDark) view.background = outline(Color.WHITE)
-            else if (originalBackground != null) view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
         } else if (originalBackground is ColorDrawable) {
             val originalColor = originalBackground.color
             view.setBackgroundColor(if (isDark) Palette.darkBackgroundColors[originalColor] ?: originalColor else originalColor)
@@ -180,6 +185,52 @@ class PersistentThemeController(private val activity: Activity) {
         setColor(Color.TRANSPARENT)
         setStroke((activity.resources.displayMetrics.density + 0.5f).toInt(), color)
     }
+
+    private fun isActionButton(viewId: Int): Boolean = viewId == org.asr.runtime.R.id.btnStartRuntime ||
+        viewId == org.asr.runtime.R.id.btnStopRuntime ||
+        viewId == org.asr.runtime.R.id.btnRestartRuntime ||
+        viewId == org.asr.runtime.R.id.btnConnectTransport ||
+        viewId == org.asr.runtime.R.id.btnDisconnectTransport ||
+        viewId == org.asr.runtime.R.id.btnReconnectTransport
+
+    private fun actionButtonBackground(isPrimary: Boolean) = StateListDrawable().apply {
+        val density = activity.resources.displayMetrics.density
+        val strokeWidth = (density + 0.5f).toInt()
+        val defaultFill = if (isPrimary) Color.WHITE else Color.TRANSPARENT
+        val defaultStroke = Color.WHITE
+        addState(
+            intArrayOf(-android.R.attr.state_enabled),
+            actionButtonShape(defaultFill, 0xFF555555.toInt(), strokeWidth)
+        )
+        addState(
+            intArrayOf(android.R.attr.state_pressed),
+            actionButtonShape(Color.BLACK, defaultStroke, strokeWidth)
+        )
+        addState(
+            intArrayOf(),
+            actionButtonShape(defaultFill, defaultStroke, strokeWidth)
+        )
+    }
+
+    private fun actionButtonShape(fillColor: Int, strokeColor: Int, strokeWidth: Int) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 4f * activity.resources.displayMetrics.density
+        setColor(fillColor)
+        setStroke(strokeWidth, strokeColor)
+    }
+
+    private fun actionButtonTextColors(isPrimary: Boolean) = ColorStateList(
+        arrayOf(
+            intArrayOf(-android.R.attr.state_enabled),
+            intArrayOf(android.R.attr.state_pressed),
+            intArrayOf()
+        ),
+        intArrayOf(
+            0xFF777777.toInt(),
+            Color.WHITE,
+            if (isPrimary) Color.BLACK else Color.WHITE
+        )
+    )
 
     private object Palette {
         val darkTextColors = mapOf(

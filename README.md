@@ -83,11 +83,7 @@ The phone uses Cyclone DDS. The documented host configuration uses ROS 2 Lyrical
 1. Connect the phone and ROS 2 host to the same Wi-Fi network that permits peer-to-peer DDS discovery.
 2. Set matching `ROS_DOMAIN_ID` on both sides (default `0`) and use `rmw_fastrtps_cpp` on the host.
 3. Start phone runtime, enable **Wi-Fi DDS**, and enable the required sensors. The phone will display **"Waiting for discovery"** until a ROS 2 participant or subscriber is active on the network.
-4. Launch the companion helper on the host to monitor the link and activate discovery:
-   ```bash
-   ros2 launch asr_ros2 connect.launch.py transport:=wifi
-   ```
-   Or discover phone topics directly using your robot node or standard ROS 2 tools (`ros2 topic list`, `rqt`). As soon as an active subscriber is listening, the phone transitions into active streaming.
+4. Discover phone topics using your robot node or standard ROS 2 tools (`ros2 topic list`, `ros2 topic echo`). The USB Link Monitor is USB-only and is not needed for Wi-Fi DDS.
 
 ### USB-tether DDS
 
@@ -108,6 +104,16 @@ The phone uses Cyclone DDS. The documented host configuration uses ROS 2 Lyrical
 This monitor is optional diagnostic software: it reports graph visibility and actual sensor callbacks separately. It does not start Android runtime or enable tethering. Raspberry Pi use is expected with a compatible ROS 2 installation and USB-tether interface, but has not yet been validated on-device.
 
 The standalone package installation and detailed diagnostic interpretation are documented in [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor). A copy is also present under [`asr_ros2/`](asr_ros2/README.md).
+
+### View topics in Foxglove
+
+Foxglove connects to a **Foxglove Bridge** WebSocket. The ASR USB Link Monitor does not start this bridge; it is a separate ROS 2 participant used for discovery and diagnostics. Keep the USB monitor running, then launch the bridge in a second terminal using the same sourced ROS 2 environment, `ROS_DOMAIN_ID`, and host RMW:
+
+```bash
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml
+```
+
+In Foxglove, choose **Open a new connection → Foxglove WebSocket** and enter `ws://localhost:8765` when it runs on the ROS 2 host. Check the Data source topic list and open a live ASR topic to verify messages. The bridge must see the same ROS 2 graph as the monitor. For a Foxglove client on another computer, use the bridge host's reachable address and allow port `8765` through the host firewall. If the launch reports that `foxglove_bridge` is missing, build or install it in the sourced ROS 2 environment. See the [Foxglove ROS 2 guide](https://docs.foxglove.dev/docs/getting-started/frameworks/ros2) for bridge setup and connection details.
 
 ## ROS 2 topic reference
 
