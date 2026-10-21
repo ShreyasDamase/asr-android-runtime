@@ -13,7 +13,7 @@ The first distribution target is the Google Play internal testing track so the m
 - Camera is declared optional so Play does not filter out devices without camera hardware.
 - Release build keeps minification disabled and references JNI-preserving ProGuard rules.
 - Release signing can be configured with local properties or environment variables. No release keystore or signing credentials are configured in this checkout.
-- The Cyclone flavor currently uses package ID `org.asr.runtime.cyclone` and version `1.0.1-cyclone` (versionCode `2`). Confirm this is the package registered in Play Console before preparing an upload; Play does not allow changing an existing listing's package ID.
+- Both flavors now use package ID `org.asr.runtime`; the Cyclone version name is `1.0.1-cyclone` (versionCode `2`). Build and upload the Cyclone flavor for the intended Play listing. Play fixes a new listing's package ID at its first app-bundle upload.
 - Current Cyclone APK and AAB outputs passed static ELF LOAD alignment checks (65 packaged ARM64 libraries), APK `zipalign -P 16` checks, and AAB `PAGE_ALIGNMENT_16K` inspection. These checks establish artifact alignment only, not device runtime behavior.
 - **AAB currently available:** `app/build/outputs/bundle/cycloneRelease/app-cyclone-release.aab` (about 11 MB), but it is **unsigned** and is not the Play upload artifact yet.
 - **APK currently available:** `app/build/outputs/apk/cyclone/release/app-cyclone-release-unsigned.apk` (about 21 MB), also unsigned. For Play distribution, use the signed AAB; keep debug APKs for local development only.
@@ -29,7 +29,7 @@ The first distribution target is the Google Play internal testing track so the m
 
 ## Internal testing checklist
 
-- [ ] Confirm the Play Console app package ID is `org.asr.runtime.cyclone` (or select/build the matching flavor).
+- [x] Package ID selected: `org.asr.runtime`. Build and upload the Cyclone flavor for this listing.
 - [ ] Configure the existing Play upload key locally; verify it matches the key already registered in Play Console. Do not create a replacement key for an existing listing.
 - [ ] Increment `versionCode` above `2` and choose the next version name before generating the upload AAB.
 - [ ] Build the signed Cyclone release AAB from the reviewed commit and verify its package ID, version, signature, native libraries, and 16 KB packaging alignment.

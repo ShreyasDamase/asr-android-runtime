@@ -65,7 +65,6 @@ android {
         }
         create("cyclone") {
             dimension = "ddsBackend"
-            applicationIdSuffix = ".cyclone"
             versionNameSuffix = "-cyclone"
             minSdk = 28
             buildConfigField("String", "ASR_DDS_BACKEND", "\"cyclone\"")

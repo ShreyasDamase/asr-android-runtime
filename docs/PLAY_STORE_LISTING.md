@@ -4,7 +4,7 @@
 
 - **App name:** ASR Android Runtime
 - **Category:** Tools
-- **Variant choice:** Cyclone DDS (`org.asr.runtime.cyclone`) is a candidate; confirm whether the Play listing will use Cyclone only or both DDS variants.
+- **Variant choice:** Cyclone DDS (`org.asr.runtime`) is the intended Play listing package. Build and upload the Cyclone flavor; Fast DDS remains a separate build flavor for later use and must not be uploaded under the same listing unless deliberately selected.
 - **Short description (under 80 characters):** Turn your Android phone into a configurable ROS 2 sensor node.
 
 ## Full description
