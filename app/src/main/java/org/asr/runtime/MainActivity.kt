@@ -61,7 +61,7 @@ class  MainActivity : ComponentActivity() {
         SensorConfigOption("camera", "CAMERA", "Camera frames"),
         SensorConfigOption("imu", "IMU", "Accelerometer + gyroscope"),
         SensorConfigOption("environment", "ENVIRONMENT", "Light, pressure, temperature, humidity"),
-        SensorConfigOption("motion", "MOTION", "Steps and motion detection"),
+        SensorConfigOption("motion", "MOTION SENSORS", "Streams motion data, including step-counter values, to ROS 2"),
         SensorConfigOption("audio", "MICROPHONE", "Audio input"),
         SensorConfigOption("gps", "GPS", "Location data"),
         SensorConfigOption("battery", "BATTERY", "Level and charging state")

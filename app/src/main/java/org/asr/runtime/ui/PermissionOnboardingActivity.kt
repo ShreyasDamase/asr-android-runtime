@@ -51,7 +51,7 @@ class PermissionOnboardingActivity : ComponentActivity() {
         PermissionItem(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) Manifest.permission.ACTIVITY_RECOGNITION else "",
             "MOTION SENSORS",
-            "Access high-rate IMU & step tracking without OS throttling.",
+            "Allows motion readings, including step-counter values, to be published to ROS 2 when enabled.",
             minSdk = Build.VERSION_CODES.Q
         ),
         PermissionItem(
