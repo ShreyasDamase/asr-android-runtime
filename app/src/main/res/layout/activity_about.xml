@@ -117,7 +117,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:fontFamily="@font/space_grotesk"
-                android:text="Only selected sensor groups publish while ASR Runtime is running. Data goes to the ROS 2 peers or ASR Studio endpoint you configure. DDS supports Wi-Fi and USB tethering; TCP supports Wi-Fi and USB through ADB. These transports are not encrypted by the current app. Camera, microphone, and location require Android permission."
+                android:text="Only selected sensor groups publish while ASR Runtime is running. Data goes directly to the ROS 2 peers or ASR Studio endpoint you configure; ASR does not operate a cloud relay or receive these streams. Connections are intended for your local robotics setup, though your network route can carry traffic beyond it. Current DDS and TCP transports are not encrypted. Camera, microphone, and location require Android permission."
                 android:textColor="#333333"
                 android:textSize="13sp" />
 

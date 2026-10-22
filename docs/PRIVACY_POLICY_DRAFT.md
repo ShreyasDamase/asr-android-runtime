@@ -1,50 +1,44 @@
-# ASR Android Runtime privacy policy — draft
+# ASR Android Runtime Privacy Policy
 
-**Effective date:** to be set when this policy is reviewed and published.
+**Effective date: 23 October 2026**
 
-ASR Android Runtime is an open-source robotics companion app. It reads sensor data only for modules that you select while the runtime is active. This draft must be reviewed and published at a stable public URL before it is used as the Play Store privacy policy.
+ASR Android Runtime turns an Android phone into a configurable sensor node for ROS 2 and ASR Studio. You choose which sensor modules to enable and which connection paths and destinations to use.
 
-## Data handled by the app
+## Information accessed
 
-Depending on the modules you enable and the hardware available, the app can access camera frames, microphone samples, precise location, motion and IMU readings, environmental sensor readings, and battery state. Android permissions gate sensitive sensor access. The app also stores settings on the device, including sensor selection and transport settings. It creates a persistent random app-scoped identifier for the node and derives a one-byte node ID from it. The app does not read Android ID to create the node ID; the derived node ID is included in outgoing protocol messages.
+Depending on the modules you enable and the hardware available, the app can access camera frames, microphone samples, precise location, motion and IMU readings (including a device-provided step-counter reading where supported), environmental sensor readings, and battery state. Android permissions gate sensitive sensor access. You can leave modules disabled and revoke permissions in Android settings.
 
-## How data is transmitted
+The app stores preferences on your device, including sensor selection and transport settings. It creates a persistent random app-scoped node identifier and derives a one-byte node ID from it; it does not read Android ID to create this node ID. Connection messages sent to your configured destination may also include the derived node ID, device model, Android API level, app and protocol versions, and available sensor capabilities.
 
-Sensor, capability, and diagnostic messages are sent through the transport paths you enable. If more than one transport is enabled, data may be sent over each active path:
+## Direct connections to your robotics system
 
-- **ROS 2 DDS over Wi-Fi:** to ROS 2 peers reachable on the selected Wi-Fi network.
-- **ROS 2 DDS over USB:** over Android USB tethering to peers reachable through that tethered IP link. This is an IP/DDS path, not a serial UART connection.
-- **TCP to ASR Studio over Wi-Fi:** to the host and port configured in the app.
-- **TCP to ASR Studio over USB/ADB:** the app still uses TCP; ASR Studio configures an ADB reverse tunnel to the connected computer.
+ASR is designed to publish directly to robotics systems that you configure, not to an ASR-operated cloud service. While the runtime is active, selected sensor streams and connection metadata are sent over only the transport paths you enable. If you enable more than one path, the same selected data may be sent over each active path:
 
-Depending on the configured network and destination, traffic may leave the local network. The app does not provide a cloud relay or account service. The recipient is the ROS 2 peer or ASR Studio installation on the host you configure. The Android app does not send sensor streams to a developer-operated cloud service. A ROS 2 peer or ASR Studio installation receives the stream directly and may process or retain it under the operator's own practices. Only enable destinations you trust. The app's TCP connection currently uses plain TCP without TLS, and the inspected DDS configurations do not enable DDS Security; sensor data can therefore be observable to parties able to inspect traffic on the route.
+- **ROS 2 DDS over Wi-Fi:** to ROS 2 peers reachable on the Wi-Fi network you select.
+- **ROS 2 DDS over USB:** through Android USB tethering as an IP connection to peers reachable on that link. This is not a USB serial/UART connection.
+- **TCP over Wi-Fi:** to the ASR Studio host and port you configure.
+- **TCP over USB/ADB:** TCP through an ADB reverse tunnel to the connected computer.
 
-## Collection by the maintainer
+These connections are intended for your local robotics setup. The destination you configure receives the data directly, and its operator may process or retain it under their own practices. Network routing or a destination you configure can carry traffic beyond your local network, so check the endpoint and route. ASR does not operate a cloud relay, account service, or server that receives sensor streams.
 
-The app has no account sign-in, advertising, or analytics SDK configured in its declared app dependencies. Data sent to a destination you configure is handled by that destination and its operator. Enabling a destination is not a guarantee that the destination or its network is private or secure.
+## Security
 
-The Android app does not include a contribution link or payment flow, and ASR does not collect payment details or transaction information. The ASR website may link to Buy Me a Coffee; if you follow that link, Buy Me a Coffee and its payment providers handle information submitted there under their own privacy terms; see the [Buy Me a Coffee Privacy Policy](https://buymeacoffee.com/privacy-policy).
+The current TCP connection uses plain TCP without TLS, and DDS Security is not enabled. Data may be visible to parties able to inspect traffic on the route. Use trusted destinations and networks. The app does not claim that its transport connections are encrypted.
+
+## Data received by the ASR developer
+
+The ASR developer does not receive sensor streams through an ASR-operated backend. The app has no account sign-in, advertising, or analytics service. This is separate from the direct transfer to a ROS 2 peer or ASR Studio endpoint that you configure.
+
+The Android app does not include a contribution link or payment flow, and ASR does not receive payment details or transaction information. The ASR website may link to Buy Me a Coffee. If you follow that link, Buy Me a Coffee and its payment providers handle information you submit under their own privacy terms. See the [Buy Me a Coffee Privacy Policy](https://buymeacoffee.com/privacy-policy).
 
 ## Storage, retention, and deletion
 
-Sensor streams are processed for live publishing and are not saved as a media archive by the app. App preferences, including the node identifier, remain on the device until changed or the app's data is cleared or the app is uninstalled. The app does not control retention at a DDS or TCP destination.
+Sensor streams are processed for live publishing and are not saved by the app as a media archive. Preferences and the node identifier remain on your device until changed, app data is cleared, or the app is uninstalled. The app cannot control retention at a DDS or TCP destination.
 
-## Your controls
+## Your choices
 
-You can select sensor modules, enable or disable transports, stop the runtime, and revoke Android permissions through system settings. Revoking permission can stop the corresponding sensor module from publishing.
+You can select sensor modules, enable or disable transports, stop the runtime, and revoke Android permissions through system settings. Disabling a module or stopping the runtime stops its live sensor publishing. You can clear locally stored preferences and the node identifier by clearing app data or uninstalling the app.
 
-## Children and contact
+## Children, contact, and policy changes
 
-ASR Android Runtime is a developer tool and is not designed for children. For privacy questions, contact the maintainer through the project repository: <https://github.com/ShreyasDamase/asr-android-runtime>.
-
-## Changes
-
-This policy may be updated as the app changes. The published version and its effective date should be updated together.
-
-## Internal Play Console review note — remove before publication
-
-Google Play defines Data Safety "collection" as transmitting data off the user's device. Its guidance treats a user-initiated or prominently disclosed transfer as a possible exception to declaring **sharing**; that does not automatically exempt off-device transmission from **collection**. Audit each outgoing data type and every transport before reusing a "no data collected" declaration. The Android and Cyclone/Fast DDS package variants may need separate forms because the form is per package name. The maintainer reports a previous Data Safety pass, but Google says the review does not verify declaration completeness. This note is internal and must be removed from the published policy.
-
-The Android TCP transport currently uses a plain `java.net.Socket`, not TLS, and the DDS runtime configuration inspected for this draft does not configure DDS Security. Do not claim all user data is encrypted in transit unless each route is secured or otherwise verified. The Play Data Safety form and final policy must match the shipped app's actual transport security.
-
-The Play-distributed Android app omits the external contribution link pending any future policy review. The website may continue to link to Buy Me a Coffee. If a future Android release restores that link, review the current Google Play payments policy and update this policy before release.
+ASR Android Runtime is a robotics developer tool and is not designed for children. For privacy questions, contact the maintainer through the [project repository](https://github.com/ShreyasDamase/asr-android-runtime). This policy will be updated if the app's data practices change; the published policy and effective date should be updated together.

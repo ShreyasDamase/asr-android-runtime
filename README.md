@@ -27,7 +27,7 @@ The primary DDS backend is Cyclone DDS. A Fast DDS build is retained as a compar
   ROS2_ANDROID_PREFIX=/path/to/ros2_android_install
   ```
   Gradle reads this automatically. See the detailed [Native Build Prefix Guide](docs/BUILD_PREFIX_GUIDE.md) for full setup and troubleshooting.
-- For DDS, a ROS 2 host using `rmw_fastrtps_cpp` and the same `ROS_DOMAIN_ID` as the phone. The tested default is domain `0`.
+- For the Play candidate, use a ROS 2 host with Cyclone DDS (`rmw_cyclonedds_cpp`) and the same `ROS_DOMAIN_ID` as the phone. The tested default is domain `0`.
 
 ## Build
 
@@ -37,15 +37,23 @@ From the repository root, build the Cyclone variant:
 ./gradlew :app:assembleCycloneDebug
 ```
 
+For the Play upload bundle, configure the release signing values described in [`docs/PLAY_STORE_RELEASE_STATUS.md`](docs/PLAY_STORE_RELEASE_STATUS.md), then run:
+
+```bash
+./gradlew :app:bundleCycloneRelease
+```
+
+The bundle is written to `app/build/outputs/bundle/cycloneRelease/app-cyclone-release.aab`. Without release signing configured, Gradle creates an unsigned bundle that Play Console cannot accept as an upload artifact.
+
 The Fast DDS comparison variant can be built with:
 
 ```bash
 ./gradlew :app:assembleFastddsDebug
 ```
 
-The variants have separate application IDs and can be installed side by side. Do not run both sensor runtimes simultaneously on one device; they use the same ROS 2 node name.
+Both DDS flavors use the same application ID, `org.asr.runtime`, and cannot be installed side by side. Install or upload one flavor at a time. Do not run both sensor runtimes simultaneously on one device; they use the same ROS 2 node name.
 
-The current Android version is `1.0`; the Cyclone build adds the `-cyclone` version suffix. The app displays its selected DDS backend and exact build version beneath the app name.
+The current Android version is `1.0.2` (version code `3`); the Cyclone build adds the `-cyclone` suffix. The app displays its selected DDS backend and exact build version beneath the app name.
 
 ## Start the phone runtime
 

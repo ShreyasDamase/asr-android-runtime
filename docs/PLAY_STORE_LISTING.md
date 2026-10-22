@@ -1,44 +1,48 @@
-# Google Play listing draft
+# Google Play listing copy
+
+Use the copy below for the Play Store listing after checking it against the exact uploaded build.
 
 ## App details
 
 - **App name:** ASR Android Runtime
 - **Category:** Tools
-- **Variant choice:** Cyclone DDS (`org.asr.runtime`) is the intended Play listing package. Build and upload the Cyclone flavor; Fast DDS remains a separate build flavor for later use and must not be uploaded under the same listing unless deliberately selected.
+- **Application ID:** `org.asr.runtime`
+- **Play build:** Cyclone DDS variant. Fast DDS is not part of this release listing.
+- **Release version:** `1.0.2` (version code `3`).
 - **Short description (under 80 characters):** Turn your Android phone into a configurable ROS 2 sensor node.
 
-## Full description
+## Full description — copy into Play Console
 
-Connect an Android phone to a robotics system as a configurable ROS 2 sensor node.
+Turn your Android phone into a configurable sensor node for ROS 2 robotics.
 
-ASR Android Runtime publishes data from the sensor modules you choose. Enable ROS 2 DDS over Wi-Fi or USB tethering, or TCP to ASR Studio over Wi-Fi or USB through an ADB reverse tunnel. Configure the connection and start the runtime when you are ready.
+ASR Android Runtime publishes live sensor data to ROS 2 peers or ASR Studio destinations that you configure. Choose the sensor groups you need, select a connection, and start the runtime when you are ready.
 
-**Available modules**
-- Camera image and camera information
-- Accelerometer and gyroscope (IMU)
-- GPS location
-- Battery state
-- Environment sensors available on your device
-- Microphone audio and motion sensors, when selected and supported
+**Use your phone's sensors in robotics projects**
 
-Sensor availability depends on the phone. Android asks for sensitive permissions when you enable a module that needs them. You can change module selection at any time.
+• Camera images
+• Microphone audio
+• GPS location
+• Accelerometer, gyroscope, and motion readings
+• Environmental sensors available on your device
+• Battery state
 
-ASR Android Runtime is intended for ROS 2 developers, robotics researchers, and makers. It is an open-source companion for robotics workflows and does not require an ASR account.
+Sensor availability depends on your device. Camera, microphone, and location features require Android permissions. You control which supported sensor groups are enabled.
 
-Sensor data is transmitted to the ROS 2 peers and/or ASR Studio endpoint you configure; enabled transports can operate at the same time. DDS over USB uses USB tethering as an IP connection. TCP over USB uses ADB reverse tunneling; this app does not provide a separate USB serial/UART mode. The current app transports do not encrypt these connections. Choose trusted destinations and review the privacy policy before enabling sensor streams.
+**Connect your way**
 
-The Play-distributed Android build does not include a Buy Me a Coffee link or payment flow. The ASR website may offer an optional external support link; this is not an in-app purchase or app feature.
+• ROS 2 DDS over Wi-Fi
+• ROS 2 DDS over USB tethering
+• TCP to ASR Studio over Wi-Fi
+• TCP to ASR Studio over USB using an ADB reverse tunnel
 
-## Store assets
+ASR sends enabled streams directly to the ROS 2 peers or ASR Studio endpoint you configure. The app does not use an ASR-operated cloud relay or account service. Connections are intended for your local robotics setup; your chosen destination or network routing can carry traffic beyond your local network. Current DDS and TCP transports are not encrypted, so connect only to destinations and networks you trust. Read the privacy policy before enabling sensor streams.
 
-- **Launcher icon:** present at `app/src/main/ic_launcher-playstore.png`; check Play Console's required dimensions and safe zone before upload.
-- **Phone screenshots:** still need to be captured from the approved release UI. Capture the dashboard in both light and dark themes and include the expanded sensor controls and connection status.
-- **Feature graphic (1024 × 500):** not present in this repository; prepare after screenshot selection so it matches the final listing.
-- **Privacy policy URL (planned):** `https://shreyasdamase.github.io/asr-android-runtime/privacy.html`. Enable GitHub Pages and publish the reviewed policy before using this URL in Play Console or the app.
+Built for ROS 2 developers, robotics researchers, students, and makers. ASR Android Runtime is open source and does not require an ASR account.
 
-## Play Console items
+## Store assets and submission notes
 
-- Content rating questionnaire and target audience declarations: not submitted or confirmed.
-- Data Safety: the maintainer reports the form has passed; check the saved declaration against the final app and policy before publication.
-- Store listing and publication: not submitted.
-- 16 KB page-size compatibility: blocked in this repository by bundled native libraries; resolve in the separate native-library repository before uploading an APK/AAB.
+- Launcher icon: `app/src/main/ic_launcher-playstore.png`.
+- Phone screenshots and feature graphic: see `docs/playstore/play_store_assets/`; confirm they match the exact release UI before upload.
+- Privacy policy URL: `https://shreyasdamase.github.io/asr-android-runtime/privacy.html`.
+- Keep the Play Data Safety answers consistent with the shipped app's sensor streams, configured recipients, and lack of transport encryption. A local destination does not make the stream encrypted, and the public Burf listing does not reveal its private IARC/Data Safety questionnaire responses.
+- Content-rating responses must describe ASR's own features. Do not copy another app's private questionnaire answers; its public age rating is not its answer sheet.

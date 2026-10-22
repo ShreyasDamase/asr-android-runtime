@@ -13,13 +13,13 @@ The first distribution target is the Google Play internal testing track so the m
 - Camera is declared optional so Play does not filter out devices without camera hardware.
 - Release build keeps minification disabled and references JNI-preserving ProGuard rules.
 - Release signing can be configured with local properties or environment variables. No release keystore or signing credentials are configured in this checkout.
-- Both flavors now use package ID `org.asr.runtime`; the Cyclone version name is `1.0.1-cyclone` (versionCode `2`). Build and upload the Cyclone flavor for the intended Play listing. Play fixes a new listing's package ID at its first app-bundle upload.
+- Both flavors use package ID `org.asr.runtime`; the Play candidate is Cyclone DDS, version `1.0.2-cyclone` (versionCode `3`). Build and upload only the Cyclone flavor for this listing. Play fixes a new listing's package ID at its first app-bundle upload.
 - Current Cyclone APK and AAB outputs passed static ELF LOAD alignment checks (65 packaged ARM64 libraries), APK `zipalign -P 16` checks, and AAB `PAGE_ALIGNMENT_16K` inspection. These checks establish artifact alignment only, not device runtime behavior.
 - **AAB currently available:** `app/build/outputs/bundle/cycloneRelease/app-cyclone-release.aab` (about 11 MB), but it is **unsigned** and is not the Play upload artifact yet.
 - **APK currently available:** `app/build/outputs/apk/cyclone/release/app-cyclone-release-unsigned.apk` (about 21 MB), also unsigned. For Play distribution, use the signed AAB; keep debug APKs for local development only.
 - **Store icon:** `app/src/main/ic_launcher-playstore.png` is 512 × 512 PNG, the required Play icon dimensions. Recheck the file-size and icon-content rules in Console before submission.
-- **Not prepared yet:** phone screenshots and the 1024 × 500 feature graphic. No Play screenshot/feature-graphic assets are currently in this repository.
-- Listing copy and a privacy policy draft are in `PLAY_STORE_LISTING.md` and `PRIVACY_POLICY_DRAFT.md`.
+- **Store assets:** phone screenshots and a 1024 × 500 feature graphic are present in `docs/playstore/play_store_assets/`; verify the selected images against the final build before upload.
+- Play listing copy and the reviewed privacy policy are in `PLAY_STORE_LISTING.md`, `PRIVACY_POLICY.md`, and `website/privacy.html`.
 - A static public-facing site is prepared under `website/` with privacy, license, and notices pages. GitHub Pages must be enabled for GitHub Actions, then the site must deploy from `main` before using its URL in Play Console.
 
 ## Build commands
@@ -66,8 +66,8 @@ The all-flavor build was last run successfully after setting the shared package 
 ## Internal testing checklist
 
 - [x] Package ID selected: `org.asr.runtime`. Build and upload the Cyclone flavor for this listing.
-- [ ] Configure the existing Play upload key locally; verify it matches the key already registered in Play Console. Do not create a replacement key for an existing listing.
-- [ ] Increment `versionCode` above `2` and choose the next version name before generating the upload AAB.
+- [ ] Configure the existing Play upload key locally; verify it matches the key already registered in Play Console. No release-signing values are currently configured in this checkout. Do not create a replacement key for an existing listing.
+- [x] Increment `versionCode` above `2`; current version is `1.0.2` / code `3`.
 - [ ] Build the signed Cyclone release AAB from the reviewed commit and verify its package ID, version, signature, native libraries, and 16 KB packaging alignment.
 - [ ] Upload to the Internal testing track, add the maintainer and friend as testers, and share the opt-in link.
 - [ ] Run functional checks on the testers' devices, including startup defaults, sensor selection, camera restart, DDS discovery, TCP, and clean Exit App shutdown; capture logs for failures.
@@ -82,7 +82,7 @@ These are a preparation guide based on the current app, not pre-filled legal dec
 - [ ] **Target audience / age groups:** ASR is aimed at robotics developers and makers, not designed for children. Select only the age ranges you truly intend to support. If selecting any child age group, review the Families requirements first. Complete the content-rating questionnaire; don't infer a rating from the audience choice.
 - [ ] **Contains ads:** declare `No` if the release has no ad content or advertising SDKs.
 - [ ] **App access:** declare that no account or sign-in is required, if still true. Give the reviewer concise steps for starting the runtime and explain that ROS 2 peers are optional for inspecting local UI. Do not provide credentials that the app does not use.
-- [ ] **Data Safety:** complete/recheck every data type and sharing answer against `PLAY_DATA_SAFETY_AUDIT.md` and the signed AAB. In particular account for user-selected camera, microphone, GPS, motion/environment sensor streams, device/capability handshake, and user-configured ROS 2 / ASR Studio destinations. Do not describe the transfers as encrypted: current TCP is plain TCP and DDS Security is not enabled.
+- [ ] **Data Safety:** recheck the saved answers against `PLAY_DATA_SAFETY_AUDIT.md` and the final AAB. The current Console preview reported “No data collected/shared,” while the app can transmit selected sensor streams off the phone to a configured ROS 2 / ASR Studio endpoint. Google defines collection as transmission off the device; its user-initiated-transfer exception is specifically a sharing exception, not a blanket collection exemption. Do not assume “local network” means “on-device.” Resolve this declaration before submission. Do not describe these transfers as encrypted: current TCP is plain TCP and DDS Security is not enabled.
 - [ ] **Privacy policy:** publish the reviewed policy at a public HTTPS URL and enter the same URL in Play Console. Confirm it opens without sign-in, is not a PDF, identifies ASR/developer and contact method, and explains data use, destinations, security, retention, and deletion. The policy must agree with the in-app disclosure and Data Safety answers.
 - [ ] **Content rating (IARC):** answer the questionnaire accurately for app content and functionality. No entertainment or user-generated content is evident in ASR; confirm in the Console questionnaire.
 - [ ] **Health apps declaration:** complete it even if the answer is that there are no health features. Based on the current robotics purpose, the expected answer is no health functionality; confirm that sensor readings are not presented for health, fitness, diagnosis, or treatment.
@@ -97,8 +97,8 @@ These are a preparation guide based on the current app, not pre-filled legal dec
 - [x] App icon: 512 × 512 PNG exists at `app/src/main/ic_launcher-playstore.png`.
 - [x] Short and full description draft: `PLAY_STORE_LISTING.md`.
 - [ ] Final app title, category, contact email, and public support/website links in Play Console.
-- [ ] At least two accurate phone screenshots. Capture the released app UI (suggested set: home/connectivity, sensor selection expanded, and one each of light and dark mode). Play accepts JPEG or 24-bit PNG screenshots from 320 to 3840 px; keep the longest side no more than twice the shortest.
-- [ ] Feature graphic: JPEG or 24-bit PNG, 1024 × 500 px, no alpha channel. Show ASR's real robotics use; avoid misleading claims and text that may be cropped.
+- [x] Phone screenshots and feature graphic are staged in `docs/playstore/play_store_assets/`; verify they reflect the final release UI and meet Play Console's current upload requirements.
+- [x] Full and short description draft is in `PLAY_STORE_LISTING.md`; review and paste it into Play Console.
 - [ ] Add tablet/large-screen screenshots only if those device types are part of the supported experience and the listing calls for them.
 - [ ] Review all text and images for accurate functionality, permission behavior, supported DDS flavor, privacy statements, and no promises of encryption or compatibility that the build has not demonstrated.
 
