@@ -13,29 +13,31 @@ Use the copy below for the Play Store listing after checking it against the exac
 
 ## Full description — copy into Play Console
 
-Turn your Android phone into a configurable sensor node for ROS 2 robotics.
+Put your Android phone to work as a sensor node for your ROS 2 robot.
 
-ASR Android Runtime publishes live sensor data to ROS 2 peers or ASR Studio destinations that you configure. Choose the sensor groups you need, select a connection, and start the runtime when you are ready.
+ASR Android Runtime reads the sensor groups you enable and sends their data to the robotics system you configure. With DDS, sensor readings are published as ROS 2 topics for ROS 2 peers on your network to discover and subscribe to. With TCP, sensor streams are sent to ASR Studio.
 
-**Use your phone's sensors in robotics projects**
+**Choose the sensors your project needs**
 
 • Camera images
 • Microphone audio
 • GPS location
-• Accelerometer, gyroscope, and motion readings
-• Environmental sensors available on your device
+• Accelerometer and gyroscope readings
+• Motion and environmental sensor data
 • Battery state
 
 Sensor availability depends on your device. Camera, microphone, and location features require Android permissions. You control which supported sensor groups are enabled.
 
-**Connect your way**
+**Choose a connection**
 
 • ROS 2 DDS over Wi-Fi
 • ROS 2 DDS over USB tethering
 • TCP to ASR Studio over Wi-Fi
 • TCP to ASR Studio over USB using an ADB reverse tunnel
 
-ASR sends enabled streams directly to the ROS 2 peers or ASR Studio endpoint you configure. The app does not use an ASR-operated cloud relay or account service. Connections are intended for your local robotics setup; your chosen destination or network routing can carry traffic beyond your local network. Current DDS and TCP transports are not encrypted, so connect only to destinations and networks you trust. Read the privacy policy before enabling sensor streams.
+DDS connects your phone to ROS 2 peers. TCP connects your phone to ASR Studio; it is a separate transport from DDS. Configure the destination you want to use for either connection. The app sends data directly to that destination and does not use an ASR-operated cloud relay or account service.
+
+These connections are designed for robotics setups on a local network. Sensor streams go directly to the destination you configure, giving you control over where the data is sent. For sensitive data, choose a trusted network and endpoint. Read the privacy policy before enabling sensor streams.
 
 Built for ROS 2 developers, robotics researchers, students, and makers. ASR Android Runtime is open source and does not require an ASR account.
 

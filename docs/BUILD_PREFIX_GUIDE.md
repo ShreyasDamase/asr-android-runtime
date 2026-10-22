@@ -41,7 +41,7 @@ unzip ros2_android_install-v1.0.0.zip -d .
 This produces `./ros2_android_install` containing `include/` and `lib/`. The folder is intentionally ignored by Git because it contains machine-specific native build artifacts.
 
 ### Step 3: Configure Project Path
-The build system automatically checks your `local.properties` file before falling back to environment variables.
+If `ros2_android_install/` is in the repository root, Gradle detects it automatically. To use a prefix in another location, set `ROS2_ANDROID_PREFIX` in `local.properties` or in the environment; either explicit setting takes precedence over the repository-local default.
 
 Open (or create) `local.properties` in the repository root and add:
 ```properties

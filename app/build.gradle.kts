@@ -12,6 +12,7 @@ val localProps = Properties().apply {
 val ros2AndroidPrefix: String = providers.gradleProperty("ROS2_ANDROID_PREFIX").orNull
     ?: System.getenv("ROS2_ANDROID_PREFIX")
     ?: localProps.getProperty("ROS2_ANDROID_PREFIX")
+    ?: rootProject.file("ros2_android_install").takeIf { it.isDirectory }?.absolutePath
     ?: ""
 val releaseSigningValues = listOf(
     localProps.getProperty("ASR_RELEASE_STORE_FILE") ?: System.getenv("ASR_RELEASE_STORE_FILE"),
