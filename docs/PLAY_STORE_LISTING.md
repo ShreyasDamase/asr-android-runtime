@@ -27,7 +27,7 @@ ASR Android Runtime is intended for ROS 2 developers, robotics researchers, and 
 
 Sensor data is transmitted to the ROS 2 peers and/or ASR Studio endpoint you configure; enabled transports can operate at the same time. DDS over USB uses USB tethering as an IP connection. TCP over USB uses ADB reverse tunneling; this app does not provide a separate USB serial/UART mode. The current app transports do not encrypt these connections. Choose trusted destinations and review the privacy policy before enabling sensor streams.
 
-The About screen currently links to an optional external Buy Me a Coffee contribution page. The app does not include checkout or receive payment details. Before including this link in a Play-distributed binary, confirm that the exact contribution flow is permitted by the current Google Play payments policy; otherwise remove the in-app link for the Play build. The website support link is separate.
+The Play-distributed Android build does not include a Buy Me a Coffee link or payment flow. The ASR website may offer an optional external support link; this is not an in-app purchase or app feature.
 
 ## Store assets
 

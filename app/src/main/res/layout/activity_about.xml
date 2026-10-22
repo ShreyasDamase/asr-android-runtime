@@ -212,6 +212,15 @@
                 android:textColor="#737373"
                 android:textSize="11sp" />
 
+            <ImageView
+                android:id="@+id/imgDeveloperPhoto"
+                android:layout_width="match_parent"
+                android:layout_height="150dp"
+                android:layout_marginTop="12dp"
+                android:contentDescription="Illustration of Shreyas by the sea"
+                android:scaleType="centerCrop"
+                android:src="@drawable/developer_photo" />
+
             <TextView
                 android:id="@+id/txtAboutDeveloper"
                 android:layout_width="match_parent"
@@ -238,6 +247,9 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
+        <!--
+            Disabled for the current Play-distributed build pending payments-policy review.
+            Keep this section as a reference; restore it only after confirming the current policy.
         <LinearLayout
             android:id="@+id/cardAboutSupport"
             android:layout_width="match_parent"
@@ -313,6 +325,7 @@
                 android:textColor="#000000"
                 android:textSize="11sp" />
         </LinearLayout>
+        -->
 
     </LinearLayout>
 </ScrollView>

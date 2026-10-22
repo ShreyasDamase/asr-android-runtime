@@ -23,7 +23,7 @@ Depending on the configured network and destination, traffic may leave the local
 
 The app has no account sign-in, advertising, or analytics SDK configured in its declared app dependencies. Data sent to a destination you configure is handled by that destination and its operator. Enabling a destination is not a guarantee that the destination or its network is private or secure.
 
-The About screen includes an optional **Buy Me a Coffee** link that opens the Buy Me a Coffee website outside the app. ASR does not embed Buy Me a Coffee or Stripe, collect payment details, receive transaction information, or grant app features or benefits in exchange for a contribution. Buy Me a Coffee and its payment providers handle information submitted on their site under their own privacy terms; see the [Buy Me a Coffee Privacy Policy](https://buymeacoffee.com/privacy-policy). The support link is optional and is not needed to use the app.
+The Android app does not include a contribution link or payment flow, and ASR does not collect payment details or transaction information. The ASR website may link to Buy Me a Coffee; if you follow that link, Buy Me a Coffee and its payment providers handle information submitted there under their own privacy terms; see the [Buy Me a Coffee Privacy Policy](https://buymeacoffee.com/privacy-policy).
 
 ## Storage, retention, and deletion
 
@@ -47,4 +47,4 @@ Google Play defines Data Safety "collection" as transmitting data off the user's
 
 The Android TCP transport currently uses a plain `java.net.Socket`, not TLS, and the DDS runtime configuration inspected for this draft does not configure DDS Security. Do not claim all user data is encrypted in transit unless each route is secured or otherwise verified. The Play Data Safety form and final policy must match the shipped app's actual transport security.
 
-The app also links to an external voluntary contribution page. Google Play's payments policy contains exceptions for some peer-to-peer payments and donations, but the policy does not establish that every Buy Me a Coffee setup qualifies. Review the exact page flow and contribution model against the current policy before release. The conservative Play release choice is to remove/disable the in-app contribution link unless its eligibility is confirmed; the website may continue to link to it. Updating this privacy policy does not make a payment flow policy-compliant.
+The Play-distributed Android app omits the external contribution link pending any future policy review. The website may continue to link to Buy Me a Coffee. If a future Android release restores that link, review the current Google Play payments policy and update this policy before release.

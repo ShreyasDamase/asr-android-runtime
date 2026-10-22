@@ -52,6 +52,7 @@ class  MainActivity : ComponentActivity() {
 
     private companion object {
         const val KEY_SENSOR_DISCLOSURE_ACCEPTED = "sensor_data_disclosure_v1_accepted"
+        const val KEY_EXIT_CONFIRMATION_VISIBLE = "exit_confirmation_visible"
     }
 
     private data class SensorConfigOption(val id: String, val label: String, val detail: String)
@@ -69,6 +70,7 @@ class  MainActivity : ComponentActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
     private lateinit var themeController: PersistentThemeController
+    private var exitConfirmationDialog: AlertDialog? = null
     private var tcpConnected = false
     private var initializingControls = true
     private var pendingSensorSelection: Set<String>? = null
@@ -174,6 +176,9 @@ class  MainActivity : ComponentActivity() {
         // Bind to the service if it's already running to get live status
         val intent = Intent(this, AsrService::class.java)
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        if (savedInstanceState?.getBoolean(KEY_EXIT_CONFIRMATION_VISIBLE) == true) {
+            confirmExit()
+        }
     }
 
     private fun updateThemeButton() {
@@ -467,6 +472,7 @@ class  MainActivity : ComponentActivity() {
                 }
             }
             .create()
+        exitConfirmationDialog = dialog
 
         dialog.setOnShowListener {
             val dark = themeController.isDark
@@ -500,6 +506,11 @@ class  MainActivity : ComponentActivity() {
                 ?.setTextColor(if (dark) 0xFFAAAAAA.toInt() else 0xFF555555.toInt())
         }
         dialog.show()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(KEY_EXIT_CONFIRMATION_VISIBLE, exitConfirmationDialog?.isShowing == true)
+        super.onSaveInstanceState(outState)
     }
 
     private fun updateTcpStatus() {
