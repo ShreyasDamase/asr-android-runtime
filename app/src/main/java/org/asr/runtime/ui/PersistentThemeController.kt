@@ -115,13 +115,7 @@ class PersistentThemeController(private val activity: Activity) {
                 (view as? TextView)?.setTextColor(outlineButtonTextColors())
             } else if (originalBackground != null) {
                 view.background = originalBackground.constantState?.newDrawable()?.mutate() ?: originalBackground
-                (view as? TextView)?.setTextColor(
-                    if (view.id == org.asr.runtime.R.id.btnAbout || view.id == org.asr.runtime.R.id.btnExitApp) {
-                        activity.getColorStateList(org.asr.runtime.R.color.btn_outline_text_nothing)
-                    } else {
-                        ColorStateList.valueOf(originalTextColors[view] ?: Color.BLACK)
-                    }
-                )
+                (view as? TextView)?.setTextColor(activity.getColorStateList(org.asr.runtime.R.color.btn_outline_text_nothing))
             }
         } else if (view.id == org.asr.runtime.R.id.btnApplySensorSelection) {
             if (isDark) {

@@ -109,10 +109,15 @@ h2 span { color: #85867f; }
 .about-section { padding-block: 78px 84px; background: #e9e9e4; }
 .about-inner { display: grid; grid-template-columns: 1fr .78fr; align-items: start; gap: 55px; }
 .about-inner h2 { font-size: clamp(38px, 4.5vw, 54px); }
+.about-visual { height: 250px; margin: 25px 0 0; overflow: hidden; border: 1px solid var(--line); background: var(--soft); }
+.about-visual img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 72% 48%; }
 .about-copy { padding-top: 5px; }
 .about-copy p { color: #555650; font-size: 14px; line-height: 1.75; }
 .about-copy p strong { color: var(--ink); }
-.about-copy .text-link { display: inline-block; margin-top: 5px; }
+.about-actions { display: flex; align-items: center; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.about-actions .button { min-height: 44px; }
+.about-actions .button-dark { color: #fff; }
+.about-actions .button-dark span { color: var(--red); }
 .support-section { padding-block: 70px; }
 .support-card { min-height: 310px; display: flex; align-items: center; justify-content: space-between; gap: 35px; padding: 36px 42px; color: #fff; background: var(--ink); }
 .support-copy { max-width: 540px; }

@@ -13,7 +13,7 @@ Internal release worksheet. Complete and verify in Play Console separately for e
 | Device model, Android API, app/protocol version, sensor capabilities | Sent in transport capability handshake | Device or other IDs / app info and performance / diagnostics as appropriate | Destination receives device model and configuration capabilities. |
 | One-byte node ID | Included in outgoing protocol messages | Device or other IDs | Derived from a stored random app-scoped UUID; the app no longer reads Android ID to generate it. |
 | Host and port configured in app | Used to establish TCP connection | Not necessarily transmitted as a user data field | Verify whether destination/service logs connection metadata. The app has no developer-operated receiver. |
-| Buy Me a Coffee contribution details | User may tap the optional About-screen link, which opens the external Buy Me a Coffee site; payment is completed outside ASR | Review only if the shipped app's exact flow makes ASR collect or share additional data | Current implementation has no BMC/Stripe SDK or embedded checkout and does not receive payment details or transaction results. BMC/payment providers handle information submitted on their site under their own policies. Recheck the actual release binary and current Play payments policy; a privacy disclosure does not establish payments-policy eligibility. |
+| Buy Me a Coffee contribution details | No contribution link or payment flow in the Play-distributed Android build. The website may link to the external service. | Not collected or shared by the Android app | ASR does not embed checkout or receive payment details or transaction results. Buy Me a Coffee/payment providers handle information entered on their site under their policies. Reassess if a future Android build restores an in-app contribution link or payment flow. |
 
 ## Routes and security
 
@@ -33,7 +33,7 @@ Internal release worksheet. Complete and verify in Play Console separately for e
 - Whether the Data Safety encryption question should be answered “No” for this binary (current source indicates no transport encryption).
 - Whether diagnostics or connection metadata are retained by the configured ASR Studio/ROS 2 endpoint and who operates those endpoints.
 - Ensure the in-app disclosure, privacy policy, store listing, and saved form describe the same package and binary behavior.
-- The About-screen Buy Me a Coffee link is an external contribution flow. Do not declare BMC/Stripe payment details as collected by ASR based solely on the external handoff; reassess if the app later embeds checkout, adds an SDK, or receives transaction data. Separately confirm the external link is allowed by the current Play payments policy before shipping it in a Play build.
+- The current Play-distributed Android UI omits the Buy Me a Coffee link. Reassess payments policy and update this worksheet if a future Android build restores it.
 
 ## Evidence and release gate
 

@@ -2,7 +2,6 @@ package org.asr.runtime.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -19,6 +18,8 @@ import org.asr.runtime.R
 
 /** App information and data-use disclosure in the dashboard's visual style. */
 class AboutActivity : ComponentActivity() {
+    // Kept for possible future reactivation after Play policy review.
+    /* private var isCoffeeAnimationRunning = false */
     private var isCoffeeAnimationRunning = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,12 +45,14 @@ class AboutActivity : ComponentActivity() {
         findViewById<View>(R.id.btnAboutSource).setOnClickListener { openSourceRepository() }
         findViewById<View>(R.id.btnAboutPrivacy).setOnClickListener { openPrivacyPolicy() }
         findViewById<View>(R.id.btnAboutDeveloper).setOnClickListener { openDeveloperProfile() }
-        findViewById<View>(R.id.btnAboutCoffee).setOnClickListener { animateCoffeeAndOpenProfile() }
+        // Play-distributed app currently omits the external contribution flow.
+        // Restore this listener together with the support card and helpers below only after policy review.
+        /* findViewById<View>(R.id.btnAboutCoffee).setOnClickListener { animateCoffeeAndOpenProfile() } */
+
     }
 
     override fun onDestroy() {
-        findViewById<View>(R.id.imgAboutCoffee).animate().cancel()
-        isCoffeeAnimationRunning = false
+        // Removed from the current Play build with its support card.
         super.onDestroy()
     }
 
@@ -62,7 +65,7 @@ class AboutActivity : ComponentActivity() {
         val edge = if (dark) Color.rgb(56, 56, 56) else Color.rgb(227, 229, 232)
 
         findViewById<View>(R.id.aboutRoot).setBackgroundColor(background)
-        listOf(R.id.cardAboutBuild, R.id.cardAboutData, R.id.cardAboutOpenSource, R.id.cardAboutDeveloper, R.id.cardAboutSupport).forEach { id ->
+        listOf(R.id.cardAboutBuild, R.id.cardAboutData, R.id.cardAboutOpenSource, R.id.cardAboutDeveloper).forEach { id ->
             findViewById<View>(id).background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 8f * resources.displayMetrics.density
@@ -80,10 +83,7 @@ class AboutActivity : ComponentActivity() {
         findViewById<TextView>(R.id.btnAboutSource).setTextColor(primary)
         findViewById<TextView>(R.id.btnAboutPrivacy).setTextColor(primary)
         findViewById<TextView>(R.id.btnAboutDeveloper).setTextColor(primary)
-        findViewById<TextView>(R.id.btnAboutCoffee).setTextColor(primary)
-        findViewById<TextView>(R.id.txtAboutCoffeeTitle).setTextColor(primary)
         findViewById<TextView>(R.id.txtAboutDeveloper).setTextColor(body)
-        findViewById<android.widget.ImageView>(R.id.imgAboutCoffee).imageTintList = ColorStateList.valueOf(primary)
 
         @Suppress("DEPRECATION")
         window.statusBarColor = background
@@ -124,6 +124,7 @@ class AboutActivity : ComponentActivity() {
         }
     }
 
+    /* Future optional support flow; disabled for the Play-distributed app pending policy review.
     private fun animateCoffeeAndOpenProfile() {
         if (isCoffeeAnimationRunning) return
         isCoffeeAnimationRunning = true
@@ -157,6 +158,7 @@ class AboutActivity : ComponentActivity() {
             Toast.makeText(this, "No browser is available", Toast.LENGTH_SHORT).show()
         }
     }
+    */
 
     private fun openPrivacyPolicy() {
         try {
@@ -167,11 +169,9 @@ class AboutActivity : ComponentActivity() {
     }
 
     companion object {
-        private const val COFFEE_TILT_DURATION_MS = 90L
         private const val SOURCE_URL = "https://github.com/ShreyasDamase/asr-android-runtime"
         private const val WEBSITE_URL = "https://shreyasdamase.github.io/asr-android-runtime/"
         private const val DEVELOPER_URL = "https://github.com/ShreyasDamase"
-        private const val BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/shreyasdamase"
         private const val PRIVACY_POLICY_URL = "https://shreyasdamase.github.io/asr-android-runtime/privacy.html"
         private val SECTION_TITLES = setOf("BUILD", "SENSOR DATA", "OPEN SOURCE", "ABOUT THE DEVELOPER", "SUPPORT OPEN-SOURCE ROBOTICS")
     }

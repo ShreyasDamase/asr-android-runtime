@@ -7,7 +7,7 @@ The first distribution target is the Google Play internal testing track so the m
 - Runtime sensor controls, lifecycle and camera restart fixes, text/status corrections, tactile controls, and Nothing-style UI milestones are committed through `55f1f8c`.
 - App icon asset exists at `app/src/main/ic_launcher-playstore.png`.
 - About screen and data-use explanation are implemented.
-- About screen includes an optional Buy Me a Coffee link that opens the third-party site outside ASR; the app does not embed checkout or receive payment details. This third-party payment link still needs a Play payments-policy eligibility decision. Privacy wording alone does not establish eligibility; for the lowest review risk, omit the in-app link from a Play-distributed build until confirmed.
+- The Play-distributed Android UI omits the Buy Me a Coffee link and payment flow pending any future policy review. The website support link remains separate.
 - First sensor opt-in now shows an inline disclosure naming live recipients, transport paths, and current lack of transport encryption; the user must accept before enabling sensor outputs. The app's About screen links to the repository privacy policy.
 - First-run onboarding explains that sensor permissions are requested when modules are selected; sensitive permissions are not requested as a bundle.
 - Camera is declared optional so Play does not filter out devices without camera hardware.
@@ -86,7 +86,7 @@ These are a preparation guide based on the current app, not pre-filled legal dec
 - [ ] **Privacy policy:** publish the reviewed policy at a public HTTPS URL and enter the same URL in Play Console. Confirm it opens without sign-in, is not a PDF, identifies ASR/developer and contact method, and explains data use, destinations, security, retention, and deletion. The policy must agree with the in-app disclosure and Data Safety answers.
 - [ ] **Content rating (IARC):** answer the questionnaire accurately for app content and functionality. No entertainment or user-generated content is evident in ASR; confirm in the Console questionnaire.
 - [ ] **Health apps declaration:** complete it even if the answer is that there are no health features. Based on the current robotics purpose, the expected answer is no health functionality; confirm that sensor readings are not presented for health, fitness, diagnosis, or treatment.
-- [ ] **Financial features declaration:** complete it even if the answer is no financial features. ASR does not provide banking, loans, investing, wallets, or transfers. Separately review whether the external Buy Me a Coffee link is permitted for this Play build and the target markets; if uncertain, remove that link from the Play build while keeping the website link.
+- [ ] **Financial features declaration:** complete it even if the answer is no financial features. ASR does not provide banking, loans, investing, wallets, or transfers, and the current Android build has no payment or contribution flow. The website support link is external to the app.
 - [ ] **Government apps / government information:** if Console shows the declaration, answer no government affiliation or official government information if that remains true. Do not imply government endorsement. No government authorization certificate should be needed for an independent robotics tool unless the app later represents or distributes government information.
 - [ ] **Education, medical, financial-service, and other regulated certificates:** the current app is a robotics tool, not an educational credential, medical device, financial service, or government app. No such certificate is identified as applicable from the current functionality. If Console flags a declaration, inspect the exact prompt and do not claim a certificate you do not hold.
 - [ ] **Permissions and foreground services:** review the permissions listed from the final AAB. Ensure each sensor permission is optional and explained in context; complete any Console permission/foreground-service declaration that is actually presented.
@@ -113,7 +113,7 @@ Official references: [Play preview assets](https://support.google.com/googleplay
 - Capture final phone screenshots and prepare the 1024 × 500 feature graphic.
 - Complete the remaining store listing and publication steps in Play Console.
 - Re-audit and update the Data Safety declaration for each Play package against the actual data and transports using `PLAY_DATA_SAFETY_AUDIT.md`. A prior pass is not a guarantee for a changed package or binary.
-- Resolve whether the optional in-app Buy Me a Coffee link qualifies under the current Play payments policy, or remove it from the Play build. Keep the website support link separate from the app's Play payment-policy assessment.
+- Reassess the Buy Me a Coffee link against current Play policy before restoring it to a future Android build. The current Android UI omits it; the website may keep its separate support link.
 - Complete 16 KB runtime validation on a 16 KB environment and resolve any observed runtime failures before production rollout.
 
 ## Signing configuration

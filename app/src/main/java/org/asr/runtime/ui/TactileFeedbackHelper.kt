@@ -120,7 +120,10 @@ object TactileFeedbackHelper {
      * - Immediate visual inversion & down-tick on ACTION_DOWN
      * - Auditory click + action execution ONLY on ACTION_UP when released within bounds
      */
-    fun attachTactileFeedback(view: View, onReleaseAction: () -> Unit) {
+    fun attachTactileFeedback(
+        view: View,
+        onReleaseAction: () -> Unit
+    ) {
         ensureSoundsLoaded(view)
         view.isClickable = true
         view.isFocusable = true
@@ -138,11 +141,13 @@ object TactileFeedbackHelper {
                 MotionEvent.ACTION_UP -> {
                     val wasPressed = v.isPressed
                     v.isPressed = false
-                    if (wasPressed && event.x in 0f..v.width.toFloat() && event.y in 0f..v.height.toFloat()) {
+                    val releasedInside = wasPressed && event.x in 0f..v.width.toFloat() && event.y in 0f..v.height.toFloat()
+                    if (releasedInside) {
                         playClickSound(v)
                         performTactileTick(v)
                         onReleaseAction.invoke()
                     }
+                    synchronized(pressStartedAt) { pressStartedAt.remove(v) }
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> {
@@ -154,4 +159,5 @@ object TactileFeedbackHelper {
             }
         }
     }
+
 }

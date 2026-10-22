@@ -25,7 +25,7 @@ Traffic may leave your local network depending on the destination and network se
 
 The app has no account sign-in, advertising, or analytics SDK configured in its declared app dependencies. The app developer does not operate a service that receives sensor streams. Data sent to a destination you configure is handled by that destination and its operator.
 
-The About screen includes an optional **Buy Me a Coffee** link. Choosing it opens `buymeacoffee.com` outside the app. ASR does not embed Buy Me a Coffee or Stripe, collect payment details, receive transaction information, or provide app features or benefits in exchange for a contribution. Buy Me a Coffee and its payment providers handle any information you submit under their own privacy terms. See the [Buy Me a Coffee Privacy Policy](https://buymeacoffee.com/privacy-policy). You can use the app without following this link.
+The Android app does not include a contribution link or payment flow, and ASR does not collect payment details or transaction information. The ASR website may link to Buy Me a Coffee; if you follow that link, Buy Me a Coffee and its payment providers handle information you submit under their own privacy terms. See the [Buy Me a Coffee Privacy Policy](https://buymeacoffee.com/privacy-policy).
 
 ## Storage and deletion
 
