@@ -74,6 +74,7 @@ class  MainActivity : ComponentActivity() {
     private var exitConfirmationDialog: AlertDialog? = null
     private var tcpConnected = false
     private var initializingControls = true
+    private var ros2ConfigEditing = false
     private var pendingSensorSelection: Set<String>? = null
     private var sensorPanelExpanded = false
     private var initialSensorSelection = emptySet<String>()
@@ -1086,6 +1087,7 @@ class  MainActivity : ComponentActivity() {
                             binding.progressRos2.stopIndeterminate()
                         }
                         syncDdsSwitches()
+                        if (!ros2ConfigEditing) loadRos2Config()
                         val routeDescription = status.pathSummary
                         binding.txtDdsPathStatus.text = buildDdsPathSummary(
                             binding.switchDdsWifi.isChecked,
@@ -1153,30 +1155,56 @@ class  MainActivity : ComponentActivity() {
     }
 
     private fun setupRos2Config() {
+        loadRos2Config()
+        setRos2ConfigEditing(false)
+        binding.btnEditRos2Config.setOnClickListener {
+            if (ros2ConfigEditing) loadRos2Config()
+            showRos2ConfigStatus("")
+            setRos2ConfigEditing(!ros2ConfigEditing)
+        }
+        binding.btnApplyRos2Config.setOnClickListener { applyRos2Config() }
+    }
+
+    private fun loadRos2Config() {
         val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
         binding.editRos2DomainId.setText(prefs.getInt("ros2_domain_id", 0).toString())
         binding.editRos2NodeName.setText(prefs.getString("node_alias", null).orEmpty())
-        binding.btnApplyRos2Config.setOnClickListener { applyRos2Config() }
+    }
+
+    /** Settings stay locked until EDIT, because a change restarts the node on a running robot. */
+    private fun setRos2ConfigEditing(editing: Boolean) {
+        ros2ConfigEditing = editing
+        binding.editRos2DomainId.isEnabled = editing
+        binding.editRos2NodeName.isEnabled = editing
+        binding.btnEditRos2Config.text = if (editing) "CANCEL" else "EDIT"
+        binding.btnApplyRos2Config.visibility =
+            if (editing) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    private fun showRos2ConfigStatus(message: String) {
+        binding.txtRos2ConfigStatus.text = message
+        binding.txtRos2ConfigStatus.visibility =
+            if (message.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
     private fun applyRos2Config() {
         val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
         val domainId = binding.editRos2DomainId.text?.toString()?.trim()?.toIntOrNull()
         if (domainId == null || domainId !in 0..232) {
-            binding.txtRos2ConfigStatus.text = "ROS_DOMAIN_ID must be between 0 and 232."
+            showRos2ConfigStatus("ROS_DOMAIN_ID must be between 0 and 232.")
             return
         }
         val nodeName = binding.editRos2NodeName.text?.toString()?.trim().orEmpty()
         if (nodeName.isNotEmpty() && !ROS2_NODE_NAME.matches(nodeName)) {
-            binding.txtRos2ConfigStatus.text =
-                "Node name must start with a letter and use only letters, numbers and underscores."
+            showRos2ConfigStatus("Node name must start with a letter and use only letters, numbers and underscores.")
             return
         }
         val alias = nodeName.ifEmpty { null }
         val domainChanged = domainId != prefs.getInt("ros2_domain_id", 0)
         val nameChanged = alias != prefs.getString("node_alias", null)
         if (!domainChanged && !nameChanged) {
-            binding.txtRos2ConfigStatus.text = "No changes to apply."
+            showRos2ConfigStatus("No changes to apply.")
+            setRos2ConfigEditing(false)
             return
         }
         if (nameChanged) {
@@ -1184,11 +1212,11 @@ class  MainActivity : ComponentActivity() {
             viewModel.setNodeAlias(alias)
         }
         if (domainChanged) viewModel.setRos2DomainId(domainId)
-        binding.txtRos2ConfigStatus.text = if (domainChanged) {
-            "Applied. Set ROS_DOMAIN_ID=$domainId on other machines to discover this node."
-        } else {
-            "Applied. Node restarted with the new name."
-        }
+        setRos2ConfigEditing(false)
+        showRos2ConfigStatus(
+            if (domainChanged) "Applied. Set ROS_DOMAIN_ID=$domainId on other machines to discover this node."
+            else "Applied. Node restarted with the new name."
+        )
     }
 
     /** The DDS path can change without this screen, such as from a service command. */
