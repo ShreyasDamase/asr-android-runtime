@@ -215,7 +215,9 @@ class PersistentThemeController(private val activity: Activity) {
         viewId == org.asr.runtime.R.id.btnRestartRuntime ||
         viewId == org.asr.runtime.R.id.btnConnectTransport ||
         viewId == org.asr.runtime.R.id.btnDisconnectTransport ||
-        viewId == org.asr.runtime.R.id.btnReconnectTransport
+        viewId == org.asr.runtime.R.id.btnReconnectTransport ||
+        viewId == org.asr.runtime.R.id.btnEditRos2Config ||
+        viewId == org.asr.runtime.R.id.btnApplyRos2Config
 
     private fun actionButtonBackground(isPrimary: Boolean) = StateListDrawable().apply {
         val density = activity.resources.displayMetrics.density

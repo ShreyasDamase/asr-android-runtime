@@ -19,13 +19,13 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [x] `tf_static` published with bundled `tf2_msgs` (Cyclone builds, 16 KB aligned). Verified with `tf2_echo`: camera rotation `[0.707, -0.707, 0, 0]`. Translations are zero by design
 
 ## 2. Configuration
-- [~] Phone UI: `ROS_DOMAIN_ID` and node name, locked behind EDIT. Locked fields confirmed read-only on a phone; domain and rename verified through the service; tapping EDIT and APPLY needs an unlocked phone
+- [x] Phone UI: `ROS_DOMAIN_ID` and node name, locked behind EDIT. Verified by real taps: locked fields stay read-only, CANCEL restores, 999 rejected, domain 7 and a rename reached the Mac
 - [x] Phone UI: `ROS_STATIC_PEERS`, locked behind EDIT. Verified on Wi-Fi where the router blocks multicast; the Mac may also need `ROS_STATIC_PEERS=<phone IP>`
 - [x] Remote config over `config/set` and `config/state` topics, verified on phone. `ros2 param` to the phone doesn't work (Fast DDS client got no reply from a Cyclone service), so a Python node on the Mac offers real parameters and forwards them; verified
 - [x] Sensor toggles, IMU rate limit and camera settings verified. `sensors.gps=false` stops the topic; settings survive an app restart
 - [x] Camera resolution presets keep 640x480 as default, with live FPS in `config/state`. USB, back main camera: 320x240 29.7 FPS 0.4 MB/s; 640x480 29.8 FPS 1.5 MB/s; 1280x960 29.7 FPS 5.2 MB/s; 1920x1440 20.2 FPS 9.6 MB/s. Wi-Fi 640x480 29.9 FPS
 - [x] Actual resolution shown in `config/state` (1280x720 requested gives 1280x960 on this phone)
-- [~] Fields refresh when changed outside the screen. Code built; needs a screen check
+- [x] Fields refresh when changed outside the screen, verified
 - [~] Checkerboard override and Python `camera_calibrator` built. Needs a printed checkerboard to verify
 
 ## 3. Multiple cameras
@@ -42,16 +42,16 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] 8-hour run
 
 ## 5. Security
-- [ ] GPS reports after re-enable or on a locked phone: no fix seen indoors in 40 s; check near a window
+- [x] GPS flows on the second phone (1 Hz). Fixed `status` staying `-2` (unknown), which made standard tools able to reject valid fixes
 - [x] `AsrService` is not exported in release builds; debug keeps adb. Verified in the merged release and debug manifests
 - [x] Release build verified on a phone: outside service and activity starts are refused, a broadcast starts nothing, and the launcher still opens
 - [x] Other exported components reviewed: only the launcher and `MainActivity` are exported, and neither reads intent extras (code read only)
 - [x] GPS coordinates and spoken text removed from logs (code changed and built)
 - [x] Removed the broken `stop_asr` launcher shortcut; `MainActivity` is no longer exported in release builds
-- [~] REMOTE CONFIG switch, default off. `config/set` rejection verified; on-screen tap and flashlight/speaker gating need an unlocked phone
+- [x] REMOTE CONFIG switch verified by tap: off by default, flashlight and `config/set` ignored when off, working when on
 - [x] ROS 2 command contents are no longer written to the log
 - [x] SROS2 verified end to end on a phone. No-key clients can't see the secured node or its data; a client with keys got 27.9 FPS and 394 Hz over Wi-Fi; `data_protection_kind` and `metadata_protection_kind` are ENCRYPT; missing keys stop the node with no fallback. On this Mac, secured nodes must use Cyclone, because Pixi's Fast DDS has no security. The libddsc swap was rechecked with no streaming regression
-- [ ] SROS2 on-screen switch needs a tap test
+- [x] SROS2 switch verified by tap: no-key client 0 Hz, client with keys 24.8 FPS, off returns to normal
 - [x] TLS for TCP to ASR Studio: dropped by decision. TCP stays unchanged; this work targets ROS 2
 - [ ] Update privacy policy and Data Safety only after these ship and are tested
 

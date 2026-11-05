@@ -521,6 +521,9 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishNavSatFix(JNIEnv *env, jobject
         msg.position_covariance[4] = msg.position_covariance[0];
         msg.position_covariance[8] = msg.position_covariance[0];
         msg.position_covariance_type = sensor_msgs__msg__NavSatFix__COVARIANCE_TYPE_APPROXIMATED;
+        // Consumers treat a fix as valid only when status >= STATUS_FIX. The default is STATUS_UNKNOWN.
+        msg.status.status = sensor_msgs__msg__NavSatStatus__STATUS_FIX;
+        msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_GPS;
         ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
         if (!ok) {
             LOGE("Failed to publish GPS: %s", rcl_get_error_string().str);
