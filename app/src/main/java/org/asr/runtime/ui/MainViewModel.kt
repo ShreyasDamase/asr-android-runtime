@@ -116,6 +116,24 @@ class MainViewModel : ViewModel() {
         asrService?.shutdownForExit(onComplete) ?: onComplete()
     }
 
+    fun setRos2DomainId(value: Int) {
+        asrService?.setRos2DomainId(value)
+    }
+
+    fun hasSecurityKeys(): Boolean = asrService?.hasSecurityKeys() ?: false
+
+    fun setRosSecurityEnabled(enabled: Boolean) {
+        asrService?.setRosSecurityEnabled(enabled)
+    }
+
+    fun setStaticPeers(peers: String) {
+        asrService?.setStaticPeers(peers)
+    }
+
+    fun setNodeAlias(alias: String?) {
+        asrService?.setNodeAlias(alias)
+    }
+
     fun setRos2Enabled(enabled: Boolean) {
         asrService?.setRos2Enabled(enabled)
     }

@@ -48,6 +48,9 @@
 #include <sensor_msgs/msg/detail/relative_humidity__rosidl_typesupport_introspection_c.h>
 #include <sensor_msgs/msg/detail/compressed_image__rosidl_typesupport_introspection_c.h>
 #include <sensor_msgs/msg/detail/camera_info__rosidl_typesupport_introspection_c.h>
+#include <tf2_msgs/msg/tf_message.h>
+#include <tf2_msgs/msg/detail/tf_message__rosidl_typesupport_introspection_c.h>
+#include <geometry_msgs/msg/transform_stamped.h>
 #define ASR_MESSAGE_TYPE_SUPPORT(package_name, namespace_name, message_name) \
     ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_introspection_c, package_name, namespace_name, message_name)()
 #else
@@ -97,6 +100,8 @@ static void message_received_callback(const char *topic_name, const char *messag
         env->DeleteLocalRef(j_topic);
         env->DeleteLocalRef(j_msg);
     }
+    // This thread never returns to Java, so local references must be released by hand.
+    env->DeleteLocalRef(cls);
 }
 
 static void run_spinner() {
@@ -179,6 +184,13 @@ static void run_spinner() {
         }
         rcl_wait_set_fini(&wait_set);
     }
+    // A native thread that attached to the JVM has to detach before it exits.
+    if (g_jvm) {
+        JNIEnv *env = nullptr;
+        if (g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) == JNI_OK) {
+            g_jvm->DetachCurrentThread();
+        }
+    }
     LOGI("ROS 2 spinner thread exiting");
 }
 
@@ -210,10 +222,12 @@ static bool ensure_publisher(const char *topic_name, const rosidl_message_type_s
     return true;
 }
 
-static void set_stamp(std_msgs__msg__Header *header, jlong timestamp_ns) {
+static void set_stamp(std_msgs__msg__Header *header, jlong timestamp_ns, const char *frame) {
     header->stamp.sec = static_cast<int32_t>(timestamp_ns / 1000000000LL);
     header->stamp.nanosec = static_cast<uint32_t>(timestamp_ns % 1000000000LL);
-    rosidl_runtime_c__String__assign(&header->frame_id, "asr_android");
+    // Prefix with the node namespace so frames from several phones stay separate in TF.
+    std::string frame_id = local_node_namespace.size() > 1 ? local_node_namespace.substr(1) + "/" + frame : frame;
+    rosidl_runtime_c__String__assign(&header->frame_id, frame_id.c_str());
 }
 
 extern "C" {
@@ -406,7 +420,8 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishString(JNIEnv *env, jobject th
     if (!topic_name) return JNI_FALSE;
 
     int qos_kind = 0;
-    if (strstr(topic_name, "capabilities") != nullptr || strstr(topic_name, "status") != nullptr) {
+    if (strstr(topic_name, "capabilities") != nullptr || strstr(topic_name, "status") != nullptr ||
+        strstr(topic_name, "config/state") != nullptr) {
         qos_kind = 2; // Transient local for caps/status
     }
 
@@ -457,7 +472,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
     if (ok) {
         sensor_msgs__msg__Imu msg;
         sensor_msgs__msg__Imu__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "imu_link");
         std::fill(std::begin(msg.orientation_covariance), std::end(msg.orientation_covariance), 0.0);
         std::fill(std::begin(msg.angular_velocity_covariance), std::end(msg.angular_velocity_covariance), 0.0);
         std::fill(std::begin(msg.linear_acceleration_covariance), std::end(msg.linear_acceleration_covariance), 0.0);
@@ -465,9 +480,13 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
         msg.orientation.z = orientation[2]; msg.orientation.w = orientation[3];
         msg.angular_velocity.x = gyro[0]; msg.angular_velocity.y = gyro[1]; msg.angular_velocity.z = gyro[2];
         msg.linear_acceleration.x = accel[0]; msg.linear_acceleration.y = accel[1]; msg.linear_acceleration.z = accel[2];
-        msg.orientation_covariance[0] = -1.0;
-        msg.angular_velocity_covariance[0] = -1.0;
-        msg.linear_acceleration_covariance[0] = -1.0;
+        // Per sensor_msgs/Imu, -1 means "no data" and all zeros means "covariance unknown".
+        const double orientation_norm =
+            orientation[0] * orientation[0] + orientation[1] * orientation[1] +
+            orientation[2] * orientation[2] + orientation[3] * orientation[3];
+        if (orientation_norm < 1e-6) {
+            msg.orientation_covariance[0] = -1.0;
+        }
         ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
         if (!ok) {
             LOGE("Failed to publish IMU: %s", rcl_get_error_string().str);
@@ -495,13 +514,16 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishNavSatFix(JNIEnv *env, jobject
     if (ok) {
         sensor_msgs__msg__NavSatFix msg;
         sensor_msgs__msg__NavSatFix__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "gps_link");
         msg.latitude = latitude; msg.longitude = longitude; msg.altitude = altitude;
         std::fill(std::begin(msg.position_covariance), std::end(msg.position_covariance), 0.0);
         msg.position_covariance[0] = static_cast<double>(accuracy) * accuracy;
         msg.position_covariance[4] = msg.position_covariance[0];
         msg.position_covariance[8] = msg.position_covariance[0];
         msg.position_covariance_type = sensor_msgs__msg__NavSatFix__COVARIANCE_TYPE_APPROXIMATED;
+        // Consumers treat a fix as valid only when status >= STATUS_FIX. The default is STATUS_UNKNOWN.
+        msg.status.status = sensor_msgs__msg__NavSatStatus__STATUS_FIX;
+        msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_GPS;
         ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
         if (!ok) {
             LOGE("Failed to publish GPS: %s", rcl_get_error_string().str);
@@ -527,7 +549,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishBattery(JNIEnv *env, jobject, 
     if (ok) {
         sensor_msgs__msg__BatteryState msg;
         sensor_msgs__msg__BatteryState__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "battery_link");
         msg.percentage = percentage / 100.0f;
         msg.temperature = temperature;
         msg.voltage = voltage / 1000.0f;
@@ -564,16 +586,16 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishScalar(JNIEnv *env, jobject, j
     bool ok = false;
     if (topic && kind == 0) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, Illuminance), &publisher, 0);
-        if (ok) { sensor_msgs__msg__Illuminance msg; sensor_msgs__msg__Illuminance__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.illuminance = value; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Illuminance__fini(&msg); }
+        if (ok) { sensor_msgs__msg__Illuminance msg; sensor_msgs__msg__Illuminance__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.illuminance = value; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Illuminance__fini(&msg); }
     } else if (topic && kind == 1) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, FluidPressure), &publisher, 0);
-        if (ok) { sensor_msgs__msg__FluidPressure msg; sensor_msgs__msg__FluidPressure__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.fluid_pressure = value * 100.0; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__FluidPressure__fini(&msg); }
+        if (ok) { sensor_msgs__msg__FluidPressure msg; sensor_msgs__msg__FluidPressure__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.fluid_pressure = value * 100.0; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__FluidPressure__fini(&msg); }
     } else if (topic && kind == 2) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, Temperature), &publisher, 0);
-        if (ok) { sensor_msgs__msg__Temperature msg; sensor_msgs__msg__Temperature__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.temperature = value; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Temperature__fini(&msg); }
+        if (ok) { sensor_msgs__msg__Temperature msg; sensor_msgs__msg__Temperature__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.temperature = value; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Temperature__fini(&msg); }
     } else if (topic && kind == 3) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, RelativeHumidity), &publisher, 0);
-        if (ok) { sensor_msgs__msg__RelativeHumidity msg; sensor_msgs__msg__RelativeHumidity__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.relative_humidity = value / 100.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__RelativeHumidity__fini(&msg); }
+        if (ok) { sensor_msgs__msg__RelativeHumidity msg; sensor_msgs__msg__RelativeHumidity__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.relative_humidity = value / 100.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__RelativeHumidity__fini(&msg); }
     }
     if (topic) env->ReleaseStringUTFChars(j_topic, topic);
     return ok ? JNI_TRUE : JNI_FALSE;
@@ -593,7 +615,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCompressedImage(JNIEnv *env, j
         jsize size = env->GetArrayLength(j_data);
         sensor_msgs__msg__CompressedImage msg;
         sensor_msgs__msg__CompressedImage__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "camera_optical_frame");
         rosidl_runtime_c__String__assign(&msg.format, format);
         rosidl_runtime_c__uint8__Sequence__init(&msg.data, static_cast<size_t>(size));
         env->GetByteArrayRegion(j_data, 0, size, reinterpret_cast<jbyte *>(msg.data.data));
@@ -607,7 +629,9 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCompressedImage(JNIEnv *env, j
 
 JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobject, jstring j_topic,
-                                                              jint width, jint height, jlong timestamp_ns) {
+                                                              jint width, jint height,
+                                                              jdoubleArray j_intrinsics, jdoubleArray j_distortion,
+                                                              jlong timestamp_ns) {
     std::lock_guard<std::mutex> lock(node_mutex);
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
@@ -616,32 +640,37 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
     if (ok) {
         sensor_msgs__msg__CameraInfo msg;
         sensor_msgs__msg__CameraInfo__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "camera_optical_frame");
         msg.width = static_cast<uint32_t>(width);
         msg.height = static_cast<uint32_t>(height);
 
-        // Simple pinhole model defaults if no calibration exists
-        double fx = width * 0.8;
-        double fy = fx;
-        double cx = width / 2.0;
-        double cy = height / 2.0;
+        // Per sensor_msgs/CameraInfo, K[0] == 0 means the camera is uncalibrated.
+        jdouble in[4] = {0.0, 0.0, 0.0, 0.0};
+        jdouble dist[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
+        env->GetDoubleArrayRegion(j_intrinsics, 0, 4, in);
+        env->GetDoubleArrayRegion(j_distortion, 0, 5, dist);
+        const bool calibrated = in[0] > 0.0;
 
         std::fill(std::begin(msg.k), std::end(msg.k), 0.0);
-        msg.k[0] = fx; msg.k[2] = cx;
-        msg.k[4] = fy; msg.k[5] = cy;
-        msg.k[8] = 1.0;
+        if (calibrated) {
+            msg.k[0] = in[0]; msg.k[2] = in[2];
+            msg.k[4] = in[1]; msg.k[5] = in[3];
+            msg.k[8] = 1.0;
+        }
 
         std::fill(std::begin(msg.r), std::end(msg.r), 0.0);
         msg.r[0] = 1.0; msg.r[4] = 1.0; msg.r[8] = 1.0;
 
         std::fill(std::begin(msg.p), std::end(msg.p), 0.0);
-        msg.p[0] = fx; msg.p[2] = cx;
-        msg.p[5] = fy; msg.p[6] = cy;
-        msg.p[10] = 1.0;
+        if (calibrated) {
+            msg.p[0] = in[0]; msg.p[2] = in[2];
+            msg.p[5] = in[1]; msg.p[6] = in[3];
+            msg.p[10] = 1.0;
+        }
 
         rosidl_runtime_c__String__assign(&msg.distortion_model, "plumb_bob");
         rosidl_runtime_c__double__Sequence__init(&msg.d, 5);
-        std::fill(msg.d.data, msg.d.data + 5, 0.0);
+        std::copy(dist, dist + 5, msg.d.data);
 
         msg.binning_x = 0;
         msg.binning_y = 0;
@@ -658,8 +687,71 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
+/**
+ * Publishes latched transforms on /tf_static. poses holds x, y, z, qx, qy, qz, qw for each child.
+ * Frame names get the node namespace prefix, so several phones stay separate in TF.
+ */
+JNIEXPORT jboolean JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_publishStaticTransforms(JNIEnv *env, jobject, jstring j_parent,
+                                                                   jobjectArray j_children, jdoubleArray j_poses,
+                                                                   jlong timestamp_ns) {
+#ifdef ASR_USE_CYCLONE_DDS
+    std::lock_guard<std::mutex> lock(node_mutex);
+    if (!node_ready) return JNI_FALSE;
+    rcl_publisher_t *publisher = nullptr;
+    if (!ensure_publisher("/tf_static", ASR_MESSAGE_TYPE_SUPPORT(tf2_msgs, msg, TFMessage), &publisher, 2)) {
+        return JNI_FALSE;
+    }
+    const std::string prefix = local_node_namespace.size() > 1 ? local_node_namespace.substr(1) + "/" : "";
+    const char *parent_chars = env->GetStringUTFChars(j_parent, nullptr);
+    if (!parent_chars) return JNI_FALSE;
+    const std::string parent = prefix + parent_chars;
+    env->ReleaseStringUTFChars(j_parent, parent_chars);
+
+    const jsize count = env->GetArrayLength(j_children);
+    std::vector<jdouble> poses(static_cast<size_t>(count) * 7);
+    env->GetDoubleArrayRegion(j_poses, 0, count * 7, poses.data());
+
+    tf2_msgs__msg__TFMessage msg;
+    tf2_msgs__msg__TFMessage__init(&msg);
+    geometry_msgs__msg__TransformStamped__Sequence__init(&msg.transforms, static_cast<size_t>(count));
+    for (jsize i = 0; i < count; ++i) {
+        geometry_msgs__msg__TransformStamped &item = msg.transforms.data[i];
+        item.header.stamp.sec = static_cast<int32_t>(timestamp_ns / 1000000000LL);
+        item.header.stamp.nanosec = static_cast<uint32_t>(timestamp_ns % 1000000000LL);
+        rosidl_runtime_c__String__assign(&item.header.frame_id, parent.c_str());
+        auto j_child = static_cast<jstring>(env->GetObjectArrayElement(j_children, i));
+        const char *child_chars = env->GetStringUTFChars(j_child, nullptr);
+        rosidl_runtime_c__String__assign(&item.child_frame_id, (prefix + child_chars).c_str());
+        env->ReleaseStringUTFChars(j_child, child_chars);
+        env->DeleteLocalRef(j_child);
+        const jdouble *pose = &poses[static_cast<size_t>(i) * 7];
+        item.transform.translation.x = pose[0];
+        item.transform.translation.y = pose[1];
+        item.transform.translation.z = pose[2];
+        item.transform.rotation.x = pose[3];
+        item.transform.rotation.y = pose[4];
+        item.transform.rotation.z = pose[5];
+        item.transform.rotation.w = pose[6];
+    }
+    const bool ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
+    if (!ok) rcl_reset_error();
+    tf2_msgs__msg__TFMessage__fini(&msg);
+    return ok ? JNI_TRUE : JNI_FALSE;
+#else
+    return JNI_FALSE;
+#endif
+}
+
 JNIEXPORT void JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_shutdown(JNIEnv *env, jobject thiz) {
+    // Stop the spinner before taking the lock. The spinner takes this lock to handle
+    // messages, so joining it while holding the lock can deadlock.
+    spinning = false;
+    if (spinner_thread.joinable()) {
+        spinner_thread.join();
+    }
+
     std::lock_guard<std::mutex> lock(node_mutex);
     if (!node_ready && !rcl_context_is_valid(&context)) {
         LOGI("Shutdown requested but ROS 2 already idle; skipping");
@@ -667,11 +759,6 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_shutdown(JNIEnv *env, jobject thiz) {
     }
 
     LOGI("Shutting down ROS 2 node and context...");
-
-    spinning = false;
-    if (spinner_thread.joinable()) {
-        spinner_thread.join();
-    }
 
     for (auto &pair : subscriptions) {
         if (rcl_subscription_fini(&pair.second, &node) != RCL_RET_OK) {
@@ -807,6 +894,25 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_setFastDdsConfigPath(JNIEnv *env, job
     LOGI("Fast DDS profile path set to: %s", path);
     env->ReleaseStringUTFChars(j_path, path);
     return JNI_TRUE;
+}
+
+/** Sets the standard SROS2 variables read by rcl_init. A null keystore turns security off. */
+JNIEXPORT void JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_setRosSecurity(JNIEnv *env, jobject thiz, jstring j_keystore, jstring j_enclave) {
+    if (j_keystore == nullptr || j_enclave == nullptr) {
+        setenv("ROS_SECURITY_ENABLE", "false", 1);
+        unsetenv("ROS_SECURITY_KEYSTORE");
+        unsetenv("ROS_SECURITY_ENCLAVE_OVERRIDE");
+        return;
+    }
+    const char *keystore = env->GetStringUTFChars(j_keystore, nullptr);
+    const char *enclave = env->GetStringUTFChars(j_enclave, nullptr);
+    setenv("ROS_SECURITY_KEYSTORE", keystore, 1);
+    setenv("ROS_SECURITY_ENCLAVE_OVERRIDE", enclave, 1);
+    setenv("ROS_SECURITY_STRATEGY", "Enforce", 1);
+    setenv("ROS_SECURITY_ENABLE", "true", 1);
+    env->ReleaseStringUTFChars(j_keystore, keystore);
+    env->ReleaseStringUTFChars(j_enclave, enclave);
 }
 
 JNIEXPORT jboolean JNICALL

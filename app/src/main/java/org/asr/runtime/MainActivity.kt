@@ -51,6 +51,8 @@ import java.util.*
 class  MainActivity : ComponentActivity() {
 
     private companion object {
+        private val ROS2_NODE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*$")
+        private val IPV4_ADDRESS = Regex("^(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$")
         const val KEY_SENSOR_DISCLOSURE_ACCEPTED = "sensor_data_disclosure_v1_accepted"
         const val KEY_EXIT_CONFIRMATION_VISIBLE = "exit_confirmation_visible"
     }
@@ -73,6 +75,7 @@ class  MainActivity : ComponentActivity() {
     private var exitConfirmationDialog: AlertDialog? = null
     private var tcpConnected = false
     private var initializingControls = true
+    private var ros2ConfigEditing = false
     private var pendingSensorSelection: Set<String>? = null
     private var sensorPanelExpanded = false
     private var initialSensorSelection = emptySet<String>()
@@ -207,6 +210,7 @@ class  MainActivity : ComponentActivity() {
         updatePermissionTable()
         updateHardwareTable()
         updateUsbTetheringSettingsButton()
+        updateBatteryOptimizationWarning()
         handler.post(refreshRunnable)
     }
 
@@ -366,6 +370,7 @@ class  MainActivity : ComponentActivity() {
         }
         binding.switchDdsWifi.setOnCheckedChangeListener(onDdsPathChanged)
         binding.switchDdsUsb.setOnCheckedChangeListener(onDdsPathChanged)
+        setupRos2Config()
         TactileFeedbackHelper.prepare(binding.switchDdsWifi)
         TactileFeedbackHelper.prepare(binding.switchDdsUsb)
         binding.btnUsbTetheringSettings.setOnClickListener { openUsbTetheringSettings() }
@@ -1058,17 +1063,17 @@ class  MainActivity : ComponentActivity() {
                             Ros2State.INITIALIZING -> "INITIALIZING"
                             Ros2State.DDS_INITIALIZING -> "DDS INIT"
                             Ros2State.NODE_READY -> "NODE READY"
-                            Ros2State.WAITING_FOR_DISCOVERY -> "WAITING DISCOVERY"
+                            Ros2State.WAITING_FOR_DISCOVERY -> "NO OTHER NODES"
                             Ros2State.WAITING_FOR_INTERFACE -> "WAITING FOR LINK"
                             Ros2State.RETRYING -> "RETRYING DDS"
-                            Ros2State.ACTIVE -> "ACTIVE (DISCOVERED)"
+                            Ros2State.ACTIVE -> "NODES DISCOVERED"
                             Ros2State.ERROR -> "ERROR"
                             Ros2State.DISCONNECTED -> "DISCONNECTED"
                             Ros2State.DISABLED -> "DISABLED"
                         }
                         val waitingForDiscovery = when(status.state) {
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
-                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
+                            Ros2State.NODE_READY,
                             Ros2State.WAITING_FOR_INTERFACE, Ros2State.RETRYING -> true
                             else -> false
                         }
@@ -1083,6 +1088,10 @@ class  MainActivity : ComponentActivity() {
                         } else {
                             binding.progressRos2.stopIndeterminate()
                         }
+                        syncDdsSwitches()
+                        if (!ros2ConfigEditing) loadRos2Config()
+                        updateRos2AdvancedSummary()
+                        updateBatteryOptimizationWarning()
                         val routeDescription = status.pathSummary
                         binding.txtDdsPathStatus.text = buildDdsPathSummary(
                             binding.switchDdsWifi.isChecked,
@@ -1147,6 +1156,166 @@ class  MainActivity : ComponentActivity() {
                 Toast.makeText(this, "Permissions required for ASR", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /** Warns when Android may stop the node while the screen is off. */
+    private fun updateBatteryOptimizationWarning() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val active = prefs.getBoolean("dds_wifi_enabled", false) || prefs.getBoolean("dds_usb_enabled", false) ||
+            prefs.getBoolean("runtime_enabled", false)
+        val power = getSystemService(android.os.PowerManager::class.java)
+        val show = active && power?.isIgnoringBatteryOptimizations(packageName) == false
+        val visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
+        binding.txtBatteryOptimizationWarning.visibility = visibility
+        // Matches the USB warning, which already has a readable color in each theme.
+        binding.txtBatteryOptimizationWarning.setTextColor(binding.txtUsbTetheringWarning.currentTextColor)
+        binding.btnBatteryOptimizationSettings.visibility = visibility
+    }
+
+    private fun updateRos2AdvancedSummary() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val chevron = if (binding.layoutRos2Advanced.visibility == android.view.View.VISIBLE) "⌃" else "⌄"
+        val security = if (prefs.getBoolean("ros_security_enable", false)) "SROS2 ON" else "SROS2 OFF"
+        binding.txtRos2AdvancedSummary.text = "DOMAIN ${prefs.getInt("ros2_domain_id", 0)} · $security $chevron"
+    }
+
+    private fun setupRos2Config() {
+        binding.rowRos2Advanced.setOnClickListener {
+            val open = binding.layoutRos2Advanced.visibility != android.view.View.VISIBLE
+            binding.layoutRos2Advanced.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            updateRos2AdvancedSummary()
+        }
+        binding.btnBatteryOptimizationSettings.setOnClickListener {
+            runCatching {
+                startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+        }
+        updateRos2AdvancedSummary()
+        updateBatteryOptimizationWarning()
+        loadRos2Config()
+        setRos2ConfigEditing(false)
+        binding.btnEditRos2Config.setOnClickListener {
+            if (ros2ConfigEditing) loadRos2Config()
+            showRos2ConfigStatus("")
+            setRos2ConfigEditing(!ros2ConfigEditing)
+        }
+        binding.btnApplyRos2Config.setOnClickListener { applyRos2Config() }
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        binding.switchRemoteConfig.isChecked = prefs.getBoolean("remote_config_enabled", false)
+        binding.switchRemoteConfig.setOnCheckedChangeListener { button, checked ->
+            if (!initializingControls) {
+                TactileFeedbackHelper.playSliderSound(button, checked)
+                prefs.edit().putBoolean("remote_config_enabled", checked).apply()
+            }
+        }
+        binding.switchStartOnBoot.isChecked = prefs.getBoolean("start_on_boot", false)
+        binding.switchStartOnBoot.setOnCheckedChangeListener { button, checked ->
+            if (!initializingControls) {
+                TactileFeedbackHelper.playSliderSound(button, checked)
+                prefs.edit().putBoolean("start_on_boot", checked).apply()
+            }
+        }
+        binding.switchRosSecurity.isChecked = prefs.getBoolean("ros_security_enable", false)
+        binding.switchRosSecurity.setOnCheckedChangeListener { button, checked ->
+            if (!initializingControls) {
+                if (checked && !viewModel.hasSecurityKeys()) {
+                    initializingControls = true
+                    button.isChecked = false
+                    initializingControls = false
+                    binding.txtRosSecurityStatus.text =
+                        "Keys for the enclave /asr_android were not found. Copy them to this phone first."
+                } else {
+                    TactileFeedbackHelper.playSliderSound(button, checked)
+                    binding.txtRosSecurityStatus.text = if (checked) {
+                        "SROS2 on. Only nodes with keys from this keystore can connect."
+                    } else {
+                        "SROS2 encrypts traffic and only allows nodes with keys. Needs the enclave /asr_android."
+                    }
+                    viewModel.setRosSecurityEnabled(checked)
+                }
+            }
+        }
+    }
+
+    private fun loadRos2Config() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        binding.editRos2DomainId.setText(prefs.getInt("ros2_domain_id", 0).toString())
+        binding.editRos2NodeName.setText(prefs.getString("node_alias", null).orEmpty())
+        binding.editRos2StaticPeers.setText(prefs.getString("ros_static_peers", "").orEmpty())
+    }
+
+    /** Settings stay locked until EDIT, because a change restarts the node on a running robot. */
+    private fun setRos2ConfigEditing(editing: Boolean) {
+        ros2ConfigEditing = editing
+        binding.editRos2DomainId.isEnabled = editing
+        binding.editRos2NodeName.isEnabled = editing
+        binding.editRos2StaticPeers.isEnabled = editing
+        binding.btnEditRos2Config.text = if (editing) "CANCEL" else "EDIT"
+        binding.btnApplyRos2Config.visibility =
+            if (editing) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    private fun showRos2ConfigStatus(message: String) {
+        binding.txtRos2ConfigStatus.text = message
+        binding.txtRos2ConfigStatus.visibility =
+            if (message.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+    }
+
+    private fun applyRos2Config() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val domainId = binding.editRos2DomainId.text?.toString()?.trim()?.toIntOrNull()
+        if (domainId == null || domainId !in 0..232) {
+            showRos2ConfigStatus("ROS_DOMAIN_ID must be between 0 and 232.")
+            return
+        }
+        val nodeName = binding.editRos2NodeName.text?.toString()?.trim().orEmpty()
+        if (nodeName.isNotEmpty() && !ROS2_NODE_NAME.matches(nodeName)) {
+            showRos2ConfigStatus("Node name must start with a letter and use only letters, numbers and underscores.")
+            return
+        }
+        val peerText = binding.editRos2StaticPeers.text?.toString().orEmpty()
+        val peers = peerText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (peers.any { !IPV4_ADDRESS.matches(it) }) {
+            showRos2ConfigStatus("ROS_STATIC_PEERS must be IPv4 addresses separated by commas.")
+            return
+        }
+        val peersValue = peers.joinToString(",")
+        val peersChanged = peersValue != prefs.getString("ros_static_peers", "").orEmpty()
+        val alias = nodeName.ifEmpty { null }
+        val domainChanged = domainId != prefs.getInt("ros2_domain_id", 0)
+        val nameChanged = alias != prefs.getString("node_alias", null)
+        if (!domainChanged && !nameChanged && !peersChanged) {
+            showRos2ConfigStatus("No changes to apply.")
+            setRos2ConfigEditing(false)
+            return
+        }
+        if (nameChanged) {
+            if (domainChanged) prefs.edit().putInt("ros2_domain_id", domainId).apply()
+            viewModel.setNodeAlias(alias)
+        }
+        if (peersChanged) {
+            if (domainChanged) prefs.edit().putInt("ros2_domain_id", domainId).apply()
+            viewModel.setStaticPeers(peersValue)
+        }
+        if (domainChanged) viewModel.setRos2DomainId(domainId)
+        setRos2ConfigEditing(false)
+        showRos2ConfigStatus(
+            if (domainChanged) "Applied. Set ROS_DOMAIN_ID=$domainId on other machines to discover this node."
+            else "Applied. Node restarted."
+        )
+    }
+
+    /** The DDS path can change without this screen, such as from a service command. */
+    private fun syncDdsSwitches() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val wifi = prefs.getBoolean("dds_wifi_enabled", prefs.getBoolean("ros2_enabled", false))
+        val usb = prefs.getBoolean("dds_usb_enabled", false)
+        if (binding.switchDdsWifi.isChecked == wifi && binding.switchDdsUsb.isChecked == usb) return
+        val wasInitializing = initializingControls
+        initializingControls = true
+        binding.switchDdsWifi.isChecked = wifi
+        binding.switchDdsUsb.isChecked = usb
+        initializingControls = wasInitializing
     }
 
     override fun onDestroy() {

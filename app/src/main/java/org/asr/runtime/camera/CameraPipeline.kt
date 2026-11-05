@@ -35,6 +35,16 @@ interface CameraCompressor {
 class JpegCompressor(val quality: Int = 75) : CameraCompressor {
     override val encoding = CameraEncoding.JPEG
 
+    // Runs on the single camera executor, so these buffers are reused between frames.
+    private var nv21Buffer = ByteArray(0)
+    private var yRowBuffer = ByteArray(0)
+    private var uRowBuffer = ByteArray(0)
+    private var vRowBuffer = ByteArray(0)
+    private val jpegOutput = ByteArrayOutputStream()
+
+    private fun sized(buffer: ByteArray, size: Int): ByteArray =
+        if (buffer.size == size) buffer else ByteArray(size)
+
     override fun compress(image: ImageProxy): ByteArray {
         val width = image.width
         val height = image.height
@@ -52,7 +62,8 @@ class JpegCompressor(val quality: Int = 75) : CameraCompressor {
 
         val ySize = width * height
         val uvSize = width * height / 2
-        val nv21 = ByteArray(ySize + uvSize)
+        nv21Buffer = sized(nv21Buffer, ySize + uvSize)
+        val nv21 = nv21Buffer
 
         val yRowStride = yPlane.rowStride
         val yPixelStride = yPlane.pixelStride
@@ -63,7 +74,8 @@ class JpegCompressor(val quality: Int = 75) : CameraCompressor {
             yBuffer.get(nv21, 0, bytesToCopy)
             pos = bytesToCopy
         } else {
-            val rowBytes = ByteArray(yRowStride)
+            yRowBuffer = sized(yRowBuffer, yRowStride)
+            val rowBytes = yRowBuffer
             for (row in 0 until height) {
                 if (yBuffer.remaining() < yRowStride) break
                 yBuffer.get(rowBytes, 0, yRowStride)
@@ -81,8 +93,10 @@ class JpegCompressor(val quality: Int = 75) : CameraCompressor {
         val uRowStride = uPlane.rowStride
         val uPixelStride = uPlane.pixelStride
 
-        val vRow = ByteArray(vRowStride)
-        val uRow = ByteArray(uRowStride)
+        vRowBuffer = sized(vRowBuffer, vRowStride)
+        uRowBuffer = sized(uRowBuffer, uRowStride)
+        val vRow = vRowBuffer
+        val uRow = uRowBuffer
 
         for (row in 0 until height / 2) {
             val vLen = vRowStride.coerceAtMost(vBuffer.remaining())
@@ -100,9 +114,9 @@ class JpegCompressor(val quality: Int = 75) : CameraCompressor {
         }
 
         val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, out)
-        return out.toByteArray()
+        jpegOutput.reset()
+        yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, jpegOutput)
+        return jpegOutput.toByteArray()
     }
 }
 

@@ -28,7 +28,7 @@ Cyclone DDS has been more reliable in the observed Mac tests. With Cyclone, USB 
 
 Earlier Fast DDS tests showed intermittent peer status that changed when short-lived ROS 2 tools or Foxglove/RQT were started and stopped. The observations were collected across separate sessions rather than a controlled benchmark, so discovery times are indicative, not a guarantee or a statistically controlled comparison.
 
-The app's Wi-Fi DDS toggle does not require the host helper. The `asr_ros2` package is intentionally USB-only and is used for persistent USB host discovery and message diagnostics. For Wi-Fi checks, use an ordinary ROS 2 subscriber or the robot's existing ROS 2 node. Keep ROS domain ID equal across phone and host.
+The app's Wi-Fi DDS toggle does not require the host helper. The `asr_ros2` package is intentionally USB-only and optional; it provides persistent USB message diagnostics. Later Mac tests with the Cyclone build found the phone over USB with plain `ros2` commands and no helper. For Wi-Fi checks, use an ordinary ROS 2 subscriber or the robot's existing ROS 2 node. Keep ROS domain ID equal across phone and host.
 
 ## Validation status
 

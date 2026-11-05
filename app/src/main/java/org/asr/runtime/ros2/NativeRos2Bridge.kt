@@ -44,7 +44,7 @@ object NativeRos2Bridge {
     external fun publishBattery(topicName: String, percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean, timestampNs: Long): Boolean
     external fun publishScalar(topicName: String, value: Double, timestampNs: Long, kind: Int): Boolean
     external fun publishCompressedImage(topicName: String, data: ByteArray, format: String, timestampNs: Long): Boolean
-    external fun publishCameraInfo(topicName: String, width: Int, height: Int, timestampNs: Long): Boolean
+    external fun publishCameraInfo(topicName: String, width: Int, height: Int, intrinsics: DoubleArray, distortion: DoubleArray, timestampNs: Long): Boolean
     
     external fun publishUInt32(topicName: String, value: Int): Boolean
     external fun publishInt16MultiArray(topicName: String, data: ShortArray): Boolean
@@ -52,6 +52,8 @@ object NativeRos2Bridge {
     external fun getDiscoveredRosNodeCount(): Int
     external fun setFastDdsConfigPath(path: String): Boolean
     external fun setCycloneDdsConfigPath(path: String): Boolean
+    external fun setRosSecurity(keystore: String?, enclave: String?)
+    external fun publishStaticTransforms(parent: String, children: Array<String>, poses: DoubleArray, timestampNs: Long): Boolean
 
     external fun shutdown()
     external fun isNodeReady(): Boolean

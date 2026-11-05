@@ -226,6 +226,7 @@ object PacketSerializer {
             append(""""accelerometer":${hasSensor(Sensor.TYPE_ACCELEROMETER)}""")
             append(""","gyroscope":${hasSensor(Sensor.TYPE_GYROSCOPE)}""")
             append(""","rotation_vector":${hasSensor(Sensor.TYPE_ROTATION_VECTOR)}""")
+            append(""","game_rotation_vector":${hasSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)}""")
             append(""","gravity":${hasSensor(Sensor.TYPE_GRAVITY)}""")
             append(""","linear_acceleration":${hasSensor(Sensor.TYPE_LINEAR_ACCELERATION)}""")
             append(""","max_rate_hz":500}""")

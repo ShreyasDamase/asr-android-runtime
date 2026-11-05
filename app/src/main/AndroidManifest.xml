@@ -19,6 +19,7 @@
     <!-- TCP transport (Wi-Fi + adb forward) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
@@ -39,8 +40,15 @@
         <service
             android:name=".core.AsrService"
             android:enabled="true"
-            android:exported="true"
+            android:exported="${asrServiceExported}"
             android:foregroundServiceType="camera|microphone|location|connectedDevice" />
+        <receiver
+            android:name=".core.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <activity
             android:name=".ui.PermissionOnboardingActivity"
             android:exported="true"
@@ -53,12 +61,9 @@
         </activity>
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="${asrServiceExported}"
             android:label="@string/app_name"
-            android:theme="@style/Theme.AsrRuntime.Starting">
-            <meta-data android:name="android.app.shortcuts"
-                android:resource="@xml/shortcuts" />
-        </activity>
+            android:theme="@style/Theme.AsrRuntime.Starting" />
         <activity
             android:name=".ui.AboutActivity"
             android:exported="false"

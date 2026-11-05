@@ -16,6 +16,7 @@
     <nav id="primary-nav" aria-label="Main navigation">
       <a href="index.html#platform">Platform</a>
       <a href="index.html#connect">Connectivity</a>
+      <a href="manual.html">Manual</a>
       <a href="docs.html" aria-current="page">Documentation</a>
       <a href="index.html#resources">Resources</a>
       <a href="index.html#about">About</a>
@@ -37,6 +38,11 @@
         <a href="#foxglove">Foxglove</a>
         <a href="#wifi-dds">Wi-Fi DDS</a>
         <a href="#usb-dds">USB-tether DDS</a>
+        <a href="#remote-config">Remote configuration</a>
+        <a href="#static-peers">Multicast-blocked Wi-Fi</a>
+        <a href="#cameras">Cameras</a>
+        <a href="#sros2">SROS2 security</a>
+        <a href="#robot-mount">Mounting on a robot</a>
         <a href="#studio-tcp">TCP to Studio</a>
         <a href="#adb-tcp">USB / ADB TCP</a>
         <a href="#troubleshooting">Troubleshooting</a>
@@ -89,14 +95,14 @@
           <h2>View ROS 2 data in Foxglove</h2>
           <p>Foxglove connects to a <strong>Foxglove Bridge</strong> WebSocket. The ASR USB Link Monitor is a separate ROS 2 participant: it can activate discovery and report sensor flow, but it does not start the WebSocket server Foxglove needs.</p>
           <ol class="docs-steps">
-            <li>Start the ASR Android Runtime, enable USB tethering and USB DDS, and keep the USB Link Monitor running.</li>
+            <li>Start the ASR Android Runtime, enable USB tethering and USB DDS. The USB Link Monitor is optional.</li>
             <li>In a second terminal, use the same sourced ROS 2 environment, <code>ROS_DOMAIN_ID</code>, and host RMW as the monitor. Launch the bridge:
               <pre class="docs-code"><code>ros2 launch foxglove_bridge foxglove_bridge_launch.xml</code></pre>
             </li>
             <li>In Foxglove, choose <strong>Open a new connection → Foxglove WebSocket</strong> and enter <code>ws://localhost:8765</code> when Foxglove runs on that same computer.</li>
             <li>Check the Data source topic list. To confirm data flow, select a live topic such as <code>/asr_android_&lt;device-id&gt;/imu</code> or <code>/asr_android_&lt;device-id&gt;/camera/image/compressed</code>.</li>
           </ol>
-          <div class="docs-callout"><p><strong>Two processes are needed:</strong> the USB Link Monitor observes DDS over the selected tether interface; Foxglove Bridge exposes the ROS 2 graph over WebSocket. If the bridge launch reports that <code>foxglove_bridge</code> is unavailable, build or install that ROS package in the sourced host environment first. See the <a href="https://docs.foxglove.dev/docs/getting-started/frameworks/ros2" target="_blank" rel="noopener noreferrer">Foxglove ROS 2 guide</a>.</p></div>
+          <div class="docs-callout"><p><strong>Foxglove Bridge is the only process needed:</strong> it exposes the ROS 2 graph over WebSocket. If the bridge launch reports that <code>foxglove_bridge</code> is unavailable, build or install that ROS package in the sourced host environment first. See the <a href="https://docs.foxglove.dev/docs/getting-started/frameworks/ros2" target="_blank" rel="noopener noreferrer">Foxglove ROS 2 guide</a>.</p></div>
         </section>
 
         <section id="wifi-dds">
@@ -107,7 +113,7 @@
             <li>Start the phone runtime, enable <strong>Wi-Fi DDS</strong>, and enable the desired sensor modules.</li>
             <li>Use <code>ros2 topic list</code> to inspect discovered topics. To confirm messages, echo a topic such as <code>/asr_android_168/imu</code>, replacing <code>168</code> with the device ID shown by the runtime.</li>
           </ol>
-          <p>The ASR USB Link Monitor is not needed for Wi-Fi DDS. It is a USB-only diagnostic; Wi-Fi can be checked with an ordinary ROS 2 subscriber or the robot's existing node.</p>
+          <p>The ASR USB Link Monitor is not needed to find the phone. It is an optional USB-only diagnostic; Wi-Fi can be checked with an ordinary ROS 2 subscriber or the robot's existing node.</p>
         </section>
 
         <section id="usb-dds">
@@ -122,6 +128,48 @@
             </li>
           </ol>
           <p>The monitor is optional and USB-only; it reports graph visibility separately from received sensor callbacks. If automatic interface selection is ambiguous, the monitor supports an explicit interface argument. See the <a href="https://github.com/ShreyasDamase/asr-ros2-link-monitor#readme" target="_blank" rel="noopener noreferrer">USB Link Monitor guide</a> for setup and diagnostics.</p>
+        </section>
+
+        <section id="remote-config">
+          <h2>Remote configuration</h2>
+          <p>Turn on <strong>REMOTE CONFIG</strong> under <strong>ADVANCED</strong> on the phone. It is off by default, and it also controls the <code>flashlight</code> and <code>speaker/speech</code> topics.</p>
+          <pre><code>ros2 topic echo --qos-durability transient_local /asr_android_250/config/state
+ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: camera.resolution=640x480}"</code></pre>
+          <ul>
+            <li><code>camera.resolution</code>: <code>320x240</code>, <code>640x480</code> (default), <code>1280x960</code>, <code>640x360</code>, <code>1280x720</code></li>
+            <li><code>camera.id</code>: <code>auto</code>, or an ID from <code>camera.available</code> in <code>config/state</code></li>
+            <li><code>imu.rate_hz</code>: <code>0</code> to <code>1000</code>; <code>0</code> publishes every sample</li>
+            <li><code>sensors.&lt;name&gt;</code>: <code>true</code> or <code>false</code></li>
+          </ul>
+          <p><code>ros2 param</code> can't reach the phone directly from a Fast DDS host, because in testing a Fast DDS client got no reply from a Cyclone DDS service. Topics work across both.</p>
+        </section>
+
+        <section id="static-peers">
+          <h2>Wi-Fi that blocks multicast</h2>
+          <p>Some routers don't pass multicast between devices, and a firewall on the computer can block it too. Ping works, but <code>ros2 node list</code> doesn't show the phone. Set <code>ROS_STATIC_PEERS</code> on both sides: under <strong>ADVANCED</strong> on the phone, enter the computer's IP. On the computer, export the phone's IP:</p>
+          <pre><code>export ROS_STATIC_PEERS=192.168.1.5</code></pre>
+        </section>
+
+        <section id="cameras">
+          <h2>Cameras</h2>
+          <p>Select any camera the phone exposes to apps with <code>camera.id</code>. One camera streams at a time. The tested phones refused to open front and back together, so use two phones, each as its own node, when you need both directions at once. <code>camera.concurrent</code> in <code>config/state</code> lists pairs a phone says it supports.</p>
+          <p>Stale frames are dropped rather than delivered late, and <code>camera_info</code> uses the lens values the phone reports. If a phone reports none, it publishes <code>K[0] = 0</code>, which means uncalibrated.</p>
+        </section>
+
+        <section id="sros2">
+          <h2>SROS2 security</h2>
+          <p>SROS2 encrypts traffic and only allows nodes holding keys from your keystore. It is off by default. In testing, a client without keys received nothing from a secured phone, and a client with keys streamed normally. If keys are missing while <strong>ROS_SECURITY_ENABLE</strong> is on, the node doesn't start, and it never falls back to an unsecured connection.</p>
+          <p>The host must use an RMW built with security. The tested Fast DDS host wasn't, so it used <code>rmw_cyclonedds_cpp</code>. See the <a href="https://github.com/ShreyasDamase/asr-android-runtime#readme" target="_blank" rel="noopener noreferrer">README</a> for key setup.</p>
+        </section>
+
+        <section id="robot-mount">
+          <h2>Mounting on a robot</h2>
+          <ul>
+            <li>The node keeps publishing while the phone is locked.</li>
+            <li>Turn off battery optimization for the app. The app warns you when it's on.</li>
+            <li><strong>START ON BOOT</strong> varies by phone maker. Some phones, such as Xiaomi, also need Autostart turned on.</li>
+            <li>The node restarts by itself when the selected network comes back.</li>
+          </ul>
         </section>
 
         <section id="studio-tcp">
@@ -171,7 +219,7 @@
             <li>Remember that Studio TCP and ROS 2 DDS are independent; enabling one does not start the other.</li>
           </ul>
           <p>For Android installation, complete topic definitions, and build details, consult the <a href="https://github.com/ShreyasDamase/asr-android-runtime#readme" target="_blank" rel="noopener noreferrer">Android Runtime README</a>. Recorded backend tests and known limits are in the <a href="https://github.com/ShreyasDamase/asr-android-runtime/blob/main/docs/android-dds-backend-comparison.md" target="_blank" rel="noopener noreferrer">DDS backend comparison</a>.</p>
-          <div class="docs-callout"><p><strong>Network note:</strong> The current TCP telemetry path does not use TLS, and the inspected DDS configurations do not enable DDS Security. Use trusted networks and destinations. See the <a href="privacy.html">Privacy Policy</a> for more information.</p></div>
+          <div class="docs-callout"><p><strong>Network note:</strong> The current TCP telemetry path does not use TLS, and SROS2 for DDS is optional and off by default. Unless SROS2 is on, data may be visible to parties able to inspect traffic on the route.<a href="privacy.html">Privacy Policy</a> for more information.</p></div>
         </section>
       </article>
     </div>
@@ -181,7 +229,7 @@
     <div class="wrap footer-main">
       <a class="brand" href="index.html"><img class="brand-icon" src="assets/asr-app-icon.png" alt=""><span>ASR <small>ROBOTICS PLATFORM</small></span></a>
       <p>Practical sensor tools for ROS 2 robotics.</p>
-      <div class="footer-links"><a href="docs.html">Documentation</a><a href="privacy.html">Privacy</a><a href="license.html">License</a><a href="notices.html">Notices</a></div>
+      <div class="footer-links"><a href="manual.html">Manual</a><a href="docs.html">Documentation</a><a href="privacy.html">Privacy</a><a href="license.html">License</a><a href="notices.html">Notices</a></div>
     </div>
     <div class="wrap footer-bottom"><span>© 2026 ASR · MAINTAINED BY SHREYAS DAMASE</span><span>BUILT FOR THE REAL WORLD <i class="red-dot"></i></span></div>
   </footer>

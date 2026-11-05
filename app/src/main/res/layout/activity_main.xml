@@ -190,6 +190,288 @@
                 android:letterSpacing="0.04"
                 android:contentDescription="Open Android USB tethering settings"
                 android:visibility="gone" />
+            <TextView
+                android:id="@+id/txtBatteryOptimizationWarning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="4dp"
+                android:text="Battery optimization is on. Android can stop this node while the screen is off."
+                android:textColor="#8A641A"
+                android:fontFamily="@font/space_grotesk"
+                android:textSize="12sp"
+                android:visibility="gone" />
+            <Button
+                android:id="@+id/btnBatteryOptimizationSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:minHeight="44dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textSize="12sp"
+                android:text="OPEN BATTERY SETTINGS"
+                android:fontFamily="@font/space_mono"
+                android:letterSpacing="0.04"
+                android:contentDescription="Open Android battery optimization settings"
+                android:visibility="gone" />
+            <LinearLayout
+                android:id="@+id/rowRos2Advanced"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:minHeight="44dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="Show or hide advanced ROS 2 settings">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="ADVANCED"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.06"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#2D3748" />
+                <TextView
+                    android:id="@+id/txtRos2AdvancedSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.03"
+                    android:textSize="12sp"
+                    android:textColor="#718096" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/layoutRos2Advanced"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp">
+                <TextView
+                    android:layout_width="124dp"
+                    android:layout_height="wrap_content"
+                    android:text="ROS_DOMAIN_ID"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.06"
+                    android:textSize="13sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold"/>
+                <EditText
+                    android:id="@+id/editRos2DomainId"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="0"
+                    android:inputType="number"
+                    android:singleLine="true"
+                    android:textSize="14sp"
+                    android:textColor="#1A202C"
+                    android:textColorHint="#718096"
+                    android:padding="10dp"
+                    android:background="@drawable/input_underline_nothing"/>
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp">
+                <TextView
+                    android:layout_width="124dp"
+                    android:layout_height="wrap_content"
+                    android:text="NODE NAME"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.06"
+                    android:textSize="13sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold"/>
+                <EditText
+                    android:id="@+id/editRos2NodeName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="asr_android"
+                    android:inputType="text"
+                    android:singleLine="true"
+                    android:textSize="14sp"
+                    android:textColor="#1A202C"
+                    android:textColorHint="#718096"
+                    android:padding="10dp"
+                    android:background="@drawable/input_underline_nothing"/>
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp">
+                <TextView
+                    android:layout_width="124dp"
+                    android:layout_height="wrap_content"
+                    android:text="ROS_STATIC_PEERS"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.02"
+                    android:textSize="11sp"
+                    android:textColor="#2D3748"
+                    android:textStyle="bold"/>
+                <EditText
+                    android:id="@+id/editRos2StaticPeers"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="192.168.1.3, 10.0.0.5"
+                    android:inputType="textUri"
+                    android:singleLine="true"
+                    android:textSize="14sp"
+                    android:textColor="#1A202C"
+                    android:textColorHint="#718096"
+                    android:padding="10dp"
+                    android:background="@drawable/input_underline_nothing"/>
+            </LinearLayout>
+            <TextView
+                android:id="@+id/txtRos2ConfigStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="@font/space_grotesk"
+                android:textSize="12sp"
+                android:textColor="@color/asr_text_secondary"
+                android:visibility="gone" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/btnEditRos2Config"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:text="EDIT"
+                    android:textColor="@color/btn_outline_text_nothing"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace"
+                    android:background="@drawable/btn_outline_nothing"
+                    android:stateListAnimator="@null"
+                    android:contentDescription="Edit ROS_DOMAIN_ID and node name" />
+                <Button
+                    android:id="@+id/btnApplyRos2Config"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="APPLY"
+                    android:textColor="@color/btn_outline_text_nothing"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace"
+                    android:background="@drawable/btn_outline_nothing"
+                    android:stateListAnimator="@null"
+                    android:visibility="gone"
+                    android:contentDescription="Apply ROS_DOMAIN_ID and node name" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="REMOTE CONFIG"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.06"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#2D3748" />
+                <org.asr.runtime.ui.SquareSlideSwitch
+                    android:id="@+id/switchRemoteConfig"
+                    android:layout_width="76dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Allow commands from the ROS 2 network" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Allows config/set, flashlight and speaker/speech commands from any node on this ROS_DOMAIN_ID."
+                android:fontFamily="@font/space_grotesk"
+                android:textSize="12sp"
+                android:textColor="@color/asr_text_secondary" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="START ON BOOT"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.06"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#2D3748" />
+                <org.asr.runtime.ui.SquareSlideSwitch
+                    android:id="@+id/switchStartOnBoot"
+                    android:layout_width="76dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Start the runtime after the phone restarts" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Runs after the phone is first unlocked. On Android 14 and later, only the node starts until the app is opened. Some phones, such as Xiaomi, also need Autostart turned on for this app in system settings."
+                android:fontFamily="@font/space_grotesk"
+                android:textSize="12sp"
+                android:textColor="@color/asr_text_secondary" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="ROS_SECURITY_ENABLE"
+                    android:fontFamily="@font/space_mono"
+                    android:letterSpacing="0.03"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#2D3748" />
+                <org.asr.runtime.ui.SquareSlideSwitch
+                    android:id="@+id/switchRosSecurity"
+                    android:layout_width="76dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Turn SROS2 security on or off" />
+            </LinearLayout>
+            <TextView
+                android:id="@+id/txtRosSecurityStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="SROS2 encrypts traffic and only allows nodes with keys. Needs the enclave /asr_android."
+                android:fontFamily="@font/space_grotesk"
+                android:textSize="12sp"
+                android:textColor="@color/asr_text_secondary" />
+            </LinearLayout>
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
@@ -205,7 +487,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="DISCOVERY STATUS"
+                    android:text="DISCOVERY"
                     android:fontFamily="@font/space_mono"
                     android:letterSpacing="0.06"
                     android:textSize="13sp"
@@ -233,7 +515,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="ROS 2 discovery status is shown separately from TCP."
+                android:text="Discovery runs while DDS is on. Other nodes appear here when they join the same ROS_DOMAIN_ID."
                 android:fontFamily="@font/space_grotesk"
                 android:textSize="12sp"
                 android:textColor="@color/asr_text_secondary" />

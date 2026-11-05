@@ -133,4 +133,4 @@ Keep the upload keystore backed up in encrypted storage and its passwords in a p
 
 ## Current 16 KB evidence and limits
 
-The static Cyclone artifact audit is recorded in `ANDROID_16KB_RESEARCH_EXPORT.md`. It passed ELF segment alignment and APK/AAB packaging checks for the built Cyclone artifacts. Fast DDS remains deferred as requested. Do not claim full 16 KB device compatibility until runtime validation succeeds on a genuine 16 KB environment.
+The Cyclone build also ran on a 16 KB Android 37 emulator with `pageSizeCompat=0`, including the ROS 2 node and SROS2 plugins. The earlier static artifact audit passed ELF segment alignment and APK/AAB packaging checks for the built Cyclone artifacts. Fast DDS remains deferred as requested. No physical 16 KB phone has been tested, and the emulator's sensors are simulated.
