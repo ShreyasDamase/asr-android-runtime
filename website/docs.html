@@ -133,7 +133,7 @@
         <section id="remote-config">
           <h2>Remote configuration</h2>
           <p>Turn on <strong>REMOTE CONFIG</strong> under <strong>ADVANCED</strong> on the phone. It is off by default, and it also controls the <code>flashlight</code> and <code>speaker/speech</code> topics.</p>
-          <pre><code>ros2 topic echo --qos-durability transient_local /asr_android_250/config/state
+          <pre class="docs-code"><code>ros2 topic echo --qos-durability transient_local /asr_android_250/config/state
 ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: camera.resolution=640x480}"</code></pre>
           <ul>
             <li><code>camera.resolution</code>: <code>320x240</code>, <code>640x480</code> (default), <code>1280x960</code>, <code>640x360</code>, <code>1280x720</code></li>
@@ -147,7 +147,7 @@ ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: ca
         <section id="static-peers">
           <h2>Wi-Fi that blocks multicast</h2>
           <p>Some routers don't pass multicast between devices, and a firewall on the computer can block it too. Ping works, but <code>ros2 node list</code> doesn't show the phone. Set <code>ROS_STATIC_PEERS</code> on both sides: under <strong>ADVANCED</strong> on the phone, enter the computer's IP. On the computer, export the phone's IP:</p>
-          <pre><code>export ROS_STATIC_PEERS=192.168.1.5</code></pre>
+          <pre class="docs-code"><code>export ROS_STATIC_PEERS=192.168.1.5</code></pre>
         </section>
 
         <section id="cameras">
