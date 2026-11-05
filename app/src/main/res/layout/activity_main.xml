@@ -436,7 +436,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Runs after the phone is first unlocked. On Android 14 and later, only the node starts until the app is opened. Some phones, such as Xiaomi, also need Autostart turned on for this app in system settings."
+                android:text="Runs after the phone is first unlocked. Only the node starts. Open the app and tap START to start sensors. Some phones, such as Xiaomi, also need Autostart turned on for this app in system settings."
                 android:fontFamily="@font/space_grotesk"
                 android:textSize="12sp"
                 android:textColor="@color/asr_text_secondary" />

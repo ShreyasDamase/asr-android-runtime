@@ -53,7 +53,7 @@ class  MainActivity : ComponentActivity() {
     private companion object {
         private val ROS2_NODE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*$")
         private val IPV4_ADDRESS = Regex("^(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$")
-        const val KEY_SENSOR_DISCLOSURE_ACCEPTED = "sensor_data_disclosure_v1_accepted"
+        const val KEY_SENSOR_DISCLOSURE_ACCEPTED = "sensor_data_disclosure_v2_accepted"
         const val KEY_EXIT_CONFIRMATION_VISIBLE = "exit_confirmation_visible"
     }
 

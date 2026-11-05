@@ -13,7 +13,7 @@ The first distribution target is the Google Play internal testing track so the m
 - Camera is declared optional so Play does not filter out devices without camera hardware.
 - Release build keeps minification disabled and references JNI-preserving ProGuard rules.
 - Release signing can be configured with local properties or environment variables. No release keystore or signing credentials are configured in this checkout.
-- Both flavors use package ID `org.asr.runtime`; the Play candidate is Cyclone DDS, version `1.0.2-cyclone` (versionCode `3`). Build and upload only the Cyclone flavor for this listing. Play fixes a new listing's package ID at its first app-bundle upload.
+- Both flavors use package ID `org.asr.runtime`; the Play candidate is Cyclone DDS, version `1.0.4-cyclone` (versionCode `5`). Build and upload only the Cyclone flavor for this listing. Play fixes a new listing's package ID at its first app-bundle upload.
 - Current Cyclone APK and AAB outputs passed static ELF LOAD alignment checks (65 packaged ARM64 libraries), APK `zipalign -P 16` checks, and AAB `PAGE_ALIGNMENT_16K` inspection. These checks establish artifact alignment only, not device runtime behavior.
 - **AAB currently available:** `app/build/outputs/bundle/cycloneRelease/app-cyclone-release.aab` (about 11 MB), but it is **unsigned** and is not the Play upload artifact yet.
 - **APK currently available:** `app/build/outputs/apk/cyclone/release/app-cyclone-release-unsigned.apk` (about 21 MB), also unsigned. For Play distribution, use the signed AAB; keep debug APKs for local development only.
@@ -67,7 +67,7 @@ The all-flavor build was last run successfully after setting the shared package 
 
 - [x] Package ID selected: `org.asr.runtime`. Build and upload the Cyclone flavor for this listing.
 - [ ] Configure the existing Play upload key locally; verify it matches the key already registered in Play Console. No release-signing values are currently configured in this checkout. Do not create a replacement key for an existing listing.
-- [x] Increment `versionCode` above `2`; current version is `1.0.2` / code `3`.
+- [x] Increment `versionCode` above `2`; current version is `1.0.4` / code `5`.
 - [ ] Build the signed Cyclone release AAB from the reviewed commit and verify its package ID, version, signature, native libraries, and 16 KB packaging alignment.
 - [ ] Upload to the Internal testing track, add the maintainer and friend as testers, and share the opt-in link.
 - [ ] Run functional checks on the testers' devices, including startup defaults, sensor selection, camera restart, DDS discovery, TCP, and clean Exit App shutdown; capture logs for failures.
