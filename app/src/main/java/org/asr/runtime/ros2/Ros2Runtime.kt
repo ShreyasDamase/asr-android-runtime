@@ -170,6 +170,7 @@ class Ros2Runtime(private val context: Context) {
                 throw IllegalStateException("${BuildConfig.ASR_DDS_BACKEND} DDS rejected the profile path")
             }
 
+            RosClock.sync()
             val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
             if (!started) {
                 Log.e(TAG, "Failed to start native ROS 2 node $nodeNamespace/$nodeName on domain $domainId")
@@ -562,12 +563,12 @@ class Ros2Runtime(private val context: Context) {
             accel.map { it.toDouble() }.toDoubleArray(),
             gyro.map { it.toDouble() }.toDoubleArray(),
             doubleArrayOf(rotation.getOrElse(0) { 0f }.toDouble(), rotation.getOrElse(1) { 0f }.toDouble(), rotation.getOrElse(2) { 0f }.toDouble(), rotation.getOrElse(3) { 1f }.toDouble()),
-            timestampNs
+            RosClock.toUnixNs(timestampNs)
         )
     }
 
     fun publishGps(latitude: Double, longitude: Double, altitude: Double, accuracy: Float, timestampNs: Long) {
-        if (ready()) NativeRos2Bridge.publishNavSatFix("gps", latitude, longitude, altitude, accuracy, timestampNs)
+        if (ready()) NativeRos2Bridge.publishNavSatFix("gps", latitude, longitude, altitude, accuracy, RosClock.toUnixNs(timestampNs))
     }
 
     fun publishSteps(steps: Int) {
@@ -579,7 +580,7 @@ class Ros2Runtime(private val context: Context) {
     }
 
     fun publishBattery(percentage: Float, temperature: Float, voltageMv: Float, charging: Boolean, timestampNs: Long) {
-        if (ready()) NativeRos2Bridge.publishBattery("battery", percentage, temperature, voltageMv, charging, timestampNs)
+        if (ready()) NativeRos2Bridge.publishBattery("battery", percentage, temperature, voltageMv, charging, RosClock.toUnixNs(timestampNs))
     }
 
     fun publishEnvironment(kind: Int, value: Double, timestampNs: Long) {
@@ -590,13 +591,14 @@ class Ros2Runtime(private val context: Context) {
             2 -> "environment/temperature"
             else -> "environment/relative_humidity"
         }
-        NativeRos2Bridge.publishScalar(topic, value, timestampNs, kind)
+        NativeRos2Bridge.publishScalar(topic, value, RosClock.toUnixNs(timestampNs), kind)
     }
 
     fun publishCameraJpeg(data: ByteArray, width: Int, height: Int, timestampNs: Long) {
         if (ready()) {
-            NativeRos2Bridge.publishCompressedImage("camera/image/compressed", data, "jpeg", timestampNs)
-            NativeRos2Bridge.publishCameraInfo("camera/camera_info", width, height, timestampNs)
+            val stampNs = RosClock.toUnixNs(timestampNs)
+            NativeRos2Bridge.publishCompressedImage("camera/image/compressed", data, "jpeg", stampNs)
+            NativeRos2Bridge.publishCameraInfo("camera/camera_info", width, height, stampNs)
         }
     }
 
