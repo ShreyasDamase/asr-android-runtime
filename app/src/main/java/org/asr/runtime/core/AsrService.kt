@@ -1252,6 +1252,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                 .put("requested_resolution", "${config.resolution.width}x${config.resolution.height}")
                 .put("resolution", ros2Runtime.cameraStreamSize())
                 .put("measured_fps", measuredCameraFps)
+                .put("frames_dropped", ros2Runtime.cameraFramesDropped())
                 .put("resolution_options", org.json.JSONArray(RemoteConfig.CAMERA_RESOLUTIONS))
                 .put("calibration", when {
                     calibrationOverride() != null -> "checkerboard"
@@ -1349,6 +1350,14 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                 .putBoolean(PREF_REMOTE_CONFIG_ENABLED, intent.getBooleanExtra("value", false))
                 .apply()
+            return
+        }
+        if (flag == "camera_probe" && org.asr.runtime.BuildConfig.DEBUG) {
+            org.asr.runtime.camera.CameraConcurrencyProbe.run(
+                this,
+                intent.getStringExtra("ids")?.split(",").orEmpty(),
+                intent.getIntExtra("seconds", 6)
+            )
             return
         }
         if (flag == "start_on_boot" && org.asr.runtime.BuildConfig.DEBUG) {

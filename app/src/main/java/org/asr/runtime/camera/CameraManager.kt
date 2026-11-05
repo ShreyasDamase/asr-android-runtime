@@ -14,6 +14,8 @@ import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.AspectRatio
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -125,7 +127,13 @@ class CameraManager(
         Log.i(TAG, "Starting Camera...")
         Log.i(TAG, "Config: ${config.toLogString()}")
 
+        val aspectRatio = if (config.resolution.width * 3 == config.resolution.height * 4) {
+            AspectRatio.RATIO_4_3
+        } else {
+            AspectRatio.RATIO_16_9
+        }
         val resolutionSelector = ResolutionSelector.Builder()
+            .setAspectRatioStrategy(AspectRatioStrategy(aspectRatio, AspectRatioStrategy.FALLBACK_RULE_AUTO))
             .setResolutionStrategy(
                 ResolutionStrategy(
                     config.resolution,

@@ -135,6 +135,16 @@ Some routers don't pass multicast between devices. Ping works, but `ros2 node li
 
 The node keeps publishing while the phone is locked, because the app holds wake and Wi-Fi locks whenever the runtime or DDS is on. For a phone mounted on a robot, also exempt the app from battery optimization, since some phones stop background apps anyway.
 
+### Timestamps across machines
+
+Messages use Unix time from the phone's clock. If `header.stamp` looks old or ahead on another machine, compare the clocks first: in one test, a phone running 690 ms behind made a delay of about 150 ms look like 850 ms.
+
+### Cameras
+
+`camera.id` selects any camera the phone exposes to apps, and `camera.resolution` selects 4:3 (`320x240`, `640x480`, `1280x960`) or 16:9 (`640x360`, `1280x720`). One camera streams at a time. `camera.concurrent` in `config/state` lists camera pairs a phone says can stream together. For front and back at once on a phone that lists none, such as the tested Redmi Note 11 Pro, use two phones, each as its own node.
+
+Stale frames are dropped rather than delivered late, and `frames_dropped` in `config/state` counts them.
+
 ### Start on boot
 
 Turn on **START ON BOOT** to start the runtime after the phone restarts. Android sends the boot signal only after the phone is first unlocked. On Android 14 and later, only the DDS node starts until the app is opened, because of limits on starting camera and microphone services at boot. Some phones, such as Xiaomi, also need **Autostart** turned on for the app in system settings.
@@ -150,7 +160,7 @@ ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: ca
 
 | Key | Values |
 | --- | --- |
-| `camera.resolution` | `320x240`, `640x480` (default), `1280x960` |
+| `camera.resolution` | `320x240`, `640x480` (default), `1280x960`, `640x360`, `1280x720` |
 | `camera.id` | `auto`, or an ID from `camera.available` in `config/state` |
 | `camera.calibration` | `WxH,fx,fy,cx,cy,k1,k2,t1,t2,k3`, or `clear` |
 | `imu.rate_hz` | `0` to `1000`; `0` publishes every sample |

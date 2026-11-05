@@ -210,6 +210,7 @@ class  MainActivity : ComponentActivity() {
         updatePermissionTable()
         updateHardwareTable()
         updateUsbTetheringSettingsButton()
+        updateBatteryOptimizationWarning()
         handler.post(refreshRunnable)
     }
 
@@ -1089,6 +1090,8 @@ class  MainActivity : ComponentActivity() {
                         }
                         syncDdsSwitches()
                         if (!ros2ConfigEditing) loadRos2Config()
+                        updateRos2AdvancedSummary()
+                        updateBatteryOptimizationWarning()
                         val routeDescription = status.pathSummary
                         binding.txtDdsPathStatus.text = buildDdsPathSummary(
                             binding.switchDdsWifi.isChecked,
@@ -1155,7 +1158,40 @@ class  MainActivity : ComponentActivity() {
         }
     }
 
+    /** Warns when Android may stop the node while the screen is off. */
+    private fun updateBatteryOptimizationWarning() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val active = prefs.getBoolean("dds_wifi_enabled", false) || prefs.getBoolean("dds_usb_enabled", false) ||
+            prefs.getBoolean("runtime_enabled", false)
+        val power = getSystemService(android.os.PowerManager::class.java)
+        val show = active && power?.isIgnoringBatteryOptimizations(packageName) == false
+        val visibility = if (show) android.view.View.VISIBLE else android.view.View.GONE
+        binding.txtBatteryOptimizationWarning.visibility = visibility
+        // Matches the USB warning, which already has a readable color in each theme.
+        binding.txtBatteryOptimizationWarning.setTextColor(binding.txtUsbTetheringWarning.currentTextColor)
+        binding.btnBatteryOptimizationSettings.visibility = visibility
+    }
+
+    private fun updateRos2AdvancedSummary() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val chevron = if (binding.layoutRos2Advanced.visibility == android.view.View.VISIBLE) "⌃" else "⌄"
+        val security = if (prefs.getBoolean("ros_security_enable", false)) "SROS2 ON" else "SROS2 OFF"
+        binding.txtRos2AdvancedSummary.text = "DOMAIN ${prefs.getInt("ros2_domain_id", 0)} · $security $chevron"
+    }
+
     private fun setupRos2Config() {
+        binding.rowRos2Advanced.setOnClickListener {
+            val open = binding.layoutRos2Advanced.visibility != android.view.View.VISIBLE
+            binding.layoutRos2Advanced.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            updateRos2AdvancedSummary()
+        }
+        binding.btnBatteryOptimizationSettings.setOnClickListener {
+            runCatching {
+                startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+        }
+        updateRos2AdvancedSummary()
+        updateBatteryOptimizationWarning()
         loadRos2Config()
         setRos2ConfigEditing(false)
         binding.btnEditRos2Config.setOnClickListener {

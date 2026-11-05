@@ -64,6 +64,7 @@ class Ros2Runtime(private val context: Context) {
     private val imuGyro = DoubleArray(3)
     private val imuOrientation = DoubleArray(4)
     @Volatile private var cameraFrames = 0
+    @Volatile private var cameraFramesDropped = 0L
     private var cameraFpsSinceNs = SystemClock.elapsedRealtimeNanos()
     private var interfaceMonitorRunnable: Runnable? = null
     private var startRetryRunnable: Runnable? = null
@@ -412,7 +413,10 @@ ${peers.joinToString("\n") { "                        <Peer address=\"${xmlEscap
             $interfaceRows
                       </Interfaces>
                       <AllowMulticast>default</AllowMulticast>
-                    </General>$discoveryRows
+                    </General>
+                    <Internal>
+                      <SocketSendBufferSize min="64KiB" max="128KiB"/>
+                    </Internal>$discoveryRows
 $traceRows
                   </Domain>
                 </CycloneDDS>
@@ -643,6 +647,9 @@ $traceRows
         return if (elapsedNs > 0) frames * 1e9 / elapsedNs else 0.0
     }
 
+    /** Camera frames dropped as stale since the node started. */
+    fun cameraFramesDropped(): Long = cameraFramesDropped
+
     fun cameraStreamSize(): String = if (streamWidth > 0) "${streamWidth}x${streamHeight}" else ""
 
     fun publishImu(accel: FloatArray, gyro: FloatArray, rotation: FloatArray, timestampNs: Long) {
@@ -745,8 +752,14 @@ $traceRows
 
     fun publishCameraJpeg(data: ByteArray, width: Int, height: Int, timestampNs: Long) {
         if (ready()) {
-            cameraFrames++
             val stampNs = RosClock.toUnixNs(timestampNs)
+            // A robot needs the newest frame, not an old one delivered late. Drop stale frames.
+            val ageNs = System.currentTimeMillis() * 1_000_000L - stampNs
+            if (ageNs > MAX_CAMERA_FRAME_AGE_NS) {
+                cameraFramesDropped++
+                return
+            }
+            cameraFrames++
             NativeRos2Bridge.publishCompressedImage("camera/image/compressed", data, "jpeg", stampNs)
             val lens = cameraIntrinsics
             var stream = streamIntrinsics
@@ -779,6 +792,7 @@ $traceRows
 
     companion object {
         private const val TAG = "Ros2Runtime"
+        private const val MAX_CAMERA_FRAME_AGE_NS = 250_000_000L
         private val NO_DISTORTION = DoubleArray(5)
         private const val START_RETRY_BASE_MS = 1_000L
         private const val START_RETRY_MAX_MS = 30_000L
