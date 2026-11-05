@@ -17,7 +17,7 @@ New to ROS 2? Start with the [illustrated manual](website/manual.html).
 
 | Version | Asset | Description |
 | ------- | ----- | ----------- |
-| 1.0.0 | [ASR Android Runtime APK](https://github.com/ShreyasDamase/asr-android-runtime/releases/latest) | Official Android APK — install directly on your phone, no build required |
+| 1.0.3 | [ASR Android Runtime APK](https://github.com/ShreyasDamase/asr-android-runtime/releases/latest) | Signed Android APK — install directly on your phone, no build required |
 | 1.0.0 | [ros2_android_install-v1.0.0.zip](https://github.com/ShreyasDamase/asr-android-runtime/releases/latest) | Pre-built Android ROS 2 prefix — required only if building from source |
 
 ## Requirements
