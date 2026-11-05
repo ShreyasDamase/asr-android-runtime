@@ -583,6 +583,29 @@ ${peers.joinToString("\n") { "                        <Peer address=\"${xmlEscap
         }
     }
 
+    /**
+     * Publishes sensor frames on /tf_static. Rotations follow Android's device axes (x right, y up,
+     * z out of the screen) and each camera's usual mounting. Translations are zero because phones
+     * don't report lens offsets, so add your own base_link transform for precise work.
+     */
+    fun publishStaticTransforms(frontCamera: Boolean) {
+        if (!ready()) return
+        val s = 0.7071067811865476
+        val camera = if (frontCamera) {
+            doubleArrayOf(0.0, 0.0, 0.0, 0.0, 0.0, -s, s)
+        } else {
+            doubleArrayOf(0.0, 0.0, 0.0, s, -s, 0.0, 0.0)
+        }
+        val identity = doubleArrayOf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+        val ok = NativeRos2Bridge.publishStaticTransforms(
+            "base_link",
+            arrayOf("imu_link", "camera_optical_frame", "gps_link", "battery_link", "environment_link"),
+            identity + camera + identity + identity + identity,
+            RosClock.toUnixNs(SystemClock.elapsedRealtimeNanos())
+        )
+        if (!ok) Log.w(TAG, "tf_static publish failed")
+    }
+
     /** Publishes the retained config/state topic. */
     fun publishConfigState(json: String) {
         if (!ready()) return

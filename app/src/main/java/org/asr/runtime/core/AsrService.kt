@@ -969,6 +969,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         val nodeName = "${baseName}_${unsignedId}"
         val nodeNamespace = "/asr_android_${unsignedId}"
         ros2Runtime.startIfNeeded(nodeName, nodeNamespace)
+        publishStaticTransforms()
         // The battery receiver is event-driven and may have no new broadcast
         // after a DDS path restart. Republish its cached value on the new node.
         batteryManager.publishCurrentRosState()
@@ -1053,6 +1054,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private fun applyCameraConfig(config: CameraConfig) {
         activeCameraConfig = config
+        publishStaticTransforms()
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putInt(PREF_CAMERA_WIDTH, config.resolution.width)
             .putInt(PREF_CAMERA_HEIGHT, config.resolution.height)
@@ -1066,6 +1068,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         } else {
             cameraManager.config = activeCameraConfig
         }
+    }
+
+    private fun publishStaticTransforms() {
+        ros2Runtime.publishStaticTransforms(
+            activeCameraConfig.lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT
+        )
     }
 
     private fun loadCameraConfig(): CameraConfig {

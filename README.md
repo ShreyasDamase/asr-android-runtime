@@ -120,6 +120,21 @@ The monitor is not needed to make the phone visible: in Mac tests with the Cyclo
 
 The standalone package installation and detailed diagnostic interpretation are documented in [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor). A copy is also present under [`asr_ros2/`](asr_ros2/README.md).
 
+### Wi-Fi routers that block multicast
+
+Some routers don't pass multicast between devices. Ping works, but `ros2 node list` shows nothing and the phone stays on **NO OTHER NODES**. Point both sides at each other:
+
+1. On the phone, press **EDIT** and set `ROS_STATIC_PEERS` to the computer's IP address.
+2. On the computer, set the phone's IP address before running ROS 2 commands:
+
+   ```bash
+   export ROS_STATIC_PEERS=192.168.1.5
+   ```
+
+### Locked screens
+
+The node keeps publishing while the phone is locked, because the app holds wake and Wi-Fi locks whenever the runtime or DDS is on. For a phone mounted on a robot, also exempt the app from battery optimization, since some phones stop background apps anyway.
+
 ### Configure the phone remotely
 
 Turn on **REMOTE CONFIG** on the phone. It is off by default, and it also controls `flashlight` and `speaker/speech`. Any node on the same `ROS_DOMAIN_ID` can then send these commands, because DDS Security is not enabled.
@@ -153,7 +168,7 @@ In Foxglove, choose **Open a new connection → Foxglove WebSocket** and enter `
 
 ## ROS 2 topic reference
 
-Topics are relative to `/asr_android_<device-id>`. For example, a device with ID `168` publishes IMU data on `/asr_android_168/imu`. Sensor availability and message rates depend on hardware, permissions, and module state.
+Topics are relative to `/asr_android_<device-id>`. For example, a device with ID `168` publishes IMU data on `/asr_android_168/imu`. Sensor availability and message rates depend on hardware, permissions, and module state. `config/state`, `config/set` and the global `/tf_static` are also available.
 
 | Topic suffix | ROS 2 type | Description |
 | --- | --- | --- |

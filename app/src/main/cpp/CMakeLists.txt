@@ -117,6 +117,16 @@ if(ASR_DDS_BACKEND STREQUAL "cyclone")
     target_compile_definitions(asr_ros2 PRIVATE
             ASR_RMW_IMPLEMENTATION="rmw_cyclonedds_cpp"
             ASR_USE_CYCLONE_DDS=1)
+    # TFMessage is bundled with the app for Cyclone builds, used for tf_static.
+    set(TF2_MSGS_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/arm64-v8a")
+    foreach(tf2_lib generator_c typesupport_c typesupport_introspection_c)
+        add_library(tf2_msgs_${tf2_lib} SHARED IMPORTED)
+        set_target_properties(tf2_msgs_${tf2_lib} PROPERTIES
+            IMPORTED_LOCATION "${TF2_MSGS_LIB_DIR}/libtf2_msgs__rosidl_${tf2_lib}.so"
+            IMPORTED_NO_SONAME TRUE)
+    endforeach()
+    target_include_directories(asr_ros2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
+    target_link_libraries(asr_ros2 tf2_msgs_generator_c tf2_msgs_typesupport_c tf2_msgs_typesupport_introspection_c)
     target_link_libraries(asr_ros2
             rmw_cyclonedds_cpp
             ddsc

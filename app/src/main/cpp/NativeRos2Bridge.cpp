@@ -48,6 +48,9 @@
 #include <sensor_msgs/msg/detail/relative_humidity__rosidl_typesupport_introspection_c.h>
 #include <sensor_msgs/msg/detail/compressed_image__rosidl_typesupport_introspection_c.h>
 #include <sensor_msgs/msg/detail/camera_info__rosidl_typesupport_introspection_c.h>
+#include <tf2_msgs/msg/tf_message.h>
+#include <tf2_msgs/msg/detail/tf_message__rosidl_typesupport_introspection_c.h>
+#include <geometry_msgs/msg/transform_stamped.h>
 #define ASR_MESSAGE_TYPE_SUPPORT(package_name, namespace_name, message_name) \
     ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_introspection_c, package_name, namespace_name, message_name)()
 #else
@@ -97,6 +100,8 @@ static void message_received_callback(const char *topic_name, const char *messag
         env->DeleteLocalRef(j_topic);
         env->DeleteLocalRef(j_msg);
     }
+    // This thread never returns to Java, so local references must be released by hand.
+    env->DeleteLocalRef(cls);
 }
 
 static void run_spinner() {
@@ -178,6 +183,13 @@ static void run_spinner() {
             }
         }
         rcl_wait_set_fini(&wait_set);
+    }
+    // A native thread that attached to the JVM has to detach before it exits.
+    if (g_jvm) {
+        JNIEnv *env = nullptr;
+        if (g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6) == JNI_OK) {
+            g_jvm->DetachCurrentThread();
+        }
     }
     LOGI("ROS 2 spinner thread exiting");
 }
@@ -670,6 +682,62 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
     }
     if (topic) env->ReleaseStringUTFChars(j_topic, topic);
     return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * Publishes latched transforms on /tf_static. poses holds x, y, z, qx, qy, qz, qw for each child.
+ * Frame names get the node namespace prefix, so several phones stay separate in TF.
+ */
+JNIEXPORT jboolean JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_publishStaticTransforms(JNIEnv *env, jobject, jstring j_parent,
+                                                                   jobjectArray j_children, jdoubleArray j_poses,
+                                                                   jlong timestamp_ns) {
+#ifdef ASR_USE_CYCLONE_DDS
+    std::lock_guard<std::mutex> lock(node_mutex);
+    if (!node_ready) return JNI_FALSE;
+    rcl_publisher_t *publisher = nullptr;
+    if (!ensure_publisher("/tf_static", ASR_MESSAGE_TYPE_SUPPORT(tf2_msgs, msg, TFMessage), &publisher, 2)) {
+        return JNI_FALSE;
+    }
+    const std::string prefix = local_node_namespace.size() > 1 ? local_node_namespace.substr(1) + "/" : "";
+    const char *parent_chars = env->GetStringUTFChars(j_parent, nullptr);
+    if (!parent_chars) return JNI_FALSE;
+    const std::string parent = prefix + parent_chars;
+    env->ReleaseStringUTFChars(j_parent, parent_chars);
+
+    const jsize count = env->GetArrayLength(j_children);
+    std::vector<jdouble> poses(static_cast<size_t>(count) * 7);
+    env->GetDoubleArrayRegion(j_poses, 0, count * 7, poses.data());
+
+    tf2_msgs__msg__TFMessage msg;
+    tf2_msgs__msg__TFMessage__init(&msg);
+    geometry_msgs__msg__TransformStamped__Sequence__init(&msg.transforms, static_cast<size_t>(count));
+    for (jsize i = 0; i < count; ++i) {
+        geometry_msgs__msg__TransformStamped &item = msg.transforms.data[i];
+        item.header.stamp.sec = static_cast<int32_t>(timestamp_ns / 1000000000LL);
+        item.header.stamp.nanosec = static_cast<uint32_t>(timestamp_ns % 1000000000LL);
+        rosidl_runtime_c__String__assign(&item.header.frame_id, parent.c_str());
+        auto j_child = static_cast<jstring>(env->GetObjectArrayElement(j_children, i));
+        const char *child_chars = env->GetStringUTFChars(j_child, nullptr);
+        rosidl_runtime_c__String__assign(&item.child_frame_id, (prefix + child_chars).c_str());
+        env->ReleaseStringUTFChars(j_child, child_chars);
+        env->DeleteLocalRef(j_child);
+        const jdouble *pose = &poses[static_cast<size_t>(i) * 7];
+        item.transform.translation.x = pose[0];
+        item.transform.translation.y = pose[1];
+        item.transform.translation.z = pose[2];
+        item.transform.rotation.x = pose[3];
+        item.transform.rotation.y = pose[4];
+        item.transform.rotation.z = pose[5];
+        item.transform.rotation.w = pose[6];
+    }
+    const bool ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
+    if (!ok) rcl_reset_error();
+    tf2_msgs__msg__TFMessage__fini(&msg);
+    return ok ? JNI_TRUE : JNI_FALSE;
+#else
+    return JNI_FALSE;
+#endif
 }
 
 JNIEXPORT void JNICALL
