@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar icons must be one color on transparent. Android tints this shape. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,88 L47,20 Q49,16 53,16 Q57,16 59,20 L86,88 L69,88 L53,54 L37,88 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M53,65 m-7,0 a7,7 0,1 0,14 0 a7,7 0,1 0,-14 0" />
+</vector>
