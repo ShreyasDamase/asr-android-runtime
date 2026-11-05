@@ -1048,7 +1048,14 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         }
     }
 
-    private fun setRos2DomainId(value: Int) {
+    /** Saves the node name prefix and restarts the node. A null alias restores the default. */
+    fun setNodeAlias(alias: String?) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(PREF_NODE_ALIAS, alias).apply()
+        Log.i(TAG, "Node alias set to: $alias")
+        restartRos2IfEnabled()
+    }
+
+    fun setRos2DomainId(value: Int) {
         if (exitRequested) return
         serviceScope.launch(Dispatchers.IO) {
             ros2LifecycleMutex.withLock {

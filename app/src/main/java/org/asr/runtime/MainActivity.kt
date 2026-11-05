@@ -51,6 +51,7 @@ import java.util.*
 class  MainActivity : ComponentActivity() {
 
     private companion object {
+        private val ROS2_NODE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*$")
         const val KEY_SENSOR_DISCLOSURE_ACCEPTED = "sensor_data_disclosure_v1_accepted"
         const val KEY_EXIT_CONFIRMATION_VISIBLE = "exit_confirmation_visible"
     }
@@ -366,6 +367,7 @@ class  MainActivity : ComponentActivity() {
         }
         binding.switchDdsWifi.setOnCheckedChangeListener(onDdsPathChanged)
         binding.switchDdsUsb.setOnCheckedChangeListener(onDdsPathChanged)
+        setupRos2Config()
         TactileFeedbackHelper.prepare(binding.switchDdsWifi)
         TactileFeedbackHelper.prepare(binding.switchDdsUsb)
         binding.btnUsbTetheringSettings.setOnClickListener { openUsbTetheringSettings() }
@@ -1083,6 +1085,7 @@ class  MainActivity : ComponentActivity() {
                         } else {
                             binding.progressRos2.stopIndeterminate()
                         }
+                        syncDdsSwitches()
                         val routeDescription = status.pathSummary
                         binding.txtDdsPathStatus.text = buildDdsPathSummary(
                             binding.switchDdsWifi.isChecked,
@@ -1147,6 +1150,58 @@ class  MainActivity : ComponentActivity() {
                 Toast.makeText(this, "Permissions required for ASR", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun setupRos2Config() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        binding.editRos2DomainId.setText(prefs.getInt("ros2_domain_id", 0).toString())
+        binding.editRos2NodeName.setText(prefs.getString("node_alias", null).orEmpty())
+        binding.btnApplyRos2Config.setOnClickListener { applyRos2Config() }
+    }
+
+    private fun applyRos2Config() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val domainId = binding.editRos2DomainId.text?.toString()?.trim()?.toIntOrNull()
+        if (domainId == null || domainId !in 0..232) {
+            binding.txtRos2ConfigStatus.text = "ROS_DOMAIN_ID must be between 0 and 232."
+            return
+        }
+        val nodeName = binding.editRos2NodeName.text?.toString()?.trim().orEmpty()
+        if (nodeName.isNotEmpty() && !ROS2_NODE_NAME.matches(nodeName)) {
+            binding.txtRos2ConfigStatus.text =
+                "Node name must start with a letter and use only letters, numbers and underscores."
+            return
+        }
+        val alias = nodeName.ifEmpty { null }
+        val domainChanged = domainId != prefs.getInt("ros2_domain_id", 0)
+        val nameChanged = alias != prefs.getString("node_alias", null)
+        if (!domainChanged && !nameChanged) {
+            binding.txtRos2ConfigStatus.text = "No changes to apply."
+            return
+        }
+        if (nameChanged) {
+            if (domainChanged) prefs.edit().putInt("ros2_domain_id", domainId).apply()
+            viewModel.setNodeAlias(alias)
+        }
+        if (domainChanged) viewModel.setRos2DomainId(domainId)
+        binding.txtRos2ConfigStatus.text = if (domainChanged) {
+            "Applied. Set ROS_DOMAIN_ID=$domainId on other machines to discover this node."
+        } else {
+            "Applied. Node restarted with the new name."
+        }
+    }
+
+    /** The DDS path can change without this screen, such as from a service command. */
+    private fun syncDdsSwitches() {
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        val wifi = prefs.getBoolean("dds_wifi_enabled", prefs.getBoolean("ros2_enabled", false))
+        val usb = prefs.getBoolean("dds_usb_enabled", false)
+        if (binding.switchDdsWifi.isChecked == wifi && binding.switchDdsUsb.isChecked == usb) return
+        val wasInitializing = initializingControls
+        initializingControls = true
+        binding.switchDdsWifi.isChecked = wifi
+        binding.switchDdsUsb.isChecked = usb
+        initializingControls = wasInitializing
     }
 
     override fun onDestroy() {
