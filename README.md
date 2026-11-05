@@ -137,7 +137,7 @@ The node keeps publishing while the phone is locked, because the app holds wake 
 
 ### Configure the phone remotely
 
-Turn on **REMOTE CONFIG** on the phone. It is off by default, and it also controls `flashlight` and `speaker/speech`. Any node on the same `ROS_DOMAIN_ID` can then send these commands, because DDS Security is not enabled.
+Turn on **REMOTE CONFIG** on the phone. It is off by default, and it also controls `flashlight` and `speaker/speech`. Unless SROS2 is on, any node on the same `ROS_DOMAIN_ID` can then send these commands.
 
 ```bash
 ros2 topic echo --qos-durability transient_local /asr_android_250/config/state
@@ -155,6 +155,42 @@ ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: ca
 `ROS_DOMAIN_ID`, node name and `ROS_STATIC_PEERS` can only be changed on the phone. Use `ROS_STATIC_PEERS` on networks that block multicast.
 
 Remote config uses topics because, in Mac tests, a Fast DDS client got no reply from a Cyclone DDS service, so `ros2 param` cannot reach the phone directly. Python examples, including a node that offers real ROS 2 parameters on the host, are in the `asr_android_examples` package.
+
+### Secure the connection with SROS2
+
+SROS2 encrypts traffic and only allows nodes that hold keys from your keystore. It is off by default. In Mac tests, a client without keys received nothing from a secured phone, and a client with keys received 27.9 FPS and 394 Hz IMU over Wi-Fi.
+
+The Fast DDS in the tested Pixi environment was built without security, so secured nodes on that host use Cyclone DDS (`rmw_cyclonedds_cpp`). Check your own host with a test before relying on it.
+
+1. Create a keystore and enclaves on the computer. Keep the `private` folder off the phone.
+
+   ```bash
+   ros2 security create_keystore ~/asr_keystore
+   ros2 security create_enclave ~/asr_keystore /asr_android
+   ros2 security create_enclave ~/asr_keystore /host
+   ```
+
+2. Copy only the phone's enclave files. The app moves them into private storage the next time SROS2 is checked or the node starts.
+
+   ```bash
+   E=/sdcard/Android/data/org.asr.runtime/files/ros2_keystore/enclaves/asr_android
+   adb shell mkdir -p $E
+   for f in identity_ca.cert.pem cert.pem key.pem permissions_ca.cert.pem governance.p7s permissions.p7s; do adb push ~/asr_keystore/enclaves/asr_android/$f $E/; done
+   ```
+
+3. Turn on **ROS_SECURITY_ENABLE** on the phone.
+
+4. On the computer, set these before running ROS 2 commands:
+
+   ```bash
+   export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+   export ROS_SECURITY_KEYSTORE=~/asr_keystore
+   export ROS_SECURITY_ENABLE=true
+   export ROS_SECURITY_STRATEGY=Enforce
+   export ROS_SECURITY_ENCLAVE_OVERRIDE=/host
+   ```
+
+If keys are missing while the switch is on, the node doesn't start. It never falls back to an unsecured connection.
 
 ### View topics in Foxglove
 

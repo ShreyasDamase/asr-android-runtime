@@ -47,10 +47,11 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] Verify the control receiver on a signed release build
 - [x] Other exported components reviewed: only the launcher and `MainActivity` are exported, and neither reads intent extras (code read only)
 - [x] GPS coordinates and spoken text removed from logs (code changed and built)
-- [ ] Fix the `stop_asr` launcher shortcut, which targets a service and likely never worked
+- [x] Removed the broken `stop_asr` launcher shortcut; `MainActivity` is no longer exported in release builds
 - [~] REMOTE CONFIG switch, default off. `config/set` rejection verified; on-screen tap and flashlight/speaker gating need an unlocked phone
 - [x] ROS 2 command contents are no longer written to the log
-- [~] SROS2: plugins built and bundled, `ROS_SECURITY_ENABLE` switch and key import added. Missing keys correctly stop the node. End-to-end encryption NOT verified yet. libddsc was swapped for the OpenSSL-enabled build, and a plain client got 0 Hz in the one run after the swap, so check that first. Pixi's Fast DDS has no security support, so Mac tests must use `rmw_cyclonedds_cpp`
+- [x] SROS2 verified end to end on a phone. No-key clients can't see the secured node or its data; a client with keys got 27.9 FPS and 394 Hz over Wi-Fi; `data_protection_kind` and `metadata_protection_kind` are ENCRYPT; missing keys stop the node with no fallback. On this Mac, secured nodes must use Cyclone, because Pixi's Fast DDS has no security. The libddsc swap was rechecked with no streaming regression
+- [ ] SROS2 on-screen switch needs a tap test
 - [x] TLS for TCP to ASR Studio: dropped by decision. TCP stays unchanged; this work targets ROS 2
 - [ ] Update privacy policy and Data Safety only after these ship and are tested
 

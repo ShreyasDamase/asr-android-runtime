@@ -53,12 +53,9 @@
         </activity>
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="${asrServiceExported}"
             android:label="@string/app_name"
-            android:theme="@style/Theme.AsrRuntime.Starting">
-            <meta-data android:name="android.app.shortcuts"
-                android:resource="@xml/shortcuts" />
-        </activity>
+            android:theme="@style/Theme.AsrRuntime.Starting" />
         <activity
             android:name=".ui.AboutActivity"
             android:exported="false"
