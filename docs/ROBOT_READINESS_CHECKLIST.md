@@ -50,12 +50,12 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] Fix the `stop_asr` launcher shortcut, which targets a service and likely never worked
 - [~] REMOTE CONFIG switch, default off. `config/set` rejection verified; on-screen tap and flashlight/speaker gating need an unlocked phone
 - [x] ROS 2 command contents are no longer written to the log
-- [?] SROS2: needs your decision. The session's safety check blocked building OpenSSL from downloaded source. Mac is ready, and the phone's `libddsc` has security support; OpenSSL and three plugins are missing
+- [~] SROS2: plugins built and bundled, `ROS_SECURITY_ENABLE` switch and key import added. Missing keys correctly stop the node. End-to-end encryption NOT verified yet. libddsc was swapped for the OpenSSL-enabled build, and a plain client got 0 Hz in the one run after the swap, so check that first. Pixi's Fast DDS has no security support, so Mac tests must use `rmw_cyclonedds_cpp`
 - [x] TLS for TCP to ASR Studio: dropped by decision. TCP stays unchanged; this work targets ROS 2
 - [ ] Update privacy policy and Data Safety only after these ship and are tested
 
 ## 6. Stability and memory (last, across all features above)
-- [~] 1-hour soak running on the locked second phone, threads steady so far; result pending
+- [~] Soak stopped at 28 of 60 minutes on a locked phone: memory stable at 55 to 69 MB, threads 48 to 51, no crash. Finish the full hour
 - [~] IMU and camera buffers reused and running on phones. Memory stable so far; no before and after comparison measured
 - [x] Fixed native shutdown deadlock risk, a JNI reference leak and a thread detach bug. 15 start/stop cycles: threads steady at 37, native memory settled at 12.8 MB, no crashes. 600-command burst plus DDS restarts: no crash
 - [x] TCP threads reviewed: disconnect interrupts and joins them (code read only)

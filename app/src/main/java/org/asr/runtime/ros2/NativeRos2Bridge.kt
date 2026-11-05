@@ -52,6 +52,7 @@ object NativeRos2Bridge {
     external fun getDiscoveredRosNodeCount(): Int
     external fun setFastDdsConfigPath(path: String): Boolean
     external fun setCycloneDdsConfigPath(path: String): Boolean
+    external fun setRosSecurity(keystore: String?, enclave: String?)
     external fun publishStaticTransforms(parent: String, children: Array<String>, poses: DoubleArray, timestampNs: Long): Boolean
 
     external fun shutdown()

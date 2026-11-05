@@ -1172,6 +1172,26 @@ class  MainActivity : ComponentActivity() {
                 prefs.edit().putBoolean("remote_config_enabled", checked).apply()
             }
         }
+        binding.switchRosSecurity.isChecked = prefs.getBoolean("ros_security_enable", false)
+        binding.switchRosSecurity.setOnCheckedChangeListener { button, checked ->
+            if (!initializingControls) {
+                if (checked && !viewModel.hasSecurityKeys()) {
+                    initializingControls = true
+                    button.isChecked = false
+                    initializingControls = false
+                    binding.txtRosSecurityStatus.text =
+                        "Keys for the enclave /asr_android were not found. Copy them to this phone first."
+                } else {
+                    TactileFeedbackHelper.playSliderSound(button, checked)
+                    binding.txtRosSecurityStatus.text = if (checked) {
+                        "SROS2 on. Only nodes with keys from this keystore can connect."
+                    } else {
+                        "SROS2 encrypts traffic and only allows nodes with keys. Needs the enclave /asr_android."
+                    }
+                    viewModel.setRosSecurityEnabled(checked)
+                }
+            }
+        }
     }
 
     private fun loadRos2Config() {

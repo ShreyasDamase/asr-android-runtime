@@ -185,6 +185,11 @@ class Ros2Runtime(private val context: Context) {
                 throw IllegalStateException("${BuildConfig.ASR_DDS_BACKEND} DDS rejected the profile path")
             }
 
+            if (!configureRosSecurity()) {
+                Log.e(TAG, "ROS_SECURITY_ENABLE is on, but keys for $SECURITY_ENCLAVE are missing; node not started")
+                _status.value = Ros2Status(Ros2State.ERROR, nodeName, nodeNamespace, domainId, "SROS2 keys missing")
+                return
+            }
             RosClock.sync()
             val started = NativeRos2Bridge.startNode(domainId, nodeName, nodeNamespace)
             if (!started) {
@@ -391,6 +396,12 @@ ${peers.joinToString("\n") { "                        <Peer address=\"${xmlEscap
                       </Peers>
                       <ParticipantIndex>auto</ParticipantIndex>
                     </Discovery>"""
+        // Debug builds log Cyclone errors, which rcl doesn't pass on, while SROS2 is on.
+        val traceRows = if (BuildConfig.DEBUG && prefs.getBoolean(PREF_ROS_SECURITY_ENABLE, false)) """
+                    <Tracing>
+                      <Verbosity>warning</Verbosity>
+                      <OutputFile>${xmlEscape(File(context.cacheDir, "cyclonedds_trace.log").absolutePath)}</OutputFile>
+                    </Tracing>""" else ""
         val file = File(context.cacheDir, "cyclonedds_asr.xml")
         file.writeText(
             """<?xml version="1.0" encoding="UTF-8"?>
@@ -402,6 +413,7 @@ ${peers.joinToString("\n") { "                        <Peer address=\"${xmlEscap
                       </Interfaces>
                       <AllowMulticast>default</AllowMulticast>
                     </General>$discoveryRows
+$traceRows
                   </Domain>
                 </CycloneDDS>
             """.trimIndent()
@@ -681,6 +693,50 @@ ${peers.joinToString("\n") { "                        <Peer address=\"${xmlEscap
         NativeRos2Bridge.publishScalar(topic, value, RosClock.toUnixNs(timestampNs), kind)
     }
 
+    private fun keystoreDir() = File(context.filesDir, "ros2_keystore")
+
+    /** True when this phone holds the certificates and key for its enclave. */
+    fun hasSecurityKeys(): Boolean {
+        importSecurityKeys()
+        val enclave = File(keystoreDir(), "enclaves$SECURITY_ENCLAVE")
+        return SECURITY_FILES.all { File(enclave, it).isFile }
+    }
+
+    /**
+     * Moves keys pushed to the app's external folder into private storage, so the private key
+     * doesn't stay where other tools can read it.
+     */
+    private fun importSecurityKeys() {
+        val pushed = context.getExternalFilesDir(null)?.let { File(it, "ros2_keystore/enclaves$SECURITY_ENCLAVE") } ?: return
+        if (!pushed.isDirectory) return
+        val target = File(keystoreDir(), "enclaves$SECURITY_ENCLAVE")
+        target.mkdirs()
+        pushed.listFiles()?.filter { it.isFile }?.forEach { file ->
+            file.copyTo(File(target, file.name), overwrite = true)
+            file.delete()
+        }
+        Log.i(TAG, "Imported SROS2 keys for $SECURITY_ENCLAVE")
+    }
+
+    /** Returns false when security is on but can't be used. It never falls back to no security. */
+    private fun configureRosSecurity(): Boolean {
+        if (!prefs.getBoolean(PREF_ROS_SECURITY_ENABLE, false)) {
+            NativeRos2Bridge.setRosSecurity(null, null)
+            return true
+        }
+        if (BuildConfig.ASR_DDS_BACKEND != "cyclone" || !hasSecurityKeys()) return false
+        // Cyclone looks these up by name, so load them first where Android can resolve them.
+        val loaded = runCatching {
+            listOf("dds_security_auth", "dds_security_ac", "dds_security_crypto").forEach(System::loadLibrary)
+        }
+        if (loaded.isFailure) {
+            Log.e(TAG, "Unable to load SROS2 plugins", loaded.exceptionOrNull())
+            return false
+        }
+        NativeRos2Bridge.setRosSecurity(keystoreDir().absolutePath, SECURITY_ENCLAVE)
+        return true
+    }
+
     /** Set when the active camera reports lens values; null publishes the camera as uncalibrated. */
     fun setCameraIntrinsics(intrinsics: CameraIntrinsics?) {
         cameraIntrinsics = intrinsics
@@ -733,6 +789,12 @@ ${peers.joinToString("\n") { "                        <Peer address=\"${xmlEscap
         private const val PREF_ROS2_DOMAIN_ID = "ros2_domain_id"
         private const val PREF_DDS_DISCOVERY_SERVER = "dds_discovery_server"
         private const val PREF_STATIC_PEERS = "ros_static_peers"
+        private const val PREF_ROS_SECURITY_ENABLE = "ros_security_enable"
+        private const val SECURITY_ENCLAVE = "/asr_android"
+        private val SECURITY_FILES = listOf(
+            "identity_ca.cert.pem", "cert.pem", "key.pem",
+            "permissions_ca.cert.pem", "governance.p7s", "permissions.p7s"
+        )
         private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
         private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
     }

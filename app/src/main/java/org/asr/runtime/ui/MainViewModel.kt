@@ -120,6 +120,12 @@ class MainViewModel : ViewModel() {
         asrService?.setRos2DomainId(value)
     }
 
+    fun hasSecurityKeys(): Boolean = asrService?.hasSecurityKeys() ?: false
+
+    fun setRosSecurityEnabled(enabled: Boolean) {
+        asrService?.setRosSecurityEnabled(enabled)
+    }
+
     fun setStaticPeers(peers: String) {
         asrService?.setStaticPeers(peers)
     }

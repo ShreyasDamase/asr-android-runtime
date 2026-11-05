@@ -807,6 +807,14 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         setRos2TransportPaths(wifiEnabled = wifi || !usb, usbEnabled = usb)
     }
 
+    fun hasSecurityKeys(): Boolean = ros2Runtime.hasSecurityKeys()
+
+    /** Turns SROS2 on or off and restarts the node. */
+    fun setRosSecurityEnabled(enabled: Boolean) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean("ros_security_enable", enabled).apply()
+        restartRos2IfEnabled()
+    }
+
     /** Saves the comma-separated peer list and restarts the node to use it. */
     fun setStaticPeers(peers: String) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString("ros_static_peers", peers).apply()
@@ -1214,6 +1222,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             .put("namespace", status.nodeNamespace)
             .put("ros_domain_id", status.domainId)
             .put("remote_config", remoteConfigAllowed())
+            .put("ros_security_enable", prefs.getBoolean("ros_security_enable", false))
             .put("camera", org.json.JSONObject()
                 .put("id", config.cameraId ?: "auto")
                 .put("requested_resolution", "${config.resolution.width}x${config.resolution.height}")
@@ -1316,6 +1325,10 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                 .putBoolean(PREF_REMOTE_CONFIG_ENABLED, intent.getBooleanExtra("value", false))
                 .apply()
+            return
+        }
+        if (flag == "ros_security_enable" && org.asr.runtime.BuildConfig.DEBUG) {
+            setRosSecurityEnabled(intent.getBooleanExtra("value", false))
             return
         }
         if (flag == "ros_static_peers" && org.asr.runtime.BuildConfig.DEBUG) {

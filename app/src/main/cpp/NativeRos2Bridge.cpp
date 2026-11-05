@@ -893,6 +893,25 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_setFastDdsConfigPath(JNIEnv *env, job
     return JNI_TRUE;
 }
 
+/** Sets the standard SROS2 variables read by rcl_init. A null keystore turns security off. */
+JNIEXPORT void JNICALL
+Java_org_asr_runtime_ros2_NativeRos2Bridge_setRosSecurity(JNIEnv *env, jobject thiz, jstring j_keystore, jstring j_enclave) {
+    if (j_keystore == nullptr || j_enclave == nullptr) {
+        setenv("ROS_SECURITY_ENABLE", "false", 1);
+        unsetenv("ROS_SECURITY_KEYSTORE");
+        unsetenv("ROS_SECURITY_ENCLAVE_OVERRIDE");
+        return;
+    }
+    const char *keystore = env->GetStringUTFChars(j_keystore, nullptr);
+    const char *enclave = env->GetStringUTFChars(j_enclave, nullptr);
+    setenv("ROS_SECURITY_KEYSTORE", keystore, 1);
+    setenv("ROS_SECURITY_ENCLAVE_OVERRIDE", enclave, 1);
+    setenv("ROS_SECURITY_STRATEGY", "Enforce", 1);
+    setenv("ROS_SECURITY_ENABLE", "true", 1);
+    env->ReleaseStringUTFChars(j_keystore, keystore);
+    env->ReleaseStringUTFChars(j_enclave, enclave);
+}
+
 JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_setCycloneDdsConfigPath(JNIEnv *env, jobject thiz, jstring j_path) {
     const char *path = env->GetStringUTFChars(j_path, nullptr);
