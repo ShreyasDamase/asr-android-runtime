@@ -21,7 +21,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 ## 2. Configuration
 - [x] ADVANCED section folds settings on the one screen, with a summary line; verified by tap
 - [x] Battery optimization warning with a settings button; shown on the phone
-- [~] 16 KB emulator test: needs a 16 KB system image installed through Android Studio
+- [x] 16 KB verified on an Android 37 emulator with `PAGE_SIZE` 16384: `pageSizeCompat=0`, the app opens, the camera opens, and the ROS 2 node starts with no crash. All 71 Cyclone libraries are 16 KB aligned. Sensors there are simulated. The Fast DDS build is not 16 KB ready, so don't upload it
 - [x] Phone UI: `ROS_DOMAIN_ID` and node name, locked behind EDIT. Verified by real taps: locked fields stay read-only, CANCEL restores, 999 rejected, domain 7 and a rename reached the Mac
 - [x] Phone UI: `ROS_STATIC_PEERS`, locked behind EDIT. Verified on Wi-Fi where the router blocks multicast; the Mac may also need `ROS_STATIC_PEERS=<phone IP>`
 - [x] Remote config over `config/set` and `config/state` topics, verified on phone. `ros2 param` to the phone doesn't work (Fast DDS client got no reply from a Cyclone service), so a Python node on the Mac offers real parameters and forwards them; verified
@@ -32,7 +32,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [~] Checkerboard override and Python `camera_calibrator` built. Needs a printed checkerboard to verify
 
 ## 3. Multiple cameras
-- [x] Front and back together on Redmi Note 11 Pro: real test failed, `ERROR_MAX_CAMERAS_IN_USE`. Use two phones, each its own node (verified). Redmi Note 10 still to test
+- [x] Front and back together: real test refused on both Redmi Note 11 Pro and Redmi Note 10 (`ERROR_MAX_CAMERAS_IN_USE`). Use two phones, each its own node (verified)
 - [~] 16:9 presets `640x360` and `1280x720` added; not yet tested on a phone
 - [x] Cameras listed in `config/state`, selected by ID, with `auto`. First phone exposes only `0` and `1` to apps; hidden IDs are rejected
 - [x] Switch cameras remotely while running; front camera verified
