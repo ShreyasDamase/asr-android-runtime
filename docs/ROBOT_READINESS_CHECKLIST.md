@@ -10,8 +10,10 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] Retire or fix the old `ROS2_ENABLE` action, which always selects Wi-Fi
 
 ## 1. Correct sensor data
-- [ ] Timestamps use real time, not phone uptime (`sec: 2233238` seen)
-- [ ] IMU orientation: all zeros is invalid; fall back to Game Rotation Vector
+- [x] Timestamps use Unix time on all ROS 2 sensor messages (IMU, camera, GPS, illuminance and battery verified on phone)
+- [x] IMU orientation falls back to Game Rotation Vector; verified with the phone moving
+- [x] IMU covariance no longer marks gyro, accel and valid orientation as "no data"
+- [ ] Check IMU publish rate (about 520 Hz measured) and whether it needs a limit
 - [ ] `camera_info` uses real lens values, not `fx = width * 0.8`
 - [ ] Separate `frame_id` per sensor, and `tf_static`
 

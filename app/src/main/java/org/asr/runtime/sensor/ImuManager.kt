@@ -2,6 +2,7 @@ package org.asr.runtime.sensor
 
 import android.content.Context
 import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.hardware.SensorEvent
 import org.asr.runtime.protocol.AsrPacket
 import org.asr.runtime.protocol.PacketSerializer
@@ -32,9 +33,15 @@ class ImuManager(
     Sensor.TYPE_GYROSCOPE,
     Sensor.TYPE_GRAVITY,
     Sensor.TYPE_ROTATION_VECTOR,
+    Sensor.TYPE_GAME_ROTATION_VECTOR,
     Sensor.TYPE_LINEAR_ACCELERATION
 )) {
     private val seq = AtomicInteger(0)
+
+    // Some phones have no Rotation Vector sensor, only Game Rotation Vector (not referenced to north).
+    private val hasRotationVector =
+        (context.getSystemService(Context.SENSOR_SERVICE) as SensorManager)
+            .getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) != null
 
     // Latest values — updated on each sensor event, published on ACCELEROMETER
     @Volatile private var accel    = FloatArray(3)
@@ -54,9 +61,20 @@ class ImuManager(
             }
             Sensor.TYPE_GYROSCOPE          -> { gyro     = event.values.copyOf(3) }
             Sensor.TYPE_GRAVITY            -> { gravity  = event.values.copyOf(3) }
-            Sensor.TYPE_ROTATION_VECTOR    -> { rotation = event.values.copyOfRange(0, minOf(4, event.values.size)) }
+            Sensor.TYPE_ROTATION_VECTOR    -> { rotation = toQuaternion(event.values) }
+            Sensor.TYPE_GAME_ROTATION_VECTOR -> { if (!hasRotationVector) rotation = toQuaternion(event.values) }
             // LINEAR_ACCELERATION not in packet v1 payload — reserved for payload v2
         }
+    }
+
+    /** The scalar component is optional in rotation sensor events; derive it when it is missing. */
+    private fun toQuaternion(values: FloatArray): FloatArray {
+        val x = values[0]
+        val y = values[1]
+        val z = values[2]
+        val w = if (values.size > 3) values[3]
+        else kotlin.math.sqrt(maxOf(0f, 1f - x * x - y * y - z * z))
+        return floatArrayOf(x, y, z, w)
     }
 
     private fun publishPacket() {

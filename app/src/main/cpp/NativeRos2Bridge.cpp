@@ -465,9 +465,13 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
         msg.orientation.z = orientation[2]; msg.orientation.w = orientation[3];
         msg.angular_velocity.x = gyro[0]; msg.angular_velocity.y = gyro[1]; msg.angular_velocity.z = gyro[2];
         msg.linear_acceleration.x = accel[0]; msg.linear_acceleration.y = accel[1]; msg.linear_acceleration.z = accel[2];
-        msg.orientation_covariance[0] = -1.0;
-        msg.angular_velocity_covariance[0] = -1.0;
-        msg.linear_acceleration_covariance[0] = -1.0;
+        // Per sensor_msgs/Imu, -1 means "no data" and all zeros means "covariance unknown".
+        const double orientation_norm =
+            orientation[0] * orientation[0] + orientation[1] * orientation[1] +
+            orientation[2] * orientation[2] + orientation[3] * orientation[3];
+        if (orientation_norm < 1e-6) {
+            msg.orientation_covariance[0] = -1.0;
+        }
         ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK;
         if (!ok) {
             LOGE("Failed to publish IMU: %s", rcl_get_error_string().str);
