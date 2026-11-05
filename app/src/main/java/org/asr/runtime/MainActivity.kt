@@ -1058,17 +1058,17 @@ class  MainActivity : ComponentActivity() {
                             Ros2State.INITIALIZING -> "INITIALIZING"
                             Ros2State.DDS_INITIALIZING -> "DDS INIT"
                             Ros2State.NODE_READY -> "NODE READY"
-                            Ros2State.WAITING_FOR_DISCOVERY -> "WAITING DISCOVERY"
+                            Ros2State.WAITING_FOR_DISCOVERY -> "NO OTHER NODES"
                             Ros2State.WAITING_FOR_INTERFACE -> "WAITING FOR LINK"
                             Ros2State.RETRYING -> "RETRYING DDS"
-                            Ros2State.ACTIVE -> "ACTIVE (DISCOVERED)"
+                            Ros2State.ACTIVE -> "NODES DISCOVERED"
                             Ros2State.ERROR -> "ERROR"
                             Ros2State.DISCONNECTED -> "DISCONNECTED"
                             Ros2State.DISABLED -> "DISABLED"
                         }
                         val waitingForDiscovery = when(status.state) {
                             Ros2State.INITIALIZING, Ros2State.DDS_INITIALIZING,
-                            Ros2State.NODE_READY, Ros2State.WAITING_FOR_DISCOVERY,
+                            Ros2State.NODE_READY,
                             Ros2State.WAITING_FOR_INTERFACE, Ros2State.RETRYING -> true
                             else -> false
                         }

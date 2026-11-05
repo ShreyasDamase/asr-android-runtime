@@ -205,7 +205,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="DISCOVERY STATUS"
+                    android:text="DISCOVERY"
                     android:fontFamily="@font/space_mono"
                     android:letterSpacing="0.06"
                     android:textSize="13sp"
@@ -233,7 +233,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="ROS 2 discovery status is shown separately from TCP."
+                android:text="Discovery runs while DDS is on. Other nodes appear here when they join the same ROS_DOMAIN_ID."
                 android:fontFamily="@font/space_grotesk"
                 android:textSize="12sp"
                 android:textColor="@color/asr_text_secondary" />
