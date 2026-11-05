@@ -44,37 +44,41 @@ class ImuManager(
             .getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) != null
 
     // Latest values — updated on each sensor event, published on ACCELEROMETER
-    @Volatile private var accel    = FloatArray(3)
-    @Volatile private var gyro     = FloatArray(3)
-    @Volatile private var gravity  = FloatArray(3)
-    @Volatile private var rotation = FloatArray(4)  // [x, y, z, w] Android convention
+    // Sensor events all arrive on one thread and consumers read synchronously, so these
+    // arrays are reused to avoid allocating at the IMU rate.
+    private val accel    = FloatArray(3)
+    private val gyro     = FloatArray(3)
+    private val gravity  = FloatArray(3)
+    private val rotation = FloatArray(4)  // [x, y, z, w] Android convention
     @Volatile private var lastTs   = 0L
 
     override fun onSensorChanged(event: SensorEvent) {
         totalEvents.incrementAndGet()
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER      -> {
-                accel = event.values.copyOf(3)
+                event.values.copyInto(accel, 0, 0, 3)
                 lastTs = event.timestamp // Use hardware sensor timestamp
                 publishPacket()
                 onRosSample?.invoke(accel, gyro, rotation, lastTs)
             }
-            Sensor.TYPE_GYROSCOPE          -> { gyro     = event.values.copyOf(3) }
-            Sensor.TYPE_GRAVITY            -> { gravity  = event.values.copyOf(3) }
-            Sensor.TYPE_ROTATION_VECTOR    -> { rotation = toQuaternion(event.values) }
-            Sensor.TYPE_GAME_ROTATION_VECTOR -> { if (!hasRotationVector) rotation = toQuaternion(event.values) }
+            Sensor.TYPE_GYROSCOPE          -> event.values.copyInto(gyro, 0, 0, 3)
+            Sensor.TYPE_GRAVITY            -> event.values.copyInto(gravity, 0, 0, 3)
+            Sensor.TYPE_ROTATION_VECTOR    -> updateRotation(event.values)
+            Sensor.TYPE_GAME_ROTATION_VECTOR -> if (!hasRotationVector) updateRotation(event.values)
             // LINEAR_ACCELERATION not in packet v1 payload — reserved for payload v2
         }
     }
 
     /** The scalar component is optional in rotation sensor events; derive it when it is missing. */
-    private fun toQuaternion(values: FloatArray): FloatArray {
+    private fun updateRotation(values: FloatArray) {
         val x = values[0]
         val y = values[1]
         val z = values[2]
-        val w = if (values.size > 3) values[3]
+        rotation[0] = x
+        rotation[1] = y
+        rotation[2] = z
+        rotation[3] = if (values.size > 3) values[3]
         else kotlin.math.sqrt(maxOf(0f, 1f - x * x - y * y - z * z))
-        return floatArrayOf(x, y, z, w)
     }
 
     private fun publishPacket() {

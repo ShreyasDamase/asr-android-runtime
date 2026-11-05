@@ -101,7 +101,7 @@ class SpeakerManager(private val context: Context) : SensorModule, TextToSpeech.
             val result = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "asr_utt_${commandsSent.get()}")
             if (result == TextToSpeech.SUCCESS) {
                 lastResult = "QUEUED"
-                Log.d("AsrSpeaker", "[OUTPUT] Speaking: \"$text\"")
+                Log.d("AsrSpeaker", "[OUTPUT] Speaking: \"(${text.length} chars)\"")
                 true
             } else {
                 failedCount.incrementAndGet()
@@ -112,7 +112,7 @@ class SpeakerManager(private val context: Context) : SensorModule, TextToSpeech.
         } else {
             failedCount.incrementAndGet()
             lastResult = "FAILED (NOT_READY)"
-            Log.w("AsrSpeaker", "TTS not ready, ignored speech request: \"$text\"")
+            Log.w("AsrSpeaker", "TTS not ready, ignored speech request: \"(${text.length} chars)\"")
             false
         }
     }

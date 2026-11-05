@@ -3,10 +3,19 @@
     android:height="240dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#171A23"
-        android:pathData="M20,88 L47,20 Q49,16 53,16 Q57,16 59,20 L86,88 L69,88 L53,54 L37,88 Z" />
-    <path
-        android:fillColor="#5D60FF"
-        android:pathData="M53,65 m-7,0 a7,7 0,1 0,14 0 a7,7 0,1 0,-14 0" />
+    <!-- Android clips splash icons to a circle, so the logo is scaled to stay inside it. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.68"
+        android:scaleY="0.68"
+        android:translateX="1"
+        android:translateY="2">
+        <path
+            android:fillColor="#171A23"
+            android:pathData="M20,88 L47,20 Q49,16 53,16 Q57,16 59,20 L86,88 L69,88 L53,54 L37,88 Z" />
+        <path
+            android:fillColor="#5D60FF"
+            android:pathData="M53,65 m-7,0 a7,7 0,1 0,14 0 a7,7 0,1 0,-14 0" />
+    </group>
 </vector>

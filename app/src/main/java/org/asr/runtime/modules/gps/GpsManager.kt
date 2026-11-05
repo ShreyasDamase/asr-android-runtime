@@ -96,7 +96,7 @@ class GpsManager(
         transportManager.send(packet)
         onRosLocation?.invoke(location)
 
-        Log.d(TAG, "[GPS] lat=${location.latitude} lon=${location.longitude} acc=${location.accuracy}m seq=${seq.get() - 1}")
+        Log.d(TAG, "[GPS] Location update received")
     }
 
     @Deprecated("Deprecated in Java")

@@ -53,7 +53,7 @@ The Fast DDS comparison variant can be built with:
 
 Both DDS flavors use the same application ID, `org.asr.runtime`, and cannot be installed side by side. Install or upload one flavor at a time. Do not run both sensor runtimes simultaneously on one device; they use the same ROS 2 node name.
 
-The current Android version is `1.0.2` (version code `3`); the Cyclone build adds the `-cyclone` suffix. The app displays its selected DDS backend and exact build version beneath the app name.
+The current Android version is `1.0.3` (version code `4`); the Cyclone build adds the `-cyclone` suffix. The app displays its selected DDS backend and exact build version beneath the app name.
 
 ## Start the phone runtime
 
@@ -120,6 +120,92 @@ The monitor is not needed to make the phone visible: in Mac tests with the Cyclo
 
 The standalone package installation and detailed diagnostic interpretation are documented in [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor). A copy is also present under [`asr_ros2/`](asr_ros2/README.md).
 
+### Wi-Fi routers that block multicast
+
+Some routers don't pass multicast between devices. Ping works, but `ros2 node list` shows nothing and the phone stays on **NO OTHER NODES**. Point both sides at each other:
+
+1. On the phone, press **EDIT** and set `ROS_STATIC_PEERS` to the computer's IP address.
+2. On the computer, set the phone's IP address before running ROS 2 commands:
+
+   ```bash
+   export ROS_STATIC_PEERS=192.168.1.5
+   ```
+
+### Locked screens
+
+The node keeps publishing while the phone is locked, because the app holds wake and Wi-Fi locks whenever the runtime or DDS is on. For a phone mounted on a robot, also exempt the app from battery optimization, since some phones stop background apps anyway.
+
+### Timestamps across machines
+
+Messages use Unix time from the phone's clock. If `header.stamp` looks old or ahead on another machine, compare the clocks first: in one test, a phone running 690 ms behind made a delay of about 150 ms look like 850 ms.
+
+### Cameras
+
+`camera.id` selects any camera the phone exposes to apps, and `camera.resolution` selects 4:3 (`320x240`, `640x480`, `1280x960`) or 16:9 (`640x360`, `1280x720`). One camera streams at a time. `camera.concurrent` in `config/state` lists camera pairs a phone says can stream together. For front and back at once on a phone that lists none, such as the tested Redmi Note 11 Pro, use two phones, each as its own node.
+
+Stale frames are dropped rather than delivered late, and `frames_dropped` in `config/state` counts them.
+
+### Start on boot
+
+Turn on **START ON BOOT** to start the runtime after the phone restarts. Android sends the boot signal only after the phone is first unlocked. On Android 14 and later, only the DDS node starts until the app is opened, because of limits on starting camera and microphone services at boot. Some phones, such as Xiaomi, also need **Autostart** turned on for the app in system settings.
+
+### Configure the phone remotely
+
+Turn on **REMOTE CONFIG** on the phone. It is off by default, and it also controls `flashlight` and `speaker/speech`. Unless SROS2 is on, any node on the same `ROS_DOMAIN_ID` can then send these commands.
+
+```bash
+ros2 topic echo --qos-durability transient_local /asr_android_250/config/state
+ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: camera.resolution=640x480}"
+```
+
+| Key | Values |
+| --- | --- |
+| `camera.resolution` | `320x240`, `640x480` (default), `1280x960`, `640x360`, `1280x720` |
+| `camera.id` | `auto`, or an ID from `camera.available` in `config/state` |
+| `camera.calibration` | `WxH,fx,fy,cx,cy,k1,k2,t1,t2,k3`, or `clear` |
+| `imu.rate_hz` | `0` to `1000`; `0` publishes every sample |
+| `sensors.<name>` | `true` or `false` for `camera`, `imu`, `environment`, `motion`, `audio`, `battery`, `gps` |
+
+`ROS_DOMAIN_ID`, node name and `ROS_STATIC_PEERS` can only be changed on the phone. Use `ROS_STATIC_PEERS` on networks that block multicast.
+
+Remote config uses topics because, in Mac tests, a Fast DDS client got no reply from a Cyclone DDS service, so `ros2 param` cannot reach the phone directly. Python examples, including a node that offers real ROS 2 parameters on the host, are in the `asr_android_examples` package.
+
+### Secure the connection with SROS2
+
+SROS2 encrypts traffic and only allows nodes that hold keys from your keystore. It is off by default. In Mac tests, a client without keys received nothing from a secured phone, and a client with keys received 27.9 FPS and 394 Hz IMU over Wi-Fi.
+
+The Fast DDS in the tested Pixi environment was built without security, so secured nodes on that host use Cyclone DDS (`rmw_cyclonedds_cpp`). Check your own host with a test before relying on it.
+
+1. Create a keystore and enclaves on the computer. Keep the `private` folder off the phone.
+
+   ```bash
+   ros2 security create_keystore ~/asr_keystore
+   ros2 security create_enclave ~/asr_keystore /asr_android
+   ros2 security create_enclave ~/asr_keystore /host
+   ```
+
+2. Copy only the phone's enclave files. The app moves them into private storage the next time SROS2 is checked or the node starts.
+
+   ```bash
+   E=/sdcard/Android/data/org.asr.runtime/files/ros2_keystore/enclaves/asr_android
+   adb shell mkdir -p $E
+   for f in identity_ca.cert.pem cert.pem key.pem permissions_ca.cert.pem governance.p7s permissions.p7s; do adb push ~/asr_keystore/enclaves/asr_android/$f $E/; done
+   ```
+
+3. Turn on **ROS_SECURITY_ENABLE** on the phone.
+
+4. On the computer, set these before running ROS 2 commands:
+
+   ```bash
+   export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+   export ROS_SECURITY_KEYSTORE=~/asr_keystore
+   export ROS_SECURITY_ENABLE=true
+   export ROS_SECURITY_STRATEGY=Enforce
+   export ROS_SECURITY_ENCLAVE_OVERRIDE=/host
+   ```
+
+If keys are missing while the switch is on, the node doesn't start. It never falls back to an unsecured connection.
+
 ### View topics in Foxglove
 
 Foxglove connects to a **Foxglove Bridge** WebSocket. The ASR USB Link Monitor does not start this bridge; it is a separate, optional diagnostic participant. Launch the bridge using the same sourced ROS 2 environment, `ROS_DOMAIN_ID`, and host RMW:
@@ -132,7 +218,7 @@ In Foxglove, choose **Open a new connection → Foxglove WebSocket** and enter `
 
 ## ROS 2 topic reference
 
-Topics are relative to `/asr_android_<device-id>`. For example, a device with ID `168` publishes IMU data on `/asr_android_168/imu`. Sensor availability and message rates depend on hardware, permissions, and module state.
+Topics are relative to `/asr_android_<device-id>`. For example, a device with ID `168` publishes IMU data on `/asr_android_168/imu`. Sensor availability and message rates depend on hardware, permissions, and module state. `config/state`, `config/set` and the global `/tf_static` are also available.
 
 | Topic suffix | ROS 2 type | Description |
 | --- | --- | --- |
@@ -159,12 +245,21 @@ The helper currently monitors `imu`, `camera/image/compressed`, `battery`, and `
 
 Cyclone DDS was exercised on macOS over Wi-Fi and USB tethering, with ROS graph discovery and sensor delivery observed. These results describe the tested setup, not a guarantee for every network. Ubuntu and Raspberry Pi live transport validation remain outstanding. See [`docs/android-dds-backend-comparison.md`](docs/android-dds-backend-comparison.md) for recorded comparisons and limits.
 
+Later testing used a Redmi Note 10 (Android 12) and a Redmi Note 11 Pro (Android 13) with a Mac host:
+
+- Two phones streamed together, including with both screens locked.
+- SROS2 rejected clients without keys, and a client with keys streamed over Wi-Fi.
+- A 60-minute soak ran without a crash or a steady memory climb, and 15 start and stop cycles held steady.
+- The Cyclone build ran on a 16 KB Android 37 emulator with no compatibility mode. Its sensors are simulated.
+
+Not yet tested: an 8-hour run, and hosts other than macOS for these features.
+
 ## Repository layout
 
 - `app/` — Android application, JNI bridge, and packaged native libraries.
 - `asr_ros2/` — ROS 2 USB link and sensor-flow monitor.
-- `docs/` — transport validation, [Native Build Prefix Guide](docs/BUILD_PREFIX_GUIDE.md), and release checklists.
-- `scripts/` — maintainer tools and prefix packaging (`package_prefix.sh`).
+- `docs/` — DDS comparison, [Native Build Prefix Guide](docs/BUILD_PREFIX_GUIDE.md), privacy policy, and Play release documents.
+- `scripts/` — maintainer tools, prefix packaging (`package_prefix.sh`), and the SROS2 plugin build (`build_sros2_android.sh`).
 
 ## Source availability and licensing
 

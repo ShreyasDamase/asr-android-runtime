@@ -36,8 +36,8 @@ android {
         applicationId = "org.asr.runtime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -100,7 +100,12 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // adb control is for testing only.
+            manifestPlaceholders["asrServiceExported"] = "true"
+        }
         release {
+            manifestPlaceholders["asrServiceExported"] = "false"
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
