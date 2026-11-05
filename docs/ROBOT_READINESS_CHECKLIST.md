@@ -42,7 +42,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] 8-hour run
 
 ## 5. Security
-- [x] GPS flows on the second phone (1 Hz). Fixed `status` staying `-2` (unknown), which made standard tools able to reject valid fixes
+- [x] GPS verified on the second phone: 1 Hz with `status 0` and `service 1`. Fixed `status` staying `-2` (unknown), which could make standard tools reject valid fixes
 - [x] `AsrService` is not exported in release builds; debug keeps adb. Verified in the merged release and debug manifests
 - [x] Release build verified on a phone: outside service and activity starts are refused, a broadcast starts nothing, and the launcher still opens
 - [x] Other exported components reviewed: only the launcher and `MainActivity` are exported, and neither reads intent extras (code read only)
@@ -65,7 +65,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 
 Location: `~/Terminator/ROS2_PROJECTS/asr_android_ws` (package `asr_android_examples`)
 
-- [~] 13 Python examples built. Data verified for IMU, camera, battery, device info, config, parameters, flashlight and audio. Environment and steps stayed silent while the phone was still; GPS and `camera_calibrator` still to verify
+- [~] 13 Python examples built. Data verified for IMU, camera, GPS, battery, light, device info, config, parameters, flashlight and audio. Steps needs walking with the phone; `camera_calibrator` needs a checkerboard
 - [ ] Add C++ (`ament_cmake`) versions of the examples
 - [ ] Publish the workspace in a GitHub repository
 - [ ] Add it to the app's documentation and website
