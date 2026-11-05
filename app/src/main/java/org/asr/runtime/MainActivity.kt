@@ -1172,6 +1172,13 @@ class  MainActivity : ComponentActivity() {
                 prefs.edit().putBoolean("remote_config_enabled", checked).apply()
             }
         }
+        binding.switchStartOnBoot.isChecked = prefs.getBoolean("start_on_boot", false)
+        binding.switchStartOnBoot.setOnCheckedChangeListener { button, checked ->
+            if (!initializingControls) {
+                TactileFeedbackHelper.playSliderSound(button, checked)
+                prefs.edit().putBoolean("start_on_boot", checked).apply()
+            }
+        }
         binding.switchRosSecurity.isChecked = prefs.getBoolean("ros_security_enable", false)
         binding.switchRosSecurity.setOnCheckedChangeListener { button, checked ->
             if (!initializingControls) {

@@ -98,6 +98,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
         // ADB broadcast actions
         const val ACTION_START          = "org.asr.runtime.START"
+        const val ACTION_BOOT_START     = "org.asr.runtime.BOOT_START"
         const val ACTION_STOP           = "org.asr.runtime.STOP"
         const val ACTION_RESTART        = "org.asr.runtime.RESTART"
         const val ACTION_STATUS         = "org.asr.runtime.STATUS"
@@ -526,6 +527,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         }
 
         when (intent.action) {
+            ACTION_BOOT_START     -> handleBootStart()
             ACTION_START          -> {
                 getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
                 restoreConfiguredRos2PathIfNeeded()
@@ -867,6 +869,21 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         }
     }
 
+    /**
+     * Android 14 and later restrict camera and microphone services started from boot, so there
+     * only the DDS node comes up. Sensors then start when the app is opened.
+     */
+    private fun handleBootStart() {
+        ensureForeground(sensorRuntime = false)
+        restoreConfiguredRos2PathIfNeeded()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE && prefs.getBoolean(PREF_RUNTIME_ENABLED, false)) {
+            handleStart()
+        } else {
+            Log.i(TAG, "Boot start: DDS only; sensors wait for the app to open")
+        }
+    }
+
     private fun handleStart() {
         if (exitRequested) return
         holdPowerLocks()
@@ -938,7 +955,14 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             } else {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             }
-            startForeground(NOTIFICATION_ID, notification, serviceType)
+            try {
+                startForeground(NOTIFICATION_ID, notification, serviceType)
+            } catch (error: RuntimeException) {
+                // Android can refuse camera, microphone or location types in the background.
+                // Keep the DDS node alive with the type that is always allowed here.
+                Log.w(TAG, "Foreground type refused; using connected device only", error)
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            }
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -1324,6 +1348,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             // Debug-only test hook; release builds change this on the phone screen only.
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                 .putBoolean(PREF_REMOTE_CONFIG_ENABLED, intent.getBooleanExtra("value", false))
+                .apply()
+            return
+        }
+        if (flag == "start_on_boot" && org.asr.runtime.BuildConfig.DEBUG) {
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                .putBoolean("start_on_boot", intent.getBooleanExtra("value", false))
                 .apply()
             return
         }

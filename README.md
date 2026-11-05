@@ -135,6 +135,10 @@ Some routers don't pass multicast between devices. Ping works, but `ros2 node li
 
 The node keeps publishing while the phone is locked, because the app holds wake and Wi-Fi locks whenever the runtime or DDS is on. For a phone mounted on a robot, also exempt the app from battery optimization, since some phones stop background apps anyway.
 
+### Start on boot
+
+Turn on **START ON BOOT** to start the runtime after the phone restarts. Android sends the boot signal only after the phone is first unlocked. On Android 14 and later, only the DDS node starts until the app is opened, because of limits on starting camera and microphone services at boot. Some phones, such as Xiaomi, also need **Autostart** turned on for the app in system settings.
+
 ### Configure the phone remotely
 
 Turn on **REMOTE CONFIG** on the phone. It is off by default, and it also controls `flashlight` and `speaker/speech`. Unless SROS2 is on, any node on the same `ROS_DOMAIN_ID` can then send these commands.

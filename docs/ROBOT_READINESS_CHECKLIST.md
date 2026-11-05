@@ -35,7 +35,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [x] Topic naming for extra camera streams: not needed until two-stream hardware exists
 
 ## 4. Robot-mounted operation
-- [?] Start on boot (check Android limits on camera and mic services)
+- [~] START ON BOOT switch, default off. Receiver registered and a real reboot tested: blocked by Xiaomi's Autostart setting (`MIUIOP(10008): ignore`). Needs Autostart on, then one more reboot test
 - [x] Locked phones keep publishing. Both locked together: USB 30.0 FPS and 498 Hz; Wi-Fi 21.2 FPS and 388 Hz. Wake and Wi-Fi locks held whenever the runtime or DDS is active
 - [ ] Recovery after a link drop: code exists; needs someone to toggle Wi-Fi or unplug USB on a phone
 - [x] Thermal status and battery percent in `config/state`, verified
@@ -44,7 +44,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 ## 5. Security
 - [ ] GPS reports after re-enable or on a locked phone: no fix seen indoors in 40 s; check near a window
 - [x] `AsrService` is not exported in release builds; debug keeps adb. Verified in the merged release and debug manifests
-- [ ] Verify the control receiver on a signed release build
+- [x] Release build verified on a phone: outside service and activity starts are refused, a broadcast starts nothing, and the launcher still opens
 - [x] Other exported components reviewed: only the launcher and `MainActivity` are exported, and neither reads intent extras (code read only)
 - [x] GPS coordinates and spoken text removed from logs (code changed and built)
 - [x] Removed the broken `stop_asr` launcher shortcut; `MainActivity` is no longer exported in release builds
@@ -56,7 +56,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] Update privacy policy and Data Safety only after these ship and are tested
 
 ## 6. Stability and memory (last, across all features above)
-- [~] Soak stopped at 28 of 60 minutes on a locked phone: memory stable at 55 to 69 MB, threads 48 to 51, no crash. Finish the full hour
+- [~] Full 60-minute soak running on phone 1 from 19:03. The earlier partial run stopped at 28 minutes with stable memory
 - [~] IMU and camera buffers reused and running on phones. Memory stable so far; no before and after comparison measured
 - [x] Fixed native shutdown deadlock risk, a JNI reference leak and a thread detach bug. 15 start/stop cycles: threads steady at 37, native memory settled at 12.8 MB, no crashes. 600-command burst plus DDS restarts: no crash
 - [x] TCP threads reviewed: disconnect interrupts and joins them (code read only)
