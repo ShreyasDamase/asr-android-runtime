@@ -55,7 +55,7 @@ The Fast DDS comparison variant can be built with:
 
 Both DDS flavors use the same application ID, `org.asr.runtime`, and cannot be installed side by side. Install or upload one flavor at a time. Do not run both sensor runtimes simultaneously on one device; they use the same ROS 2 node name.
 
-The current Android version is `1.0.3` (version code `4`); the Cyclone build adds the `-cyclone` suffix. The app displays its selected DDS backend and exact build version beneath the app name.
+The current Android version is `1.0.4` (version code `5`); the Cyclone build adds the `-cyclone` suffix. The app displays its selected DDS backend and exact build version beneath the app name.
 
 ## Start the phone runtime
 
@@ -149,7 +149,7 @@ Stale frames are dropped rather than delivered late, and `frames_dropped` in `co
 
 ### Start on boot
 
-Turn on **START ON BOOT** to start the runtime after the phone restarts. Android sends the boot signal only after the phone is first unlocked. On Android 14 and later, only the DDS node starts until the app is opened, because of limits on starting camera and microphone services at boot. Some phones, such as Xiaomi, also need **Autostart** turned on for the app in system settings.
+Turn on **START ON BOOT** to start the runtime after the phone restarts. Android sends the boot signal only after the phone is first unlocked. Only the DDS node starts. Open the app and tap **START** to start sensors, because camera, microphone and location must follow a user action in the app. Some phones, such as Xiaomi, also need **Autostart** turned on for the app in system settings.
 
 ### Configure the phone remotely
 

@@ -8,7 +8,7 @@ Use the copy below for the Play Store listing after checking it against the exac
 - **Category:** Tools
 - **Application ID:** `org.asr.runtime`
 - **Play build:** Cyclone DDS variant. Fast DDS is not part of this release listing.
-- **Release version:** `1.0.2` (version code `3`).
+- **Release version:** `1.0.4` (version code `5`).
 - **Short description (under 80 characters):** Turn your Android phone into a configurable ROS 2 sensor node.
 
 ## Full description — copy into Play Console
