@@ -14,8 +14,9 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [x] IMU orientation falls back to Game Rotation Vector; verified with the phone moving
 - [x] IMU covariance no longer marks gyro, accel and valid orientation as "no data"
 - [ ] Check IMU publish rate (about 520 Hz measured) and whether it needs a limit
-- [ ] `camera_info` uses real lens values, not `fx = width * 0.8`
-- [ ] Separate `frame_id` per sensor, and `tf_static`
+- [x] `camera_info` uses phone-reported lens values; `K[0]=0` (uncalibrated) when the phone has none. Verified: `fx=474`, center `320,240` at 640x480. Device values, not a checkerboard calibration
+- [x] Separate `frame_id` per sensor, prefixed with the node namespace
+- [?] `tf_static`: `tf2_msgs` is not in the Android prefix, so this needs a new native package (needs permission)
 
 ## 2. Stability and memory
 - [ ] 1-hour soak test with memory and thread counts (no leak proven yet)
@@ -26,6 +27,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] Phone UI: domain ID, node name, peer IP list
 - [ ] Remote config from the Mac with real ROS 2 parameters (`ros2 param`, `rqt_reconfigure`, Foxglove)
 - [ ] Sensor on/off, rates, camera settings saved across restarts
+- [ ] Camera resolution options keep 640x480 as the default (fixed on purpose for higher FPS) and show estimated FPS for each option
 
 ## 4. Multiple cameras
 - [ ] List cameras in `capabilities`; select one by ID (this phone: back 0, 21; front 1, 101)

@@ -4,6 +4,11 @@ import android.content.Context
 import android.hardware.camera2.CaptureRequest
 import android.util.Log
 import android.util.Range
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.annotation.OptIn
@@ -29,7 +34,8 @@ class CameraManager(
     private val context: Context,
     private val onCameraError: () -> Unit = {},
     private val onThermalStatus: (ThermalStatus) -> Unit = {},
-    private val onCameraStarted: () -> Unit = {}
+    private val onCameraStarted: () -> Unit = {},
+    private val onCameraIntrinsics: (CameraIntrinsics?) -> Unit = {}
 ) : SensorModule {
 
     override val id: String = "camera"
@@ -65,6 +71,7 @@ class CameraManager(
     private val cameraOperationGeneration = AtomicLong(0)
     // Written on the main executor (bind/unbind), read from binder & TCP threads.
     @Volatile private var imageAnalysis: ImageAnalysis? = null
+    @Volatile private var activeArraySize: android.graphics.Rect? = null
 
     fun initialize(onReady: () -> Unit, onError: (Throwable) -> Unit = {}) {
         try {
@@ -134,6 +141,30 @@ class CameraManager(
             .setTargetRotation(android.view.Surface.ROTATION_90)
 
         // Lock AE frame rate to targetFps via Camera2 interop
+        // Many phones report lens values only in capture results, not in static characteristics.
+        onCameraIntrinsics(null)
+        var intrinsicsPending = true
+        Camera2Interop.Extender(analysisBuilder).setSessionCaptureCallback(
+            object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(
+                    session: CameraCaptureSession,
+                    request: CaptureRequest,
+                    result: TotalCaptureResult
+                ) {
+                    if (!intrinsicsPending || generation != cameraOperationGeneration.get()) return
+                    val active = activeArraySize ?: return
+                    intrinsicsPending = false
+                    val intrinsics = CameraIntrinsics.fromCamera2(
+                        result.get(CaptureResult.LENS_INTRINSIC_CALIBRATION),
+                        result.get(CaptureResult.LENS_DISTORTION),
+                        active.width(),
+                        active.height()
+                    )
+                    Log.i(TAG, if (intrinsics != null) "Camera lens values found" else "Camera reports no lens values; publishing as uncalibrated")
+                    onCameraIntrinsics(intrinsics)
+                }
+            }
+        )
         Camera2Interop.Extender(analysisBuilder)
             .setCaptureRequestOption(
                 CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
@@ -159,6 +190,10 @@ class CameraManager(
                     cameraSelector,
                     imageAnalysis
                 )
+                activeArraySize = camera?.let {
+                    Camera2CameraInfo.from(it.cameraInfo)
+                        .getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+                }
                 Log.i(TAG, "Camera Started with lens facing ${config.lensFacing}")
                 state = ModuleState.RUNNING
                 onCameraStarted()

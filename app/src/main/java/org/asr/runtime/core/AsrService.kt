@@ -386,7 +386,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                 if (isRunning && _runtimeState.value == RuntimeState.STARTING) {
                     _runtimeState.value = RuntimeState.STREAMING
                 }
-            }
+            },
+            onCameraIntrinsics = { intrinsics -> ros2Runtime.setCameraIntrinsics(intrinsics) }
         ).apply {
             this.lifecycleOwner = this@AsrService
             this.cameraPipeline = this@AsrService.cameraPipeline

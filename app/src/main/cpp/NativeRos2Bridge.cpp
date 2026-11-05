@@ -210,10 +210,12 @@ static bool ensure_publisher(const char *topic_name, const rosidl_message_type_s
     return true;
 }
 
-static void set_stamp(std_msgs__msg__Header *header, jlong timestamp_ns) {
+static void set_stamp(std_msgs__msg__Header *header, jlong timestamp_ns, const char *frame) {
     header->stamp.sec = static_cast<int32_t>(timestamp_ns / 1000000000LL);
     header->stamp.nanosec = static_cast<uint32_t>(timestamp_ns % 1000000000LL);
-    rosidl_runtime_c__String__assign(&header->frame_id, "asr_android");
+    // Prefix with the node namespace so frames from several phones stay separate in TF.
+    std::string frame_id = local_node_namespace.size() > 1 ? local_node_namespace.substr(1) + "/" + frame : frame;
+    rosidl_runtime_c__String__assign(&header->frame_id, frame_id.c_str());
 }
 
 extern "C" {
@@ -457,7 +459,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishImu(JNIEnv *env, jobject, jstr
     if (ok) {
         sensor_msgs__msg__Imu msg;
         sensor_msgs__msg__Imu__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "imu_link");
         std::fill(std::begin(msg.orientation_covariance), std::end(msg.orientation_covariance), 0.0);
         std::fill(std::begin(msg.angular_velocity_covariance), std::end(msg.angular_velocity_covariance), 0.0);
         std::fill(std::begin(msg.linear_acceleration_covariance), std::end(msg.linear_acceleration_covariance), 0.0);
@@ -499,7 +501,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishNavSatFix(JNIEnv *env, jobject
     if (ok) {
         sensor_msgs__msg__NavSatFix msg;
         sensor_msgs__msg__NavSatFix__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "gps_link");
         msg.latitude = latitude; msg.longitude = longitude; msg.altitude = altitude;
         std::fill(std::begin(msg.position_covariance), std::end(msg.position_covariance), 0.0);
         msg.position_covariance[0] = static_cast<double>(accuracy) * accuracy;
@@ -531,7 +533,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishBattery(JNIEnv *env, jobject, 
     if (ok) {
         sensor_msgs__msg__BatteryState msg;
         sensor_msgs__msg__BatteryState__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "battery_link");
         msg.percentage = percentage / 100.0f;
         msg.temperature = temperature;
         msg.voltage = voltage / 1000.0f;
@@ -568,16 +570,16 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishScalar(JNIEnv *env, jobject, j
     bool ok = false;
     if (topic && kind == 0) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, Illuminance), &publisher, 0);
-        if (ok) { sensor_msgs__msg__Illuminance msg; sensor_msgs__msg__Illuminance__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.illuminance = value; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Illuminance__fini(&msg); }
+        if (ok) { sensor_msgs__msg__Illuminance msg; sensor_msgs__msg__Illuminance__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.illuminance = value; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Illuminance__fini(&msg); }
     } else if (topic && kind == 1) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, FluidPressure), &publisher, 0);
-        if (ok) { sensor_msgs__msg__FluidPressure msg; sensor_msgs__msg__FluidPressure__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.fluid_pressure = value * 100.0; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__FluidPressure__fini(&msg); }
+        if (ok) { sensor_msgs__msg__FluidPressure msg; sensor_msgs__msg__FluidPressure__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.fluid_pressure = value * 100.0; msg.variance = 0.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__FluidPressure__fini(&msg); }
     } else if (topic && kind == 2) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, Temperature), &publisher, 0);
-        if (ok) { sensor_msgs__msg__Temperature msg; sensor_msgs__msg__Temperature__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.temperature = value; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Temperature__fini(&msg); }
+        if (ok) { sensor_msgs__msg__Temperature msg; sensor_msgs__msg__Temperature__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.temperature = value; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__Temperature__fini(&msg); }
     } else if (topic && kind == 3) {
         rcl_publisher_t *publisher = nullptr; ok = ensure_publisher(topic, ASR_MESSAGE_TYPE_SUPPORT(sensor_msgs, msg, RelativeHumidity), &publisher, 0);
-        if (ok) { sensor_msgs__msg__RelativeHumidity msg; sensor_msgs__msg__RelativeHumidity__init(&msg); set_stamp(&msg.header, timestamp_ns); msg.relative_humidity = value / 100.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__RelativeHumidity__fini(&msg); }
+        if (ok) { sensor_msgs__msg__RelativeHumidity msg; sensor_msgs__msg__RelativeHumidity__init(&msg); set_stamp(&msg.header, timestamp_ns, "environment_link"); msg.relative_humidity = value / 100.0; ok = rcl_publish(publisher, &msg, nullptr) == RCL_RET_OK; sensor_msgs__msg__RelativeHumidity__fini(&msg); }
     }
     if (topic) env->ReleaseStringUTFChars(j_topic, topic);
     return ok ? JNI_TRUE : JNI_FALSE;
@@ -597,7 +599,7 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCompressedImage(JNIEnv *env, j
         jsize size = env->GetArrayLength(j_data);
         sensor_msgs__msg__CompressedImage msg;
         sensor_msgs__msg__CompressedImage__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "camera_optical_frame");
         rosidl_runtime_c__String__assign(&msg.format, format);
         rosidl_runtime_c__uint8__Sequence__init(&msg.data, static_cast<size_t>(size));
         env->GetByteArrayRegion(j_data, 0, size, reinterpret_cast<jbyte *>(msg.data.data));
@@ -611,7 +613,9 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCompressedImage(JNIEnv *env, j
 
 JNIEXPORT jboolean JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobject, jstring j_topic,
-                                                              jint width, jint height, jlong timestamp_ns) {
+                                                              jint width, jint height,
+                                                              jdoubleArray j_intrinsics, jdoubleArray j_distortion,
+                                                              jlong timestamp_ns) {
     std::lock_guard<std::mutex> lock(node_mutex);
     if (!node_ready) return JNI_FALSE;
     const char *topic = env->GetStringUTFChars(j_topic, nullptr);
@@ -620,32 +624,37 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
     if (ok) {
         sensor_msgs__msg__CameraInfo msg;
         sensor_msgs__msg__CameraInfo__init(&msg);
-        set_stamp(&msg.header, timestamp_ns);
+        set_stamp(&msg.header, timestamp_ns, "camera_optical_frame");
         msg.width = static_cast<uint32_t>(width);
         msg.height = static_cast<uint32_t>(height);
 
-        // Simple pinhole model defaults if no calibration exists
-        double fx = width * 0.8;
-        double fy = fx;
-        double cx = width / 2.0;
-        double cy = height / 2.0;
+        // Per sensor_msgs/CameraInfo, K[0] == 0 means the camera is uncalibrated.
+        jdouble in[4] = {0.0, 0.0, 0.0, 0.0};
+        jdouble dist[5] = {0.0, 0.0, 0.0, 0.0, 0.0};
+        env->GetDoubleArrayRegion(j_intrinsics, 0, 4, in);
+        env->GetDoubleArrayRegion(j_distortion, 0, 5, dist);
+        const bool calibrated = in[0] > 0.0;
 
         std::fill(std::begin(msg.k), std::end(msg.k), 0.0);
-        msg.k[0] = fx; msg.k[2] = cx;
-        msg.k[4] = fy; msg.k[5] = cy;
-        msg.k[8] = 1.0;
+        if (calibrated) {
+            msg.k[0] = in[0]; msg.k[2] = in[2];
+            msg.k[4] = in[1]; msg.k[5] = in[3];
+            msg.k[8] = 1.0;
+        }
 
         std::fill(std::begin(msg.r), std::end(msg.r), 0.0);
         msg.r[0] = 1.0; msg.r[4] = 1.0; msg.r[8] = 1.0;
 
         std::fill(std::begin(msg.p), std::end(msg.p), 0.0);
-        msg.p[0] = fx; msg.p[2] = cx;
-        msg.p[5] = fy; msg.p[6] = cy;
-        msg.p[10] = 1.0;
+        if (calibrated) {
+            msg.p[0] = in[0]; msg.p[2] = in[2];
+            msg.p[5] = in[1]; msg.p[6] = in[3];
+            msg.p[10] = 1.0;
+        }
 
         rosidl_runtime_c__String__assign(&msg.distortion_model, "plumb_bob");
         rosidl_runtime_c__double__Sequence__init(&msg.d, 5);
-        std::fill(msg.d.data, msg.d.data + 5, 0.0);
+        std::copy(dist, dist + 5, msg.d.data);
 
         msg.binning_x = 0;
         msg.binning_y = 0;

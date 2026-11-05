@@ -1,5 +1,6 @@
 package org.asr.runtime.ros2
 
+import org.asr.runtime.camera.CameraIntrinsics
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -50,6 +51,10 @@ class Ros2Runtime(private val context: Context) {
 
     private var heartbeatRunnable: Runnable? = null
     private var discoveryPollingRunnable: Runnable? = null
+    @Volatile private var cameraIntrinsics: CameraIntrinsics? = null
+    @Volatile private var streamIntrinsics: DoubleArray? = null
+    private var streamWidth = 0
+    private var streamHeight = 0
     private var interfaceMonitorRunnable: Runnable? = null
     private var startRetryRunnable: Runnable? = null
     private var startRetryAttempt = 0
@@ -594,11 +599,27 @@ class Ros2Runtime(private val context: Context) {
         NativeRos2Bridge.publishScalar(topic, value, RosClock.toUnixNs(timestampNs), kind)
     }
 
+    /** Set when the active camera reports lens values; null publishes the camera as uncalibrated. */
+    fun setCameraIntrinsics(intrinsics: CameraIntrinsics?) {
+        cameraIntrinsics = intrinsics
+        streamIntrinsics = null
+    }
+
     fun publishCameraJpeg(data: ByteArray, width: Int, height: Int, timestampNs: Long) {
         if (ready()) {
             val stampNs = RosClock.toUnixNs(timestampNs)
             NativeRos2Bridge.publishCompressedImage("camera/image/compressed", data, "jpeg", stampNs)
-            NativeRos2Bridge.publishCameraInfo("camera/camera_info", width, height, stampNs)
+            val lens = cameraIntrinsics
+            var stream = streamIntrinsics
+            if (stream == null || streamWidth != width || streamHeight != height) {
+                stream = lens?.forStream(width, height) ?: DoubleArray(4)
+                streamIntrinsics = stream
+                streamWidth = width
+                streamHeight = height
+            }
+            NativeRos2Bridge.publishCameraInfo(
+                "camera/camera_info", width, height, stream, lens?.distortion ?: NO_DISTORTION, stampNs
+            )
         }
     }
 
@@ -618,6 +639,7 @@ class Ros2Runtime(private val context: Context) {
 
     companion object {
         private const val TAG = "Ros2Runtime"
+        private val NO_DISTORTION = DoubleArray(5)
         private const val START_RETRY_BASE_MS = 1_000L
         private const val START_RETRY_MAX_MS = 30_000L
         private const val DISCOVERY_LOG_INTERVAL_MS = 5_000L
