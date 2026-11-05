@@ -870,18 +870,13 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     /**
-     * Android 14 and later restrict camera and microphone services started from boot, so there
-     * only the DDS node comes up. Sensors then start when the app is opened.
+     * Only the DDS node starts from boot, on every Android version. Camera, microphone and location
+     * must follow a user action in the app, so sensors wait until START is tapped.
      */
     private fun handleBootStart() {
         ensureForeground(sensorRuntime = false)
         restoreConfiguredRos2PathIfNeeded()
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE && prefs.getBoolean(PREF_RUNTIME_ENABLED, false)) {
-            handleStart()
-        } else {
-            Log.i(TAG, "Boot start: DDS only; sensors wait for the app to open")
-        }
+        Log.i(TAG, "Boot start: DDS only; sensors wait for START")
     }
 
     private fun handleStart() {

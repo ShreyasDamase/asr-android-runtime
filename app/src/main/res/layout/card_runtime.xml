@@ -205,7 +205,7 @@
                     android:buttonTint="@color/asr_text_secondary"
                     android:fontFamily="@font/space_grotesk"
                     android:paddingStart="4dp"
-                    android:text="I understand: selected sensor data and device details (model, Android version, capabilities, node ID) are sent live to ROS 2 peers or ASR Studio at enabled DDS/TCP destinations (Wi-Fi, USB tethering, or USB/ADB). These connections are not encrypted by this app. The destination operator may process or retain data. No developer cloud relay is used."
+                    android:text="I understand: ASR sends the sensors I select (camera, microphone, precise GPS location, motion including step count, environment, battery) and device details (model, Android version, capabilities, node ID) live to ROS 2 peers or ASR Studio at the destinations I enable. This continues while the app is closed or the screen is off, until I tap STOP. TCP is not encrypted. DDS is encrypted only when SROS2 is on. The destination operator may process or retain data. No developer cloud relay is used."
                     android:textColor="@color/asr_text_secondary"
                     android:textSize="12sp" />
 

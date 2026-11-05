@@ -1,6 +1,6 @@
 # ASR Android Runtime Privacy Policy
 
-**Effective date: 23 October 2026**
+**Effective date: 5 November 2026**
 
 ASR Android Runtime turns an Android phone into a configurable sensor node for ROS 2 and ASR Studio. You choose which sensor modules to enable and which connection paths and destinations to use.
 
@@ -20,6 +20,14 @@ ASR is designed to publish directly to robotics systems that you configure, not 
 - **TCP over USB/ADB:** TCP through an ADB reverse tunnel to the connected computer.
 
 These connections are intended for your local robotics setup. The destination you configure receives the data directly, and its operator may process or retain it under their own practices. Network routing or a destination you configure can carry traffic beyond your local network, so check the endpoint and route. ASR does not operate a cloud relay, account service, or server that receives sensor streams.
+
+## Background use and remote control
+
+After you tap START, selected sensors, including precise location, camera and microphone, keep sending data while the app is closed or the screen is off, until you tap STOP. Android shows an ongoing notification during this time.
+
+START ON BOOT is off by default. When it is on, only the DDS node starts after a reboot; sensors wait until you open the app and tap START.
+
+REMOTE CONFIG is off by default. When it is on, any node on the same ROS_DOMAIN_ID can change camera and sensor settings and send flashlight and speaker commands.
 
 ## Security
 
@@ -41,4 +49,4 @@ You can select sensor modules, enable or disable transports, stop the runtime, a
 
 ## Children, contact, and policy changes
 
-ASR Android Runtime is a robotics developer tool and is not designed for children. For privacy questions, contact the maintainer through the [project repository](https://github.com/ShreyasDamase/asr-android-runtime). This policy will be updated if the app's data practices change; the published policy and effective date should be updated together.
+ASR Android Runtime is developed by Shreyas Damase. It is a robotics developer tool and is not designed for children. For privacy questions, contact the maintainer through the [project repository](https://github.com/ShreyasDamase/asr-android-runtime). This policy will be updated if the app's data practices change; the published policy and effective date should be updated together.
