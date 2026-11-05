@@ -22,7 +22,9 @@ Internal release worksheet. Complete and verify in Play Console separately for e
 - TCP over Wi-Fi to configured ASR Studio host.
 - TCP over USB via ADB reverse tunnel.
 - Enabled transports may run concurrently and receive the same selected sensor data.
-- Current TCP is plain TCP without TLS; inspected DDS configuration does not enable DDS Security. Do not claim encryption in transit.
+- Current TCP is plain TCP without TLS. DDS Security (SROS2) is optional, off by default, and needs user-supplied keys. Do not claim encryption in transit for all data.
+- REMOTE CONFIG is off by default. When on, nodes on the same ROS domain can change camera and sensor settings and send flashlight and speaker commands.
+- START ON BOOT is off by default and uses `RECEIVE_BOOT_COMPLETED`.
 - Code review found no separate native USB serial/UART transport. Do not describe ADB or tethering as UART.
 
 ## Questions to resolve in Play Console
@@ -30,7 +32,7 @@ Internal release worksheet. Complete and verify in Play Console separately for e
 - Whether the configured peers qualify as service providers or third parties for each disclosure and sharing answer. User-configured destinations do not automatically make data collection disappear from the form.
 - Whether any documented user-initiated-transfer or ephemeral-processing exception applies to each data type and route. Confirm against the current form requirements; do not infer a blanket exception.
 - Whether camera, audio, location, motion, device identifier, and device model/capability fields require collection declarations under the actual distribution and use.
-- Whether the Data Safety encryption question should be answered “No” for this binary (current source indicates no transport encryption).
+- Whether the Data Safety encryption question should be answered “No” for this binary (TCP and default DDS are not encrypted; SROS2 is optional).
 - Whether diagnostics or connection metadata are retained by the configured ASR Studio/ROS 2 endpoint and who operates those endpoints.
 - Ensure the in-app disclosure, privacy policy, store listing, and saved form describe the same package and binary behavior.
 - The current Play-distributed Android UI omits the Buy Me a Coffee link. Reassess payments policy and update this worksheet if a future Android build restores it.

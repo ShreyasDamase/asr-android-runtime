@@ -53,7 +53,7 @@ The Fast DDS comparison variant can be built with:
 
 Both DDS flavors use the same application ID, `org.asr.runtime`, and cannot be installed side by side. Install or upload one flavor at a time. Do not run both sensor runtimes simultaneously on one device; they use the same ROS 2 node name.
 
-The current Android version is `1.0.2` (version code `3`); the Cyclone build adds the `-cyclone` suffix. The app displays its selected DDS backend and exact build version beneath the app name.
+The current Android version is `1.0.3` (version code `4`); the Cyclone build adds the `-cyclone` suffix. The app displays its selected DDS backend and exact build version beneath the app name.
 
 ## Start the phone runtime
 
@@ -245,12 +245,21 @@ The helper currently monitors `imu`, `camera/image/compressed`, `battery`, and `
 
 Cyclone DDS was exercised on macOS over Wi-Fi and USB tethering, with ROS graph discovery and sensor delivery observed. These results describe the tested setup, not a guarantee for every network. Ubuntu and Raspberry Pi live transport validation remain outstanding. See [`docs/android-dds-backend-comparison.md`](docs/android-dds-backend-comparison.md) for recorded comparisons and limits.
 
+Later testing used a Redmi Note 10 (Android 12) and a Redmi Note 11 Pro (Android 13) with a Mac host:
+
+- Two phones streamed together, including with both screens locked.
+- SROS2 rejected clients without keys, and a client with keys streamed over Wi-Fi.
+- A 60-minute soak ran without a crash or a steady memory climb, and 15 start and stop cycles held steady.
+- The Cyclone build ran on a 16 KB Android 37 emulator with no compatibility mode. Its sensors are simulated.
+
+Not yet tested: an 8-hour run, and hosts other than macOS for these features.
+
 ## Repository layout
 
 - `app/` — Android application, JNI bridge, and packaged native libraries.
 - `asr_ros2/` — ROS 2 USB link and sensor-flow monitor.
-- `docs/` — transport validation, [Native Build Prefix Guide](docs/BUILD_PREFIX_GUIDE.md), and release checklists.
-- `scripts/` — maintainer tools and prefix packaging (`package_prefix.sh`).
+- `docs/` — DDS comparison, [Native Build Prefix Guide](docs/BUILD_PREFIX_GUIDE.md), privacy policy, and Play release documents.
+- `scripts/` — maintainer tools, prefix packaging (`package_prefix.sh`), and the SROS2 plugin build (`build_sros2_android.sh`).
 
 ## Source availability and licensing
 

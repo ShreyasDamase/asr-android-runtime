@@ -23,7 +23,7 @@ These connections are intended for your local robotics setup. The destination yo
 
 ## Security
 
-The current TCP connection uses plain TCP without TLS, and DDS Security is not enabled. Data may be visible to parties able to inspect traffic on the route. Use trusted destinations and networks. The app does not claim that its transport connections are encrypted.
+The current TCP connection uses plain TCP without TLS. DDS Security (SROS2) is optional and off by default. Unless it is on, data may be visible to parties able to inspect traffic on the route. Use trusted destinations and networks. The app does not claim that its TCP connection, or DDS with SROS2 off, is encrypted.
 
 ## Data received by the ASR developer
 
