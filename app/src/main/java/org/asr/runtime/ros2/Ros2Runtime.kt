@@ -42,6 +42,8 @@ class Ros2Runtime(private val context: Context) {
         fun onSpeakerCommand(text: String)
         fun onDdsInterfacesChanged()
         fun onDdsRetryRequested()
+        fun onConfigCommand(command: String)
+        fun onConfigStateTick()
     }
 
     var listener: Listener? = null
@@ -55,6 +57,14 @@ class Ros2Runtime(private val context: Context) {
     @Volatile private var streamIntrinsics: DoubleArray? = null
     private var streamWidth = 0
     private var streamHeight = 0
+    @Volatile private var imuMinIntervalNs = 0L
+    private var lastImuTimestampNs = 0L
+    // Reused because the IMU publishes hundreds of times per second from a single thread.
+    private val imuAccel = DoubleArray(3)
+    private val imuGyro = DoubleArray(3)
+    private val imuOrientation = DoubleArray(4)
+    @Volatile private var cameraFrames = 0
+    private var cameraFpsSinceNs = SystemClock.elapsedRealtimeNanos()
     private var interfaceMonitorRunnable: Runnable? = null
     private var startRetryRunnable: Runnable? = null
     private var startRetryAttempt = 0
@@ -189,8 +199,9 @@ class Ros2Runtime(private val context: Context) {
 
             NativeRos2Bridge.setMessageListener(object : NativeRos2Bridge.MessageListener {
                 override fun onStringMessage(topic: String, message: String) {
-                    Log.i(TAG, "ROS 2 message received on $topic: $message")
+                    Log.i(TAG, "ROS 2 message received on $topic")
                     when {
+                        topic.contains("config/set") -> listener?.onConfigCommand(message)
                         topic.contains("flashlight") -> {
                             listener?.onFlashlightCommand(message.trim().lowercase() == "true")
                         }
@@ -205,6 +216,7 @@ class Ros2Runtime(private val context: Context) {
             NativeRos2Bridge.subscribeString("test/in")
             NativeRos2Bridge.subscribeString("flashlight")
             NativeRos2Bridge.subscribeString("speaker/speech")
+            NativeRos2Bridge.subscribeString("config/set")
 
             runtimeReady = true
             startInterfaceMonitor()
@@ -369,6 +381,16 @@ class Ros2Runtime(private val context: Context) {
         val interfaceRows = addresses.joinToString("\n") { address ->
             "                <NetworkInterface address=\"${xmlEscape(address)}\"/>"
         }
+        val peers = prefs.getString(PREF_STATIC_PEERS, "").orEmpty()
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        // Static peers reach networks that block multicast, the same idea as ROS_STATIC_PEERS.
+        val discoveryRows = if (peers.isEmpty()) "" else """
+                    <Discovery>
+                      <Peers>
+${peers.joinToString("\n") { "                        <Peer address=\"${xmlEscape(it)}\"/>" }}
+                      </Peers>
+                      <ParticipantIndex>auto</ParticipantIndex>
+                    </Discovery>"""
         val file = File(context.cacheDir, "cyclonedds_asr.xml")
         file.writeText(
             """<?xml version="1.0" encoding="UTF-8"?>
@@ -379,7 +401,7 @@ class Ros2Runtime(private val context: Context) {
             $interfaceRows
                       </Interfaces>
                       <AllowMulticast>default</AllowMulticast>
-                    </General>
+                    </General>$discoveryRows
                   </Domain>
                 </CycloneDDS>
             """.trimIndent()
@@ -561,13 +583,50 @@ class Ros2Runtime(private val context: Context) {
         }
     }
 
+    /** Publishes the retained config/state topic. */
+    fun publishConfigState(json: String) {
+        if (!ready()) return
+        try {
+            NativeRos2Bridge.publishString("config/state", json)
+        } catch (t: Throwable) {
+            Log.w(TAG, "ROS 2 config state publish failed", t)
+        }
+    }
+
+    /** Limits IMU messages to this rate. 0 publishes every sample. */
+    fun setImuRateLimitHz(rateHz: Int) {
+        imuMinIntervalNs = if (rateHz > 0) 1_000_000_000L / rateHz else 0L
+    }
+
+    /** Camera frames per second published since the previous call. */
+    fun takeCameraFps(): Double {
+        val now = SystemClock.elapsedRealtimeNanos()
+        val frames = cameraFrames
+        val elapsedNs = now - cameraFpsSinceNs
+        cameraFrames = 0
+        cameraFpsSinceNs = now
+        return if (elapsedNs > 0) frames * 1e9 / elapsedNs else 0.0
+    }
+
+    fun cameraStreamSize(): String = if (streamWidth > 0) "${streamWidth}x${streamHeight}" else ""
+
     fun publishImu(accel: FloatArray, gyro: FloatArray, rotation: FloatArray, timestampNs: Long) {
         if (!ready()) return
+        val minInterval = imuMinIntervalNs
+        if (minInterval > 0L) {
+            if (timestampNs - lastImuTimestampNs < minInterval) return
+            lastImuTimestampNs = timestampNs
+        }
+        for (i in 0 until 3) {
+            imuAccel[i] = accel[i].toDouble()
+            imuGyro[i] = gyro[i].toDouble()
+        }
+        for (i in 0 until 4) imuOrientation[i] = rotation[i].toDouble()
         NativeRos2Bridge.publishImu(
             "imu",
-            accel.map { it.toDouble() }.toDoubleArray(),
-            gyro.map { it.toDouble() }.toDoubleArray(),
-            doubleArrayOf(rotation.getOrElse(0) { 0f }.toDouble(), rotation.getOrElse(1) { 0f }.toDouble(), rotation.getOrElse(2) { 0f }.toDouble(), rotation.getOrElse(3) { 1f }.toDouble()),
+            imuAccel,
+            imuGyro,
+            imuOrientation,
             RosClock.toUnixNs(timestampNs)
         )
     }
@@ -607,6 +666,7 @@ class Ros2Runtime(private val context: Context) {
 
     fun publishCameraJpeg(data: ByteArray, width: Int, height: Int, timestampNs: Long) {
         if (ready()) {
+            cameraFrames++
             val stampNs = RosClock.toUnixNs(timestampNs)
             NativeRos2Bridge.publishCompressedImage("camera/image/compressed", data, "jpeg", stampNs)
             val lens = cameraIntrinsics
@@ -630,6 +690,7 @@ class Ros2Runtime(private val context: Context) {
             override fun run() {
                 if (enabled && runtimeReady) {
                     publishStatus("ASR heartbeat")
+                    listener?.onConfigStateTick()
                 }
                 mainHandler.postDelayed(this, 5000)
             }
@@ -648,6 +709,7 @@ class Ros2Runtime(private val context: Context) {
         private const val PREF_ROS2_ENABLED = "ros2_enabled"
         private const val PREF_ROS2_DOMAIN_ID = "ros2_domain_id"
         private const val PREF_DDS_DISCOVERY_SERVER = "dds_discovery_server"
+        private const val PREF_STATIC_PEERS = "ros_static_peers"
         private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
         private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
     }

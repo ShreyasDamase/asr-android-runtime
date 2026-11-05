@@ -120,6 +120,10 @@ class MainViewModel : ViewModel() {
         asrService?.setRos2DomainId(value)
     }
 
+    fun setStaticPeers(peers: String) {
+        asrService?.setStaticPeers(peers)
+    }
+
     fun setNodeAlias(alias: String?) {
         asrService?.setNodeAlias(alias)
     }

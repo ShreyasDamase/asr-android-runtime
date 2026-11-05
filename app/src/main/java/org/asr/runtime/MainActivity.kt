@@ -52,6 +52,7 @@ class  MainActivity : ComponentActivity() {
 
     private companion object {
         private val ROS2_NODE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*$")
+        private val IPV4_ADDRESS = Regex("^(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}$")
         const val KEY_SENSOR_DISCLOSURE_ACCEPTED = "sensor_data_disclosure_v1_accepted"
         const val KEY_EXIT_CONFIRMATION_VISIBLE = "exit_confirmation_visible"
     }
@@ -1163,12 +1164,21 @@ class  MainActivity : ComponentActivity() {
             setRos2ConfigEditing(!ros2ConfigEditing)
         }
         binding.btnApplyRos2Config.setOnClickListener { applyRos2Config() }
+        val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
+        binding.switchRemoteConfig.isChecked = prefs.getBoolean("remote_config_enabled", false)
+        binding.switchRemoteConfig.setOnCheckedChangeListener { button, checked ->
+            if (!initializingControls) {
+                TactileFeedbackHelper.playSliderSound(button, checked)
+                prefs.edit().putBoolean("remote_config_enabled", checked).apply()
+            }
+        }
     }
 
     private fun loadRos2Config() {
         val prefs = getSharedPreferences("asr_prefs", MODE_PRIVATE)
         binding.editRos2DomainId.setText(prefs.getInt("ros2_domain_id", 0).toString())
         binding.editRos2NodeName.setText(prefs.getString("node_alias", null).orEmpty())
+        binding.editRos2StaticPeers.setText(prefs.getString("ros_static_peers", "").orEmpty())
     }
 
     /** Settings stay locked until EDIT, because a change restarts the node on a running robot. */
@@ -1176,6 +1186,7 @@ class  MainActivity : ComponentActivity() {
         ros2ConfigEditing = editing
         binding.editRos2DomainId.isEnabled = editing
         binding.editRos2NodeName.isEnabled = editing
+        binding.editRos2StaticPeers.isEnabled = editing
         binding.btnEditRos2Config.text = if (editing) "CANCEL" else "EDIT"
         binding.btnApplyRos2Config.visibility =
             if (editing) android.view.View.VISIBLE else android.view.View.GONE
@@ -1199,10 +1210,18 @@ class  MainActivity : ComponentActivity() {
             showRos2ConfigStatus("Node name must start with a letter and use only letters, numbers and underscores.")
             return
         }
+        val peerText = binding.editRos2StaticPeers.text?.toString().orEmpty()
+        val peers = peerText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (peers.any { !IPV4_ADDRESS.matches(it) }) {
+            showRos2ConfigStatus("ROS_STATIC_PEERS must be IPv4 addresses separated by commas.")
+            return
+        }
+        val peersValue = peers.joinToString(",")
+        val peersChanged = peersValue != prefs.getString("ros_static_peers", "").orEmpty()
         val alias = nodeName.ifEmpty { null }
         val domainChanged = domainId != prefs.getInt("ros2_domain_id", 0)
         val nameChanged = alias != prefs.getString("node_alias", null)
-        if (!domainChanged && !nameChanged) {
+        if (!domainChanged && !nameChanged && !peersChanged) {
             showRos2ConfigStatus("No changes to apply.")
             setRos2ConfigEditing(false)
             return
@@ -1211,11 +1230,15 @@ class  MainActivity : ComponentActivity() {
             if (domainChanged) prefs.edit().putInt("ros2_domain_id", domainId).apply()
             viewModel.setNodeAlias(alias)
         }
+        if (peersChanged) {
+            if (domainChanged) prefs.edit().putInt("ros2_domain_id", domainId).apply()
+            viewModel.setStaticPeers(peersValue)
+        }
         if (domainChanged) viewModel.setRos2DomainId(domainId)
         setRos2ConfigEditing(false)
         showRos2ConfigStatus(
             if (domainChanged) "Applied. Set ROS_DOMAIN_ID=$domainId on other machines to discover this node."
-            else "Applied. Node restarted with the new name."
+            else "Applied. Node restarted."
         )
     }
 

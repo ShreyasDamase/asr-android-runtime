@@ -100,7 +100,12 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // adb control is for testing only.
+            manifestPlaceholders["asrServiceExported"] = "true"
+        }
         release {
+            manifestPlaceholders["asrServiceExported"] = "false"
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

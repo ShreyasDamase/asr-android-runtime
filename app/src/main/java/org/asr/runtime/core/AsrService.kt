@@ -88,6 +88,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         private const val PREF_DDS_WIFI_ENABLED = "dds_wifi_enabled"
         private const val PREF_DDS_USB_ENABLED = "dds_usb_enabled"
         private const val PREF_DDS_DISCOVERY_SERVER = "dds_discovery_server"
+        private const val PREF_CAMERA_WIDTH = "camera_width"
+        private const val PREF_CAMERA_HEIGHT = "camera_height"
+        private const val PREF_CAMERA_LENS = "camera_lens"
+        private const val PREF_CAMERA_ID = "camera_id"
+        private const val PREF_IMU_RATE_HZ = "imu_rate_hz"
+        private const val PREF_REMOTE_CONFIG_ENABLED = "remote_config_enabled"
         private const val TCP_TRANSPORT_TYPE = "tcp"
 
         // ADB broadcast actions
@@ -164,6 +170,10 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     private lateinit var commandDispatcher:   CommandDispatcher
 
     private var activeCameraConfig = CameraConfig()
+    @Volatile private var lastConfigResult = ""
+    @Volatile private var measuredCameraFps = 0.0
+    @Volatile private var configCommandSeq = 0L
+    @Volatile private var reportedIntrinsics: org.asr.runtime.camera.CameraIntrinsics? = null
     @Volatile private var isRunning  = false
     @Volatile private var exitRequested = false
     private var restartCount = 0
@@ -331,6 +341,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
         multicastLock = wm.createMulticastLock("AsrRuntime:MulticastLock")
         multicastLock?.setReferenceCounted(false)
+        wakeLock?.setReferenceCounted(false)
+        wifiLock?.setReferenceCounted(false)
 
         Log.i(TAG, "[ASR] Starting Runtime v${BuildConfig.VERSION_NAME}")
 
@@ -338,6 +350,9 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         deviceId = getOrCreateDeviceId()
         ros2Runtime = Ros2Runtime(this).apply {
             listener = this@AsrService
+            setImuRateLimitHz(
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(PREF_IMU_RATE_HZ, 0)
+            )
         }
 
         // ── 2. Transport layer ─────────────────────────────────────────────
@@ -372,6 +387,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         )
 
         // ── 5. Hardware drivers ───────────────────────────────────────────
+        activeCameraConfig = loadCameraConfig()
         cameraManager = CameraManager(
             context         = this,
             onCameraError   = {
@@ -387,7 +403,10 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
                     _runtimeState.value = RuntimeState.STREAMING
                 }
             },
-            onCameraIntrinsics = { intrinsics -> ros2Runtime.setCameraIntrinsics(intrinsics) }
+            onCameraIntrinsics = { intrinsics ->
+                reportedIntrinsics = intrinsics
+                ros2Runtime.setCameraIntrinsics(calibrationOverride() ?: intrinsics)
+            }
         ).apply {
             this.lifecycleOwner = this@AsrService
             this.cameraPipeline = this@AsrService.cameraPipeline
@@ -451,7 +470,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             addAction(ACTION_SET_ALIAS)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(controlReceiver, filter, Context.RECEIVER_EXPORTED)
+            // Debug builds keep adb control for testing; release builds accept only this app.
+            registerReceiver(
+                controlReceiver,
+                filter,
+                if (org.asr.runtime.BuildConfig.DEBUG) Context.RECEIVER_EXPORTED else Context.RECEIVER_NOT_EXPORTED
+            )
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(controlReceiver, filter)
@@ -771,8 +795,21 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     fun setRos2Enabled(enabled: Boolean) {
-        // Legacy control action maps to the existing Wi-Fi DDS behavior.
-        setRos2TransportPaths(wifiEnabled = enabled, usbEnabled = false)
+        if (!enabled) {
+            setRos2TransportPaths(wifiEnabled = false, usbEnabled = false)
+            return
+        }
+        // Keep the paths already chosen. Fall back to Wi-Fi only when none is selected.
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val wifi = prefs.getBoolean(PREF_DDS_WIFI_ENABLED, false)
+        val usb = prefs.getBoolean(PREF_DDS_USB_ENABLED, false)
+        setRos2TransportPaths(wifiEnabled = wifi || !usb, usbEnabled = usb)
+    }
+
+    /** Saves the comma-separated peer list and restarts the node to use it. */
+    fun setStaticPeers(peers: String) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString("ros_static_peers", peers).apply()
+        restartRos2IfEnabled()
     }
 
     fun setRos2TransportPaths(wifiEnabled: Boolean, usbEnabled: Boolean) {
@@ -823,6 +860,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     private fun handleStart() {
         if (exitRequested) return
+        holdPowerLocks()
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(PREF_RUNTIME_ENABLED, true).apply()
         ensureForeground(sensorRuntime = true)
         if (isRunning) return
@@ -897,7 +935,25 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         }
     }
 
+    /**
+     * Keeps the CPU and Wi-Fi awake while the runtime or DDS is active. A locked phone would
+     * otherwise sleep, and its node would drop off the ROS 2 network.
+     */
+    private fun holdPowerLocks() {
+        if (wakeLock?.isHeld != true) runCatching { wakeLock?.acquire() }
+        if (wifiLock?.isHeld != true) runCatching { wifiLock?.acquire() }
+    }
+
+    private fun releasePowerLocksIfIdle() {
+        val ddsEnabled = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(PREF_ROS2_ENABLED, false)
+        if (isRunning || pendingStart || ddsEnabled) return
+        if (wakeLock?.isHeld == true) wakeLock?.release()
+        if (wifiLock?.isHeld == true) wifiLock?.release()
+    }
+
     private fun startRos2() {
+        holdPowerLocks()
         if (ros2Runtime.isEnabled() && multicastLock?.isHeld != true) {
             runCatching { multicastLock?.acquire() }
                 .onFailure { Log.w(TAG, "Unable to acquire DDS multicast lock", it) }
@@ -924,8 +980,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         benchmarkProcessor.reset(restartCount)
 
         // Acquire locks only when active
-        wakeLock?.acquire(10 * 60 * 60 * 1000L)
-        wifiLock?.acquire()
+        holdPowerLocks()
 
         isRunning = true
         startSensorModules()
@@ -943,10 +998,8 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         heartbeatHandler.removeCallbacks(heartbeatRunnable)
         stopSensorModules()
         
-        if (wakeLock?.isHeld == true) wakeLock?.release()
-        if (wifiLock?.isHeld == true) wifiLock?.release()
-
         isRunning = false
+        releasePowerLocksIfIdle()
         _runtimeState.value = RuntimeState.STOPPED
         updateDiagnosticsSnapshot()
         stopForegroundIfIdle()
@@ -961,6 +1014,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             runCatching { multicastLock?.release() }
                 .onFailure { Log.w(TAG, "Unable to release DDS multicast lock", it) }
         }
+        releasePowerLocksIfIdle()
     }
 
     private fun startSensorModules() {
@@ -990,10 +1044,21 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             "back"  -> androidx.camera.core.CameraSelector.LENS_FACING_BACK
             else    -> activeCameraConfig.lensFacing
         }
-        activeCameraConfig = activeCameraConfig.copy(
+        applyCameraConfig(activeCameraConfig.copy(
             lensFacing = newLensFacing,
-            resolution = android.util.Size(width, height)
-        )
+            resolution = android.util.Size(width, height),
+            cameraId = if (lens != null) null else activeCameraConfig.cameraId
+        ))
+    }
+
+    private fun applyCameraConfig(config: CameraConfig) {
+        activeCameraConfig = config
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putInt(PREF_CAMERA_WIDTH, config.resolution.width)
+            .putInt(PREF_CAMERA_HEIGHT, config.resolution.height)
+            .putInt(PREF_CAMERA_LENS, config.lensFacing)
+            .putString(PREF_CAMERA_ID, config.cameraId)
+            .apply()
         if (cameraManager.state == org.asr.runtime.common.ModuleState.RUNNING) {
             cameraManager.stop()
             cameraManager.config = activeCameraConfig
@@ -1001,6 +1066,161 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         } else {
             cameraManager.config = activeCameraConfig
         }
+    }
+
+    private fun loadCameraConfig(): CameraConfig {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val defaults = CameraConfig()
+        return defaults.copy(
+            lensFacing = prefs.getInt(PREF_CAMERA_LENS, defaults.lensFacing),
+            resolution = android.util.Size(
+                prefs.getInt(PREF_CAMERA_WIDTH, defaults.resolution.width),
+                prefs.getInt(PREF_CAMERA_HEIGHT, defaults.resolution.height)
+            ),
+            cameraId = prefs.getString(PREF_CAMERA_ID, null)
+        )
+    }
+
+    private fun remoteConfigAllowed(): Boolean =
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(PREF_REMOTE_CONFIG_ENABLED, false)
+
+    /** Runs off the native spinner thread, which holds the node lock during callbacks. */
+    override fun onConfigCommand(command: String) {
+        serviceScope.launch(Dispatchers.IO) {
+            lastConfigResult = runCatching { applyRemoteConfig(command) }
+                .getOrElse { "error: ${it.message}" }
+            configCommandSeq++
+            Log.i(TAG, "Remote config result: $lastConfigResult")
+            publishConfigState()
+        }
+    }
+
+    override fun onConfigStateTick() {
+        // Measured only on this timer, so commands can't shorten the FPS window.
+        measuredCameraFps = Math.round(ros2Runtime.takeCameraFps() * 10) / 10.0
+        serviceScope.launch(Dispatchers.IO) { publishConfigState() }
+    }
+
+    private fun applyRemoteConfig(command: String): String {
+        val parts = command.trim().split("=", limit = 2)
+        val key = parts[0].trim()
+        val value = parts.getOrNull(1)?.trim().orEmpty()
+        if (key == "get" || key.isEmpty()) return "ok: state published"
+        if (!remoteConfigAllowed()) return "rejected: turn on REMOTE CONFIG on the phone"
+        return when {
+            key == "camera.resolution" -> {
+                if (value !in RemoteConfig.CAMERA_RESOLUTIONS) {
+                    return "rejected: camera.resolution must be one of ${RemoteConfig.CAMERA_RESOLUTIONS}"
+                }
+                val (width, height) = value.split("x").map { it.toInt() }
+                applyCameraConfig(activeCameraConfig.copy(resolution = android.util.Size(width, height)))
+                "ok: camera.resolution=$value"
+            }
+            key == "camera.id" && value == "auto" -> {
+                applyCameraConfig(activeCameraConfig.copy(cameraId = null))
+                "ok: camera.id=auto"
+            }
+            key == "camera.id" -> {
+                val camera = cameraManager.availableCameras().firstOrNull { it.id == value }
+                    ?: return "rejected: camera.id must be auto or one of ${cameraManager.availableCameras().map { it.id }}"
+                applyCameraConfig(activeCameraConfig.copy(
+                    cameraId = camera.id,
+                    lensFacing = if (camera.facing == "front") {
+                        androidx.camera.core.CameraSelector.LENS_FACING_FRONT
+                    } else {
+                        androidx.camera.core.CameraSelector.LENS_FACING_BACK
+                    }
+                ))
+                "ok: camera.id=$value"
+            }
+            key == "camera.calibration" -> applyCalibrationCommand(value)
+            key == "imu.rate_hz" -> {
+                val rate = value.toIntOrNull()
+                if (rate == null || rate !in 0..1000) return "rejected: imu.rate_hz must be between 0 and 1000"
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putInt(PREF_IMU_RATE_HZ, rate).apply()
+                ros2Runtime.setImuRateLimitHz(rate)
+                "ok: imu.rate_hz=$rate"
+            }
+            key.startsWith("sensors.") -> {
+                val module = key.removePrefix("sensors.")
+                if (module !in CONFIGURABLE_SENSOR_MODULE_IDS) {
+                    return "rejected: sensor must be one of $CONFIGURABLE_SENSOR_MODULE_IDS"
+                }
+                val enabled = value.toBooleanStrictOrNull()
+                    ?: return "rejected: $key must be true or false"
+                val current = getEnabledSensorModuleIds()
+                setEnabledSensorModuleIds(if (enabled) current + module else current - module)
+                "ok: $key=$enabled"
+            }
+            key == "ros_domain_id" || key == "node_name" -> "rejected: $key can only be changed on the phone"
+            else -> "rejected: unknown key $key"
+        }
+    }
+
+    private fun calibrationPrefKey() = "camera_calibration_${activeCameraConfig.cameraId ?: activeCameraConfig.lensFacing}"
+
+    private fun calibrationOverride(): org.asr.runtime.camera.CameraIntrinsics? =
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(calibrationPrefKey(), null)
+            ?.let { org.asr.runtime.camera.CameraIntrinsics.parseCalibration(it) }
+
+    /** Accepts a checkerboard result for the active camera, or `clear` to return to phone values. */
+    private fun applyCalibrationCommand(value: String): String {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (value == "clear") {
+            prefs.edit().remove(calibrationPrefKey()).apply()
+            ros2Runtime.setCameraIntrinsics(reportedIntrinsics)
+            return "ok: camera.calibration=clear"
+        }
+        val parsed = org.asr.runtime.camera.CameraIntrinsics.parseCalibration(value)
+            ?: return "rejected: camera.calibration must be WxH,fx,fy,cx,cy,k1,k2,t1,t2,k3 or clear"
+        prefs.edit().putString(calibrationPrefKey(), value).apply()
+        ros2Runtime.setCameraIntrinsics(parsed)
+        return "ok: camera.calibration saved"
+    }
+
+    private fun publishConfigState() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val config = activeCameraConfig
+        val status = ros2Runtime.status.value
+        val cameras = org.json.JSONArray()
+        cameraManager.availableCameras().forEach {
+            cameras.put(org.json.JSONObject()
+                .put("id", it.id).put("facing", it.facing).put("focal_length_mm", it.focalLengthMm))
+        }
+        val sensors = org.json.JSONObject()
+        val enabled = getEnabledSensorModuleIds()
+        CONFIGURABLE_SENSOR_MODULE_IDS.forEach { sensors.put(it, it in enabled) }
+        val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            (getSystemService(Context.POWER_SERVICE) as PowerManager).currentThermalStatus
+        } else {
+            -1
+        }
+        val battery = getSystemService(android.os.BatteryManager::class.java)
+        val state = org.json.JSONObject()
+            .put("node_name", status.nodeName)
+            .put("namespace", status.nodeNamespace)
+            .put("ros_domain_id", status.domainId)
+            .put("remote_config", remoteConfigAllowed())
+            .put("camera", org.json.JSONObject()
+                .put("id", config.cameraId ?: "auto")
+                .put("requested_resolution", "${config.resolution.width}x${config.resolution.height}")
+                .put("resolution", ros2Runtime.cameraStreamSize())
+                .put("measured_fps", measuredCameraFps)
+                .put("resolution_options", org.json.JSONArray(RemoteConfig.CAMERA_RESOLUTIONS))
+                .put("calibration", when {
+                    calibrationOverride() != null -> "checkerboard"
+                    reportedIntrinsics != null -> "phone"
+                    else -> "uncalibrated"
+                })
+                .put("available", cameras)
+                .put("concurrent", org.json.JSONArray(cameraManager.concurrentCameraIds().map { org.json.JSONArray(it) })))
+            .put("imu_rate_hz", prefs.getInt(PREF_IMU_RATE_HZ, 0))
+            .put("sensors", sensors)
+            .put("thermal_status", thermal)
+            .put("battery_percent", battery?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1)
+            .put("last_result", lastConfigResult)
+            .put("command_seq", configCommandSeq)
+        ros2Runtime.publishConfigState(state.toString())
     }
 
     private fun handleTcpConnect(intent: Intent) {
@@ -1077,6 +1297,17 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             setRos2Enabled(value)
             return
         }
+        if (flag == "remote_config_enabled" && org.asr.runtime.BuildConfig.DEBUG) {
+            // Debug-only test hook; release builds change this on the phone screen only.
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                .putBoolean(PREF_REMOTE_CONFIG_ENABLED, intent.getBooleanExtra("value", false))
+                .apply()
+            return
+        }
+        if (flag == "ros_static_peers" && org.asr.runtime.BuildConfig.DEBUG) {
+            setStaticPeers(intent.getStringExtra("peers").orEmpty())
+            return
+        }
         if (flag == "ros2_domain_id") {
             val value = intent.getIntExtra("value", 0)
             setRos2DomainId(value)
@@ -1122,10 +1353,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     }
 
     override fun onFlashlightCommand(on: Boolean) {
+        if (!remoteConfigAllowed()) return
         cameraManager.setTorch(on)
     }
 
     override fun onSpeakerCommand(text: String) {
+        if (!remoteConfigAllowed()) return
         speakerManager.speak(text)
     }
 
@@ -1168,6 +1401,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
 
     override fun onDestroy() {
         runCatching { ros2Runtime.shutdown() }
+        ros2Runtime.listener = null
         runCatching { moduleRegistry.releaseAll() }
         wakeLock?.let { if (it.isHeld) it.release() }
         wifiLock?.let { if (it.isHeld) it.release() }

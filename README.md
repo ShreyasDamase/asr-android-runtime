@@ -120,6 +120,27 @@ The monitor is not needed to make the phone visible: in Mac tests with the Cyclo
 
 The standalone package installation and detailed diagnostic interpretation are documented in [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor). A copy is also present under [`asr_ros2/`](asr_ros2/README.md).
 
+### Configure the phone remotely
+
+Turn on **REMOTE CONFIG** on the phone. It is off by default, and it also controls `flashlight` and `speaker/speech`. Any node on the same `ROS_DOMAIN_ID` can then send these commands, because DDS Security is not enabled.
+
+```bash
+ros2 topic echo --qos-durability transient_local /asr_android_250/config/state
+ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: camera.resolution=640x480}"
+```
+
+| Key | Values |
+| --- | --- |
+| `camera.resolution` | `320x240`, `640x480` (default), `1280x960` |
+| `camera.id` | `auto`, or an ID from `camera.available` in `config/state` |
+| `camera.calibration` | `WxH,fx,fy,cx,cy,k1,k2,t1,t2,k3`, or `clear` |
+| `imu.rate_hz` | `0` to `1000`; `0` publishes every sample |
+| `sensors.<name>` | `true` or `false` for `camera`, `imu`, `environment`, `motion`, `audio`, `battery`, `gps` |
+
+`ROS_DOMAIN_ID`, node name and `ROS_STATIC_PEERS` can only be changed on the phone. Use `ROS_STATIC_PEERS` on networks that block multicast.
+
+Remote config uses topics because, in Mac tests, a Fast DDS client got no reply from a Cyclone DDS service, so `ros2 param` cannot reach the phone directly. Python examples, including a node that offers real ROS 2 parameters on the host, are in the `asr_android_examples` package.
+
 ### View topics in Foxglove
 
 Foxglove connects to a **Foxglove Bridge** WebSocket. The ASR USB Link Monitor does not start this bridge; it is a separate, optional diagnostic participant. Launch the bridge using the same sourced ROS 2 environment, `ROS_DOMAIN_ID`, and host RMW:

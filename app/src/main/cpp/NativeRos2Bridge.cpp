@@ -408,7 +408,8 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishString(JNIEnv *env, jobject th
     if (!topic_name) return JNI_FALSE;
 
     int qos_kind = 0;
-    if (strstr(topic_name, "capabilities") != nullptr || strstr(topic_name, "status") != nullptr) {
+    if (strstr(topic_name, "capabilities") != nullptr || strstr(topic_name, "status") != nullptr ||
+        strstr(topic_name, "config/state") != nullptr) {
         qos_kind = 2; // Transient local for caps/status
     }
 
@@ -673,6 +674,13 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_publishCameraInfo(JNIEnv *env, jobjec
 
 JNIEXPORT void JNICALL
 Java_org_asr_runtime_ros2_NativeRos2Bridge_shutdown(JNIEnv *env, jobject thiz) {
+    // Stop the spinner before taking the lock. The spinner takes this lock to handle
+    // messages, so joining it while holding the lock can deadlock.
+    spinning = false;
+    if (spinner_thread.joinable()) {
+        spinner_thread.join();
+    }
+
     std::lock_guard<std::mutex> lock(node_mutex);
     if (!node_ready && !rcl_context_is_valid(&context)) {
         LOGI("Shutdown requested but ROS 2 already idle; skipping");
@@ -680,11 +688,6 @@ Java_org_asr_runtime_ros2_NativeRos2Bridge_shutdown(JNIEnv *env, jobject thiz) {
     }
 
     LOGI("Shutting down ROS 2 node and context...");
-
-    spinning = false;
-    if (spinner_thread.joinable()) {
-        spinner_thread.join();
-    }
 
     for (auto &pair : subscriptions) {
         if (rcl_subscription_fini(&pair.second, &node) != RCL_RET_OK) {

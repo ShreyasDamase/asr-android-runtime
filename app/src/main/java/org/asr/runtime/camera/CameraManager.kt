@@ -176,9 +176,14 @@ class CameraManager(
                 it.setAnalyzer(cameraExecutor, CameraAnalyzer(cameraPipeline, benchmarkProcessor))
             }
 
-        val cameraSelector = CameraSelector.Builder()
-            .requireLensFacing(config.lensFacing)
-            .build()
+        val cameraId = config.cameraId
+        val cameraSelector = if (cameraId != null) {
+            CameraSelector.Builder()
+                .addCameraFilter { infos -> infos.filter { Camera2CameraInfo.from(it).cameraId == cameraId } }
+                .build()
+        } else {
+            CameraSelector.Builder().requireLensFacing(config.lensFacing).build()
+        }
 
         val mainExecutor = ContextCompat.getMainExecutor(context)
         mainExecutor.execute {
@@ -223,7 +228,37 @@ class CameraManager(
         }
     }
 
+    /** Camera ID sets this phone says can stream at the same time. Empty when it promises none. */
+    fun concurrentCameraIds(): List<List<String>> {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return emptyList()
+        val manager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+        return runCatching { manager.concurrentCameraIds.map { it.toList() } }.getOrDefault(emptyList())
+    }
+
+    /** Cameras this phone exposes to the app, for remote selection. */
+    fun availableCameras(): List<CameraDescriptor> {
+        val provider = cameraProvider ?: return emptyList()
+        return provider.availableCameraInfos.mapNotNull { info ->
+            runCatching {
+                val camera2 = Camera2CameraInfo.from(info)
+                val facing = camera2.getCameraCharacteristic(CameraCharacteristics.LENS_FACING)
+                val focal = camera2.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                CameraDescriptor(
+                    id = camera2.cameraId,
+                    facing = when (facing) {
+                        CameraCharacteristics.LENS_FACING_FRONT -> "front"
+                        CameraCharacteristics.LENS_FACING_BACK -> "back"
+                        else -> "external"
+                    },
+                    focalLengthMm = focal?.firstOrNull()?.toDouble() ?: 0.0
+                )
+            }.getOrNull()
+        }
+    }
+
     fun shutdown() {
         cameraExecutor.shutdown()
     }
 }
+
+data class CameraDescriptor(val id: String, val facing: String, val focalLengthMm: Double)

@@ -25,6 +25,29 @@ class CameraIntrinsics(
 
     companion object {
         /**
+         * Parses a checkerboard result: WxH,fx,fy,cx,cy,k1,k2,t1,t2,k3.
+         * Scales from the image size used for calibration, so any stream size can use it.
+         */
+        fun parseCalibration(text: String): CameraIntrinsics? {
+            val parts = text.split(",").map { it.trim() }
+            if (parts.size != 10) return null
+            val size = parts[0].split("x")
+            val width = size.getOrNull(0)?.toIntOrNull() ?: return null
+            val height = size.getOrNull(1)?.toIntOrNull() ?: return null
+            val numbers = parts.drop(1).map { it.toDoubleOrNull() ?: return null }
+            if (width <= 0 || height <= 0 || numbers[0] <= 0.0 || numbers[1] <= 0.0) return null
+            return CameraIntrinsics(
+                fx = numbers[0],
+                fy = numbers[1],
+                cx = numbers[2],
+                cy = numbers[3],
+                distortion = numbers.subList(4, 9).toDoubleArray(),
+                activeWidth = width,
+                activeHeight = height
+            )
+        }
+
+        /**
          * @param calibration LENS_INTRINSIC_CALIBRATION: fx, fy, cx, cy, s
          * @param androidDistortion LENS_DISTORTION: k1, k2, k3, p1, p2
          * @return null when the phone gives no usable focal length

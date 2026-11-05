@@ -39,7 +39,7 @@
         <service
             android:name=".core.AsrService"
             android:enabled="true"
-            android:exported="true"
+            android:exported="${asrServiceExported}"
             android:foregroundServiceType="camera|microphone|location|connectedDevice" />
         <activity
             android:name=".ui.PermissionOnboardingActivity"
