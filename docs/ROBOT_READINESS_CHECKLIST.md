@@ -1,6 +1,6 @@
 # ASR Android: Robot Readiness Checklist
 
-Key: `[ ]` not started, `[~]` in progress, `[x]` done and verified on a phone, `[?]` needs a decision
+Key: `[ ]` not started, `[~]` in progress, `[x]` done and verified on a phone, `[?]` needs a decision, `[*]` kept in the app but varies by phone maker, so not tested on each one
 
 Rules: branch from `develop`. No new libraries without asking. New UI matches the current UI. Never install or update the Pixi environment. Labels use standard ROS 2 terms only.
 
@@ -35,7 +35,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [x] Topic naming for extra camera streams: not needed until two-stream hardware exists
 
 ## 4. Robot-mounted operation
-- [x] START ON BOOT: skipped testing by decision, because auto-start rules vary by phone maker. The switch stays in the app, off by default, and isn't confirmed to start the app after a reboot; Xiaomi's Autostart setting blocked it in the one test
+- [*] START ON BOOT: kept in the app, off by default. Auto-start rules vary by phone maker. Xiaomi's Autostart setting blocked it in the one reboot test
 - [x] Locked phones keep publishing. Both locked together: USB 30.0 FPS and 498 Hz; Wi-Fi 21.2 FPS and 388 Hz. Wake and Wi-Fi locks held whenever the runtime or DDS is active
 - [ ] Recovery after a link drop: code exists; needs someone to toggle Wi-Fi or unplug USB on a phone
 - [x] Thermal status and battery percent in `config/state`, verified
