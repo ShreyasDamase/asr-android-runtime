@@ -37,7 +37,8 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 ## 4. Robot-mounted operation
 - [*] START ON BOOT: kept in the app, off by default. Auto-start rules vary by phone maker. Xiaomi's Autostart setting blocked it in the one reboot test
 - [x] Locked phones keep publishing. Both locked together: USB 30.0 FPS and 498 Hz; Wi-Fi 21.2 FPS and 388 Hz. Wake and Wi-Fi locks held whenever the runtime or DDS is active
-- [ ] Recovery after a link drop: code exists; needs someone to toggle Wi-Fi or unplug USB on a phone
+- [~] Recovery after a link drop: Redmi Note 10's node restarted by itself in about 1 second after a Wi-Fi toggle. Afterwards, with both phones on Wi-Fi, its camera fell to 13.6 FPS on the phone and about 1 FPS at the Mac, with a 3 to 7 s delay. Cause not found; must be fixed before release
+- [ ] Redmi Note 11 Pro: no restart logged after its Wi-Fi toggle, so confirm it was toggled and retest
 - [x] Thermal status and battery percent in `config/state`, verified
 - [ ] 8-hour run
 
@@ -56,7 +57,7 @@ Rules: branch from `develop`. No new libraries without asking. New UI matches th
 - [ ] Update privacy policy and Data Safety only after these ship and are tested
 
 ## 6. Stability and memory (last, across all features above)
-- [~] Full 60-minute soak running on phone 1 from 19:03. The earlier partial run stopped at 28 minutes with stable memory
+- [~] Full 60-minute soak running on the Redmi Note 10 from 19:03. Memory stayed near 80 MB for 22 minutes, then stepped to about 125 MB at minute 23 and held. Threads 40 to 46. Cause of the step not found
 - [~] IMU and camera buffers reused and running on phones. Memory stable so far; no before and after comparison measured
 - [x] Fixed native shutdown deadlock risk, a JNI reference leak and a thread detach bug. 15 start/stop cycles: threads steady at 37, native memory settled at 12.8 MB, no crashes. 600-command burst plus DDS restarts: no crash
 - [x] TCP threads reviewed: disconnect interrupts and joins them (code read only)
