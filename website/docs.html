@@ -16,6 +16,7 @@
     <nav id="primary-nav" aria-label="Main navigation">
       <a href="index.html#platform">Platform</a>
       <a href="index.html#connect">Connectivity</a>
+      <a href="manual.html">Manual</a>
       <a href="docs.html" aria-current="page">Documentation</a>
       <a href="index.html#resources">Resources</a>
       <a href="index.html#about">About</a>
@@ -145,7 +146,7 @@ ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: ca
 
         <section id="static-peers">
           <h2>Wi-Fi that blocks multicast</h2>
-          <p>Some routers don't pass multicast between devices. Ping works, but <code>ros2 node list</code> doesn't show the phone. Set <code>ROS_STATIC_PEERS</code> on both sides: under <strong>ADVANCED</strong> on the phone, enter the computer's IP. On the computer, export the phone's IP:</p>
+          <p>Some routers don't pass multicast between devices, and a firewall on the computer can block it too. Ping works, but <code>ros2 node list</code> doesn't show the phone. Set <code>ROS_STATIC_PEERS</code> on both sides: under <strong>ADVANCED</strong> on the phone, enter the computer's IP. On the computer, export the phone's IP:</p>
           <pre><code>export ROS_STATIC_PEERS=192.168.1.5</code></pre>
         </section>
 
@@ -228,7 +229,7 @@ ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: ca
     <div class="wrap footer-main">
       <a class="brand" href="index.html"><img class="brand-icon" src="assets/asr-app-icon.png" alt=""><span>ASR <small>ROBOTICS PLATFORM</small></span></a>
       <p>Practical sensor tools for ROS 2 robotics.</p>
-      <div class="footer-links"><a href="docs.html">Documentation</a><a href="privacy.html">Privacy</a><a href="license.html">License</a><a href="notices.html">Notices</a></div>
+      <div class="footer-links"><a href="manual.html">Manual</a><a href="docs.html">Documentation</a><a href="privacy.html">Privacy</a><a href="license.html">License</a><a href="notices.html">Notices</a></div>
     </div>
     <div class="wrap footer-bottom"><span>© 2026 ASR · MAINTAINED BY SHREYAS DAMASE</span><span>BUILT FOR THE REAL WORLD <i class="red-dot"></i></span></div>
   </footer>

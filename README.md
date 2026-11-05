@@ -4,6 +4,8 @@ ASR Android Runtime turns an Android phone into a ROS 2 sensor node. It publishe
 
 The primary DDS backend is Cyclone DDS. A Fast DDS build is retained as a comparison variant. The Android application and ROS 2 USB monitor are maintained here; the monitor is also available as a standalone repository: [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor).
 
+New to ROS 2? Start with the [illustrated manual](website/manual.html).
+
 ## Capabilities
 
 - Camera, IMU, GPS, battery, environment, microphone, speaker, and flashlight modules, subject to device hardware and Android permissions.
@@ -122,7 +124,7 @@ The standalone package installation and detailed diagnostic interpretation are d
 
 ### Wi-Fi routers that block multicast
 
-Some routers don't pass multicast between devices. Ping works, but `ros2 node list` shows nothing and the phone stays on **NO OTHER NODES**. Point both sides at each other:
+Some routers don't pass multicast between devices, and a firewall on the computer can block it too. Ping works, but `ros2 node list` shows nothing and the phone stays on **NO OTHER NODES**. Point both sides at each other:
 
 1. On the phone, press **EDIT** and set `ROS_STATIC_PEERS` to the computer's IP address.
 2. On the computer, set the phone's IP address before running ROS 2 commands:
@@ -168,7 +170,7 @@ ros2 topic pub --once /asr_android_250/config/set std_msgs/msg/String "{data: ca
 
 `ROS_DOMAIN_ID`, node name and `ROS_STATIC_PEERS` can only be changed on the phone. Use `ROS_STATIC_PEERS` on networks that block multicast.
 
-Remote config uses topics because, in Mac tests, a Fast DDS client got no reply from a Cyclone DDS service, so `ros2 param` cannot reach the phone directly. Python examples, including a node that offers real ROS 2 parameters on the host, are in the `asr_android_examples` package.
+Remote config uses topics because, in Mac tests, a Fast DDS client got no reply from a Cyclone DDS service, so `ros2 param` cannot reach the phone directly. Python and C++ examples are maintained separately and will be published later, including a node that offers real ROS 2 parameters on the host.
 
 ### Secure the connection with SROS2
 
@@ -252,7 +254,7 @@ Later testing used a Redmi Note 10 (Android 12) and a Redmi Note 11 Pro (Android
 - A 60-minute soak ran without a crash or a steady memory climb, and 15 start and stop cycles held steady.
 - The Cyclone build ran on a 16 KB Android 37 emulator with no compatibility mode. Its sensors are simulated.
 
-Not yet tested: an 8-hour run, and hosts other than macOS for these features.
+Not yet tested: runs longer than one hour, physical 16 KB phones, and Ubuntu, Windows or Raspberry Pi hosts for these features. Fast DDS builds differ, so SROS2 may behave differently on your host.
 
 ## Repository layout
 
