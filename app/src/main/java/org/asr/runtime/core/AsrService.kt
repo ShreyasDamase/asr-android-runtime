@@ -173,6 +173,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     @Volatile private var lastConfigResult = ""
     @Volatile private var measuredCameraFps = 0.0
     @Volatile private var configCommandSeq = 0L
+    @Volatile private var lastConfigCommand = ""
     @Volatile private var reportedIntrinsics: org.asr.runtime.camera.CameraIntrinsics? = null
     @Volatile private var isRunning  = false
     @Volatile private var exitRequested = false
@@ -1095,8 +1096,12 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
     /** Runs off the native spinner thread, which holds the node lock during callbacks. */
     override fun onConfigCommand(command: String) {
         serviceScope.launch(Dispatchers.IO) {
-            lastConfigResult = runCatching { applyRemoteConfig(command) }
-                .getOrElse { "error: ${it.message}" }
+            val text = command.trim()
+            if (text != "get") {
+                lastConfigResult = runCatching { applyRemoteConfig(text) }
+                    .getOrElse { "error: ${it.message}" }
+                lastConfigCommand = text
+            }
             configCommandSeq++
             Log.i(TAG, "Remote config result: $lastConfigResult")
             publishConfigState()
@@ -1113,7 +1118,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
         val parts = command.trim().split("=", limit = 2)
         val key = parts[0].trim()
         val value = parts.getOrNull(1)?.trim().orEmpty()
-        if (key == "get" || key.isEmpty()) return "ok: state published"
+        if (key.isEmpty()) return "rejected: empty command"
         if (!remoteConfigAllowed()) return "rejected: turn on REMOTE CONFIG on the phone"
         return when {
             key == "camera.resolution" -> {
@@ -1226,6 +1231,7 @@ class AsrService : LifecycleService(), Ros2Runtime.Listener {
             .put("sensors", sensors)
             .put("thermal_status", thermal)
             .put("battery_percent", battery?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1)
+            .put("last_command", lastConfigCommand)
             .put("last_result", lastConfigResult)
             .put("command_seq", configCommandSeq)
         ros2Runtime.publishConfigState(state.toString())
