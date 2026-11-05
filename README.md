@@ -9,7 +9,7 @@ The primary DDS backend is Cyclone DDS. A Fast DDS build is retained as a compar
 - Camera, IMU, GPS, battery, environment, microphone, speaker, and flashlight modules, subject to device hardware and Android permissions.
 - ROS 2 topics under a device-specific `/asr_android_<device-id>` namespace.
 - TCP telemetry to ASR Studio on port `4242`.
-- Wi-Fi DDS and USB-tether DDS. The optional host monitor is for USB DDS diagnostics only; Wi-Fi DDS uses an ordinary ROS 2 subscriber or robot node.
+- Wi-Fi DDS and USB-tether DDS. Plain ROS 2 tools and nodes find the phone on both paths. The optional host monitor adds USB DDS diagnostics.
 
 ## Downloads
 
@@ -90,32 +90,39 @@ The phone uses Cyclone DDS. The documented host configuration uses ROS 2 Lyrical
 
 1. Connect the phone and ROS 2 host to the same Wi-Fi network that permits peer-to-peer DDS discovery.
 2. Set matching `ROS_DOMAIN_ID` on both sides (default `0`) and use `rmw_fastrtps_cpp` on the host.
-3. Start phone runtime, enable **Wi-Fi DDS**, and enable the required sensors. The phone will display **"Waiting for discovery"** until a ROS 2 participant or subscriber is active on the network.
+3. Start phone runtime, enable **Wi-Fi DDS**, and enable the required sensors. The phone displays **"NO OTHER NODES"** until another ROS 2 node joins the same `ROS_DOMAIN_ID`. That is normal: discovery is already running, and the phone's node can be found by `ros2 node list`.
 4. Discover phone topics using your robot node or standard ROS 2 tools (`ros2 topic list`, `ros2 topic echo`). The USB Link Monitor is USB-only and is not needed for Wi-Fi DDS.
 
 ### USB-tether DDS
 
 1. Connect the phone to the ROS 2 host and enable Android **USB tethering** in system settings.
 2. Start the phone runtime and enable **USB DDS**. For an isolated USB check, leave Wi-Fi DDS off.
-3. In a sourced ROS 2 host environment using `rmw_fastrtps_cpp` and the same domain, run the persistent USB diagnostic:
+3. In a sourced ROS 2 host environment using `rmw_fastrtps_cpp` and the same domain, check the phone with plain ROS 2 tools:
+
+   ```bash
+   ros2 node list
+   ros2 topic list
+   ```
+
+4. Optional: run the persistent USB diagnostic for ongoing health reports:
 
    ```bash
    ros2 launch asr_ros2 connect.launch.py transport:=usb
    ```
 
-4. If the host interface cannot be selected automatically, pass its name. For example, some macOS USB-tether setups use `feth0`:
+5. If the monitor cannot select the host interface automatically, pass its name. For example, some macOS USB-tether setups use `feth0`:
 
    ```bash
    ros2 launch asr_ros2 connect.launch.py transport:=usb interface:=feth0
    ```
 
-This monitor is optional diagnostic software: it reports graph visibility and actual sensor callbacks separately. It does not start Android runtime or enable tethering. Raspberry Pi use is expected with a compatible ROS 2 installation and USB-tether interface, but has not yet been validated on-device.
+The monitor is not needed to make the phone visible: in Mac tests with the Cyclone build, plain `ros2 node list` and `ros2 topic echo` worked over USB tether with no monitor running. It is optional diagnostic software: it reports graph visibility and actual sensor callbacks separately. It does not start Android runtime or enable tethering. Raspberry Pi use is expected with a compatible ROS 2 installation and USB-tether interface, but has not yet been validated on-device.
 
 The standalone package installation and detailed diagnostic interpretation are documented in [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor). A copy is also present under [`asr_ros2/`](asr_ros2/README.md).
 
 ### View topics in Foxglove
 
-Foxglove connects to a **Foxglove Bridge** WebSocket. The ASR USB Link Monitor does not start this bridge; it is a separate ROS 2 participant used for discovery and diagnostics. Keep the USB monitor running, then launch the bridge in a second terminal using the same sourced ROS 2 environment, `ROS_DOMAIN_ID`, and host RMW:
+Foxglove connects to a **Foxglove Bridge** WebSocket. The ASR USB Link Monitor does not start this bridge; it is a separate, optional diagnostic participant. Launch the bridge using the same sourced ROS 2 environment, `ROS_DOMAIN_ID`, and host RMW:
 
 ```bash
 ros2 launch foxglove_bridge foxglove_bridge_launch.xml

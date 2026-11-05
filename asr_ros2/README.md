@@ -1,6 +1,6 @@
 # ASR ROS 2 host helper
 
-`asr_ros2` is a persistent, USB-only ROS 2 host monitor for the ASR Android Runtime. It discovers the phone's ROS graph, subscribes to selected sensor topics, and reports graph visibility separately from actual message delivery. It does not require Foxglove, RQT, or a short-lived ROS 2 CLI command to keep the host participant present. The standalone repository is [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor).
+`asr_ros2` is an optional, persistent, USB-only ROS 2 host monitor for the ASR Android Runtime. Plain ROS 2 tools can find the phone without it. It discovers the phone's ROS graph, subscribes to selected sensor topics, and reports graph visibility separately from actual message delivery. It does not require Foxglove, RQT, or a short-lived ROS 2 CLI command to keep the host participant present. The standalone repository is [asr-ros2-link-monitor](https://github.com/ShreyasDamase/asr-ros2-link-monitor).
 
 ## Compatibility
 
